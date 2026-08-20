@@ -27,7 +27,8 @@ public class SecurityConfig {
             "/api/auth/email/verify",
             "/api/auth/signup",
             "/api/auth/login",
-            "/api/auth/reissue"
+            "/api/auth/reissue",
+            "/api/auth/seller/signup"
     };
 
     private final TokenProvider tokenProvider;
