@@ -10,6 +10,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.stereotype.Component;
 
@@ -38,9 +39,11 @@ public class TokenProvider {
     }
 
     // JWT 생성 공통 로직 - subject/deviceId claim/발급·만료시각 설정 후 서명 (role은 null이면 claim 생략)
+    // jti에 랜덤 UUID를 부여 - 동일 초 안에 동일 memberId+deviceId로 재발급되어도(RTR grace 경쟁 요청 등) 토큰이 같은 문자열로 겹치지 않도록 보장
     private String createToken(Long memberId, String deviceId, Role role, long expirationMs) {
         Date now = new Date();
         var builder = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(memberId))
                 .claim(CLAIM_DEVICE_ID, deviceId)
                 .issuedAt(now)

@@ -17,6 +17,17 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:CHANGE_ME_local_dev_mail_username}
+    password: ${MAIL_PASSWORD:CHANGE_ME_local_dev_mail_password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   security:
     oauth2:
       client:
@@ -48,6 +59,7 @@ jwt:
   secret: ${JWT_SECRET:CHANGE_ME_local_dev_secret_key_min_256_bits_______}
   access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:1800000}   # 30분
   refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000} # 7일
+  refresh-token-grace-seconds: ${JWT_REFRESH_TOKEN_GRACE_SECONDS:5} # RTR 유예 기간
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

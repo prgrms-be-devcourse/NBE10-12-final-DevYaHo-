@@ -16,15 +16,19 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailVerificationService emailVerificationService;
 
-    public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
+    public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
+            EmailVerificationService emailVerificationService) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailVerificationService = emailVerificationService;
     }
 
-    // 이메일 중복 체크 후 비밀번호를 BCrypt로 인코딩하여 회원을 저장, 중복이면 EMAIL_ALREADY_EXISTS 예외
+    // 이메일 인증 완료 여부 확인 후, 이메일 중복 체크 → 비밀번호를 BCrypt로 인코딩하여 회원을 저장, 중복이면 EMAIL_ALREADY_EXISTS 예외
     @Transactional
     public SignupResponse signUp(SignupRequest request) {
+        emailVerificationService.assertVerified(request.email());
         if (memberRepository.existsByEmail(request.email())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }

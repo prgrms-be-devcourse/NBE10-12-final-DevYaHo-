@@ -23,8 +23,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private static final String[] PERMIT_ALL_PATHS = {
+            "/api/auth/email/verification-code",
+            "/api/auth/email/verify",
             "/api/auth/signup",
-            "/api/auth/login"
+            "/api/auth/login",
+            "/api/auth/reissue"
     };
 
     private final TokenProvider tokenProvider;

@@ -1,10 +1,14 @@
 package com.wellbuying.auth.token;
 
 import com.wellbuying.auth.jwt.JwtProperties;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.RedisHashCommands.HashFieldSetOption;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.core.types.Expiration;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
@@ -13,6 +17,8 @@ import tools.jackson.databind.ObjectMapper;
 public class RefreshTokenRepository {
 
     private static final String KEY_PREFIX = "ReT:";
+    private static final RedisScript<Long> ROTATE_SCRIPT =
+            RedisScript.of(new ClassPathResource("scripts/rotate_refresh_token.lua"), Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -40,6 +46,15 @@ public class RefreshTokenRepository {
             return Optional.empty();
         }
         return Optional.of(objectMapper.readValue((String) value, RefreshTokenValue.class));
+    }
+
+    // rotate_refresh_token.lua 실행 - grace 기간 내 경쟁 요청까지 허용하는 RTR 원자적 회전 (1=성공, 0=세션없음, -1=재사용감지로 전체세션삭제)
+    public long rotate(Long memberId, String deviceId, String oldTokenHash, String newTokenHash) {
+        return redisTemplate.execute(ROTATE_SCRIPT, List.of(key(memberId)),
+                deviceId, oldTokenHash, newTokenHash,
+                String.valueOf(jwtProperties.refreshTokenExpirationMs() / 1000),
+                String.valueOf(jwtProperties.refreshTokenGraceSeconds()),
+                String.valueOf(Instant.now().getEpochSecond()));
     }
 
     // 특정 기기(deviceId)의 refresh token만 삭제 - 해당 기기 로그아웃

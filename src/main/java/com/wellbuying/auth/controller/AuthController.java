@@ -2,9 +2,13 @@ package com.wellbuying.auth.controller;
 
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
+import com.wellbuying.auth.dto.ReissueRequest;
+import com.wellbuying.auth.dto.ReissueResponse;
+import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -25,5 +29,26 @@ public class AuthController {
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
         LoginResponse response = authService.login(request, deviceId);
         return ResponseEntity.ok(response);
+    }
+
+    // 토큰 재발급 API - body의 refresh token을 검증/rotate해 access/refresh 토큰을 새로 발급 (Bearer 인증 아님, permitAll)
+    @PostMapping("/api/auth/reissue")
+    public ResponseEntity<ReissueResponse> reissue(@Valid @RequestBody ReissueRequest request) {
+        ReissueResponse response = authService.reissue(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // 로그아웃 API - access token의 deviceId claim으로 현재 기기의 세션만 삭제
+    @PostMapping("/api/auth/logout")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
+        authService.logout(authenticatedMember.memberId(), authenticatedMember.deviceId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 전체 로그아웃 API - 계정의 모든 기기 세션을 삭제
+    @PostMapping("/api/auth/logout-all")
+    public ResponseEntity<Void> logoutAll(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
+        authService.logoutAll(authenticatedMember.memberId());
+        return ResponseEntity.noContent().build();
     }
 }

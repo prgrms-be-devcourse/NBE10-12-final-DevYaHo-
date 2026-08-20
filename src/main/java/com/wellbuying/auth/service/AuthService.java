@@ -2,6 +2,8 @@ package com.wellbuying.auth.service;
 
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
+import com.wellbuying.auth.dto.ReissueRequest;
+import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
@@ -10,6 +12,7 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.member.domain.Member;
 import com.wellbuying.member.repository.MemberRepository;
+import io.jsonwebtoken.Claims;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,9 +55,45 @@ public class AuthService {
 
         long now = Instant.now().getEpochSecond();
         refreshTokenRepository.save(member.getId(), deviceId,
-                new RefreshTokenValue(tokenHasher.hash(refreshToken), now, now));
+                RefreshTokenValue.issued(tokenHasher.hash(refreshToken), now));
 
         return new LoginResponse(accessToken, refreshToken, tokenProvider.getAccessTokenExpirationSeconds(),
                 deviceId);
+    }
+
+    // refresh token 검증 후 Lua 스크립트로 rotate하여 access/refresh 토큰을 재발급 (RTR) - role은 DB에서 최신값을 다시 조회해 반영
+    @Transactional(readOnly = true)
+    public ReissueResponse reissue(ReissueRequest request) {
+        Claims claims = tokenProvider.parseClaims(request.refreshToken());
+        Long memberId = tokenProvider.getMemberId(claims);
+        String deviceId = tokenProvider.getDeviceId(claims);
+
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        String oldTokenHash = tokenHasher.hash(request.refreshToken());
+        String newAccessToken = tokenProvider.createAccessToken(memberId, member.getRole(), deviceId);
+        String newRefreshToken = tokenProvider.createRefreshToken(memberId, deviceId);
+        String newTokenHash = tokenHasher.hash(newRefreshToken);
+
+        long result = refreshTokenRepository.rotate(memberId, deviceId, oldTokenHash, newTokenHash);
+        if (result == 0) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
+        if (result < 0) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
+        }
+
+        return new ReissueResponse(newAccessToken, newRefreshToken, tokenProvider.getAccessTokenExpirationSeconds());
+    }
+
+    // 현재 기기의 refresh token만 삭제 - 해당 기기 로그아웃
+    public void logout(Long memberId, String deviceId) {
+        refreshTokenRepository.delete(memberId, deviceId);
+    }
+
+    // 회원의 모든 기기 refresh token 삭제 - 전체 기기 로그아웃
+    public void logoutAll(Long memberId) {
+        refreshTokenRepository.deleteAll(memberId);
     }
 }

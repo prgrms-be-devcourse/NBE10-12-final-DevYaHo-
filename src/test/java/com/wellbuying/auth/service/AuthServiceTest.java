@@ -20,8 +20,11 @@ import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.member.domain.Member;
+import com.wellbuying.auth.dto.ReissueRequest;
+import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.member.domain.Role;
 import com.wellbuying.member.repository.MemberRepository;
+import io.jsonwebtoken.Claims;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -48,6 +51,9 @@ class AuthServiceTest {
 
     @Mock
     private TokenHasher tokenHasher;
+
+    @Mock
+    private Claims claims;
 
     @InjectMocks
     private AuthService authService;
@@ -125,6 +131,95 @@ class AuthServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SOCIAL_ONLY_ACCOUNT);
         verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    // 유효한 refresh token으로 재발급 요청 시 새 access/refresh 토큰을 발급하고 rotate를 호출하는지 검증
+    @Test
+    void 유효한_refresh_token으로_재발급하면_새_토큰을_발급하고_rotate를_호출한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        when(tokenProvider.parseClaims("old-refresh-token")).thenReturn(claims);
+        when(tokenProvider.getMemberId(claims)).thenReturn(1L);
+        when(tokenProvider.getDeviceId(claims)).thenReturn("device-1");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(tokenProvider.createAccessToken(1L, Role.BUYER, "device-1")).thenReturn("new-access-token");
+        when(tokenProvider.createRefreshToken(1L, "device-1")).thenReturn("new-refresh-token");
+        when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
+        when(tokenHasher.hash("old-refresh-token")).thenReturn("old-hash");
+        when(tokenHasher.hash("new-refresh-token")).thenReturn("new-hash");
+        when(refreshTokenRepository.rotate(1L, "device-1", "old-hash", "new-hash")).thenReturn(1L);
+
+        ReissueResponse response = authService.reissue(new ReissueRequest("old-refresh-token"));
+
+        assertThat(response.accessToken()).isEqualTo("new-access-token");
+        assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
+        assertThat(response.accessTokenExpiresIn()).isEqualTo(1800L);
+    }
+
+    // 탈퇴했거나 존재하지 않는 회원의 refresh token으로 재발급 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원의_refresh_token이면_예외가_발생한다() {
+        when(tokenProvider.parseClaims("old-refresh-token")).thenReturn(claims);
+        when(tokenProvider.getMemberId(claims)).thenReturn(1L);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    // rotate 결과가 0(세션 없음)이면 REFRESH_TOKEN_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 세션이_없으면_재발급에_실패한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        when(tokenProvider.parseClaims("old-refresh-token")).thenReturn(claims);
+        when(tokenProvider.getMemberId(claims)).thenReturn(1L);
+        when(tokenProvider.getDeviceId(claims)).thenReturn("device-1");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(tokenProvider.createAccessToken(any(), any(), anyString())).thenReturn("new-access-token");
+        when(tokenProvider.createRefreshToken(any(), anyString())).thenReturn("new-refresh-token");
+        when(tokenHasher.hash(anyString())).thenReturn("some-hash");
+        when(refreshTokenRepository.rotate(anyLong(), anyString(), anyString(), anyString())).thenReturn(0L);
+
+        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+    }
+
+    // rotate 결과가 음수(재사용 감지)이면 REFRESH_TOKEN_REUSE_DETECTED 예외가 발생하는지 검증
+    @Test
+    void 토큰_재사용이_감지되면_재발급에_실패한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        when(tokenProvider.parseClaims("old-refresh-token")).thenReturn(claims);
+        when(tokenProvider.getMemberId(claims)).thenReturn(1L);
+        when(tokenProvider.getDeviceId(claims)).thenReturn("device-1");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(tokenProvider.createAccessToken(any(), any(), anyString())).thenReturn("new-access-token");
+        when(tokenProvider.createRefreshToken(any(), anyString())).thenReturn("new-refresh-token");
+        when(tokenHasher.hash(anyString())).thenReturn("some-hash");
+        when(refreshTokenRepository.rotate(anyLong(), anyString(), anyString(), anyString())).thenReturn(-1L);
+
+        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
+    }
+
+    // 로그아웃 시 해당 기기의 refresh token만 삭제하는지 검증
+    @Test
+    void 로그아웃하면_해당_기기의_refresh_token을_삭제한다() {
+        authService.logout(1L, "device-1");
+
+        verify(refreshTokenRepository).delete(1L, "device-1");
+    }
+
+    // 전체 로그아웃 시 회원의 모든 기기 refresh token을 삭제하는지 검증
+    @Test
+    void 전체_로그아웃하면_모든_기기의_refresh_token을_삭제한다() {
+        authService.logoutAll(1L);
+
+        verify(refreshTokenRepository).deleteAll(1L);
     }
 
     private RefreshTokenValue argThatHasHash(String hash) {

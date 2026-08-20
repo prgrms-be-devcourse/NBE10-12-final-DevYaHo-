@@ -13,7 +13,8 @@ class TokenProviderTest {
 
     private static final String SECRET = "test-secret-key-must-be-at-least-256-bits-long!!";
 
-    private final TokenProvider tokenProvider = new TokenProvider(new JwtProperties(SECRET, 1_800_000L, 604_800_000L));
+    private final TokenProvider tokenProvider =
+            new TokenProvider(new JwtProperties(SECRET, 1_800_000L, 604_800_000L, 5L));
 
     // access token을 생성하고 파싱하면 memberId/role/deviceId가 그대로 추출되는지 검증
     @Test
@@ -42,7 +43,7 @@ class TokenProviderTest {
     // 만료된 토큰을 파싱하면 BusinessException(TOKEN_EXPIRED)이 발생하는지 검증
     @Test
     void 만료된_토큰을_파싱하면_예외가_발생한다() {
-        TokenProvider expiredTokenProvider = new TokenProvider(new JwtProperties(SECRET, -1000L, -1000L));
+        TokenProvider expiredTokenProvider = new TokenProvider(new JwtProperties(SECRET, -1000L, -1000L, 5L));
         String token = expiredTokenProvider.createAccessToken(1L, Role.BUYER, "device-1");
 
         assertThatThrownBy(() -> expiredTokenProvider.parseClaims(token))
@@ -55,7 +56,7 @@ class TokenProviderTest {
     @Test
     void 다른_키로_서명된_토큰을_파싱하면_예외가_발생한다() {
         TokenProvider otherTokenProvider = new TokenProvider(
-                new JwtProperties("other-secret-key-must-be-at-least-256-bits!!", 1_800_000L, 604_800_000L));
+                new JwtProperties("other-secret-key-must-be-at-least-256-bits!!", 1_800_000L, 604_800_000L, 5L));
         String token = otherTokenProvider.createAccessToken(1L, Role.BUYER, "device-1");
 
         assertThatThrownBy(() -> tokenProvider.parseClaims(token))

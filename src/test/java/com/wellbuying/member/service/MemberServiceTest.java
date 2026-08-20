@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,9 @@ class MemberServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private EmailVerificationService emailVerificationService;
 
     @InjectMocks
     private MemberService memberService;
@@ -62,6 +66,20 @@ class MemberServiceTest {
                 .isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
         verify(memberRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    // 이메일 인증을 완료하지 않은 상태로 회원가입 시 EMAIL_NOT_VERIFIED 예외가 발생하고 이메일 중복 체크가 일어나지 않는지 검증
+    @Test
+    void 이메일_인증을_완료하지_않으면_회원가입시_예외가_발생한다() {
+        doThrow(new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED))
+                .when(emailVerificationService).assertVerified("not-verified@example.com");
+
+        assertThatThrownBy(() -> memberService.signUp(
+                new SignupRequest("not-verified@example.com", "Pass1234!", "홍길동")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+        verify(memberRepository, never()).existsByEmail(anyString());
     }
 
     // 존재하는 회원 ID로 조회 시 해당 회원 정보를 응답으로 반환하는지 검증
