@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -32,7 +33,7 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
         UriComponentsBuilder redirectUriBuilder = UriComponentsBuilder.fromUriString(
                 oAuthProperties.successRedirectUri());
         if (principal.isLinked()) {
-            String provider = extractProvider(request);
+            String provider = extractProvider(authentication);
             redirectUriBuilder.queryParam("linked", true)
                     .queryParam("provider", provider);
         } else {
@@ -43,9 +44,11 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
         response.sendRedirect(redirectUriBuilder.build().toUriString());
     }
 
-    // 콜백 URI(/login/oauth2/code/{provider})의 마지막 경로 세그먼트에서 provider를 추출
-    private String extractProvider(HttpServletRequest request) {
-        String uri = request.getRequestURI();
-        return uri.substring(uri.lastIndexOf('/') + 1);
+    // URI 문자열 파싱 대신 OAuth2AuthenticationToken이 들고 있는 registrationId를 그대로 사용
+    private String extractProvider(Authentication authentication) {
+        if (authentication instanceof OAuth2AuthenticationToken oAuth2AuthenticationToken) {
+            return oAuth2AuthenticationToken.getAuthorizedClientRegistrationId();
+        }
+        throw new IllegalArgumentException("Unsupported authentication type: " + authentication.getClass());
     }
 }

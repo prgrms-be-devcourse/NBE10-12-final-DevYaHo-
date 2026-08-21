@@ -84,7 +84,8 @@ public class OAuthAccountService {
     // 소셜 계정 연동 해제 - 비밀번호가 없고 연동된 소셜 계정이 이 하나뿐이면(마지막 로그인 수단) 해제 불가
     @Transactional
     public void unlinkSocialAccount(Long memberId, String provider) {
-        SocialAccount socialAccount = socialAccountRepository.findByMemberIdAndProvider(memberId, provider)
+        String normalizedProvider = provider.toLowerCase();
+        SocialAccount socialAccount = socialAccountRepository.findByMemberIdAndProvider(memberId, normalizedProvider)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_FOUND));
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -95,11 +96,13 @@ public class OAuthAccountService {
     }
 
     // 로그인 상태에서 소셜 계정 연동을 시작하기 위한 1회용 link_token을 발급하고, provider 인가 엔드포인트 URL을 조립
+    // provider는 registrationId(소문자)와 대조되므로, GET 목록 조회 응답(대문자)을 그대로 넘겨도 매칭되도록 정규화
     public String issueLinkRedirectUrl(Long memberId, String provider, String baseUrl) {
-        if (clientRegistrationRepository.findByRegistrationId(provider) == null) {
+        String normalizedProvider = provider.toLowerCase();
+        if (clientRegistrationRepository.findByRegistrationId(normalizedProvider) == null) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         String linkToken = socialLinkTicketRepository.issue(memberId);
-        return baseUrl + "/oauth2/authorization/" + provider + "?link_token=" + linkToken;
+        return baseUrl + "/oauth2/authorization/" + normalizedProvider + "?link_token=" + linkToken;
     }
 }
