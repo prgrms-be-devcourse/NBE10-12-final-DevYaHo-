@@ -46,3 +46,7 @@ out/
 ### docs ###
 docs/
 capcature/
+### env ###
+.env
+.env.*
+!.env.example
