@@ -64,12 +64,13 @@ public class OAuthAccountService {
     // 로그인 상태에서 소셜 계정을 추가 연동 - (provider, providerId)가 이미 다른 소셜 로그인으로 연동되어 있으면 거부
     @Transactional
     public Member linkSocialAccount(Long memberId, String provider, String providerId) {
-        if (socialAccountRepository.findByProviderAndProviderId(provider, providerId).isPresent()) {
+        String normalizedProvider = provider.toLowerCase();
+        if (socialAccountRepository.findByProviderAndProviderId(normalizedProvider, providerId).isPresent()) {
             throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
         }
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        socialAccountRepository.save(SocialAccount.create(memberId, provider, providerId));
+        socialAccountRepository.save(SocialAccount.create(memberId, normalizedProvider, providerId));
         return member;
     }
 
