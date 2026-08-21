@@ -83,14 +83,18 @@ public class OAuthAccountService {
     }
 
     // 소셜 계정 연동 해제 - 비밀번호가 없고 연동된 소셜 계정이 이 하나뿐이면(마지막 로그인 수단) 해제 불가
+    // 연동 목록을 한 번만 조회해 대상 존재 여부와 개수 체크를 함께 처리 (findByMemberIdAndProvider + countByMemberId 쿼리 2회 대신 1회)
     @Transactional
     public void unlinkSocialAccount(Long memberId, String provider) {
         String normalizedProvider = provider.toLowerCase();
-        SocialAccount socialAccount = socialAccountRepository.findByMemberIdAndProvider(memberId, normalizedProvider)
+        List<SocialAccount> socialAccounts = socialAccountRepository.findAllByMemberId(memberId);
+        SocialAccount socialAccount = socialAccounts.stream()
+                .filter(account -> account.getProvider().equals(normalizedProvider))
+                .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_FOUND));
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        if (member.isSocialOnly() && socialAccountRepository.countByMemberId(memberId) == 1) {
+        if (member.isSocialOnly() && socialAccounts.size() == 1) {
             throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_LAST_LOGIN_METHOD);
         }
         socialAccountRepository.delete(socialAccount);

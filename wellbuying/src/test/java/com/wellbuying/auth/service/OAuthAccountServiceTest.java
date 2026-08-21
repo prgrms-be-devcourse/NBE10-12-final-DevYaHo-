@@ -155,7 +155,7 @@ class OAuthAccountServiceTest {
     // 연동되지 않은 provider를 해제하려 하면 예외가 발생하는지 검증
     @Test
     void 연동되지_않은_provider_해제시_예외가_발생한다() {
-        when(socialAccountRepository.findByMemberIdAndProvider(1L, "google")).thenReturn(Optional.empty());
+        when(socialAccountRepository.findAllByMemberId(1L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> oAuthAccountService.unlinkSocialAccount(1L, "google"))
                 .isInstanceOf(BusinessException.class)
@@ -168,10 +168,9 @@ class OAuthAccountServiceTest {
     @Test
     void 마지막_로그인_수단이면_해제시_예외가_발생한다() {
         SocialAccount socialAccount = SocialAccount.create(1L, "google", "google-uid-1");
-        when(socialAccountRepository.findByMemberIdAndProvider(1L, "google")).thenReturn(Optional.of(socialAccount));
+        when(socialAccountRepository.findAllByMemberId(1L)).thenReturn(List.of(socialAccount));
         Member member = Member.socialOnly("test@example.com", "홍길동");
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
-        when(socialAccountRepository.countByMemberId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> oAuthAccountService.unlinkSocialAccount(1L, "google"))
                 .isInstanceOf(BusinessException.class)
@@ -184,7 +183,7 @@ class OAuthAccountServiceTest {
     @Test
     void 마지막_로그인_수단이_아니면_정상_해제된다() {
         SocialAccount socialAccount = SocialAccount.create(1L, "google", "google-uid-1");
-        when(socialAccountRepository.findByMemberIdAndProvider(1L, "google")).thenReturn(Optional.of(socialAccount));
+        when(socialAccountRepository.findAllByMemberId(1L)).thenReturn(List.of(socialAccount));
         Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
