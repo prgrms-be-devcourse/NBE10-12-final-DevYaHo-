@@ -18,7 +18,11 @@ public enum ErrorCode {
     REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_NOT_FOUND", "세션이 만료되었습니다. 다시 로그인해주세요."),
     REFRESH_TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_REUSE_DETECTED", "비정상적인 토큰 사용이 감지되어 모든 세션이 종료되었습니다. 다시 로그인해주세요."),
     SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다."),
-    OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다.");
+    OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다."),
+    SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.CONFLICT, "SOCIAL_409_ALREADY_LINKED", "이미 연동된 소셜 계정입니다."),
+    SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "SOCIAL_404_NOT_FOUND", "연동되지 않은 소셜 계정입니다."),
+    SOCIAL_ACCOUNT_LAST_LOGIN_METHOD(HttpStatus.CONFLICT, "SOCIAL_409_LAST_LOGIN_METHOD",
+            "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요.");
 
     private final HttpStatus status;
     private final String code;

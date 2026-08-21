@@ -23,16 +23,29 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
     }
 
     // 콜백 리다이렉트 URL에 토큰을 직접 노출하지 않기 위해 1회용 교환 코드를 발급해 프론트로 리다이렉트
+    // 로그인 상태에서의 추가 연동이면 기존 토큰이 그대로 유효하므로 교환 코드 없이 결과만 리다이렉트
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
             Authentication authentication) throws IOException, ServletException {
         OAuthPrincipal principal = (OAuthPrincipal) authentication.getPrincipal();
-        String code = authService.issueOAuthExchangeCode(principal.getMemberId(), principal.getRole());
 
-        String redirectUri = UriComponentsBuilder.fromUriString(oAuthProperties.successRedirectUri())
-                .queryParam("code", code)
-                .build()
-                .toUriString();
-        response.sendRedirect(redirectUri);
+        UriComponentsBuilder redirectUriBuilder = UriComponentsBuilder.fromUriString(
+                oAuthProperties.successRedirectUri());
+        if (principal.isLinked()) {
+            String provider = extractProvider(request);
+            redirectUriBuilder.queryParam("linked", true)
+                    .queryParam("provider", provider);
+        } else {
+            String code = authService.issueOAuthExchangeCode(principal.getMemberId(), principal.getRole());
+            redirectUriBuilder.queryParam("code", code);
+        }
+
+        response.sendRedirect(redirectUriBuilder.build().toUriString());
+    }
+
+    // 콜백 URI(/login/oauth2/code/{provider})의 마지막 경로 세그먼트에서 provider를 추출
+    private String extractProvider(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri.substring(uri.lastIndexOf('/') + 1);
     }
 }
