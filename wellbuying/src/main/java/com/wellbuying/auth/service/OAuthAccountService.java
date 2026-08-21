@@ -62,10 +62,14 @@ public class OAuthAccountService {
     }
 
     // 로그인 상태에서 소셜 계정을 추가 연동 - (provider, providerId)가 이미 다른 소셜 로그인으로 연동되어 있으면 거부
+    // 이 회원이 동일 provider를 이미 연동한 경우도 거부 - providerId가 달라 위 체크는 통과해도 save 시 (member_id, provider) UNIQUE 제약(V3) 위반으로 DataIntegrityViolationException(500)이 발생하므로 사전 차단
     @Transactional
     public Member linkSocialAccount(Long memberId, String provider, String providerId) {
         String normalizedProvider = provider.toLowerCase();
         if (socialAccountRepository.findByProviderAndProviderId(normalizedProvider, providerId).isPresent()) {
+            throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
+        }
+        if (socialAccountRepository.existsByMemberIdAndProvider(memberId, normalizedProvider)) {
             throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
         }
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
@@ -87,13 +91,13 @@ public class OAuthAccountService {
     @Transactional
     public void unlinkSocialAccount(Long memberId, String provider) {
         String normalizedProvider = provider.toLowerCase();
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         List<SocialAccount> socialAccounts = socialAccountRepository.findAllByMemberId(memberId);
         SocialAccount socialAccount = socialAccounts.stream()
                 .filter(account -> account.getProvider().equals(normalizedProvider))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_FOUND));
-        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         if (member.isSocialOnly() && socialAccounts.size() == 1) {
             throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_LAST_LOGIN_METHOD);
         }

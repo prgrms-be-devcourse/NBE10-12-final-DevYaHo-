@@ -126,6 +126,21 @@ class OAuthAccountServiceTest {
         verify(socialAccountRepository, never()).save(any());
     }
 
+    // providerId가 달라 (provider, providerId) 체크는 통과해도, 이 회원이 동일 provider를 이미 연동했다면 추가연동시 예외가 발생하는지 검증
+    // (member_id, provider) UNIQUE 제약(V3) 위반으로 인한 DataIntegrityViolationException(500)을 사전에 막기 위한 체크
+    @Test
+    void 동일_provider가_이미_연동되어_있으면_다른_providerId여도_예외가_발생한다() {
+        when(socialAccountRepository.findByProviderAndProviderId("google", "google-uid-2"))
+                .thenReturn(Optional.empty());
+        when(socialAccountRepository.existsByMemberIdAndProvider(1L, "google")).thenReturn(true);
+
+        assertThatThrownBy(() -> oAuthAccountService.linkSocialAccount(1L, "google", "google-uid-2"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SOCIAL_ACCOUNT_ALREADY_LINKED);
+        verify(socialAccountRepository, never()).save(any());
+    }
+
     // 연동되지 않은 (provider, providerId)면 회원에 새 소셜계정을 연동하는지 검증
     @Test
     void 연동되지_않은_소셜계정이면_추가연동한다() {
@@ -155,12 +170,27 @@ class OAuthAccountServiceTest {
     // 연동되지 않은 provider를 해제하려 하면 예외가 발생하는지 검증
     @Test
     void 연동되지_않은_provider_해제시_예외가_발생한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
         when(socialAccountRepository.findAllByMemberId(1L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> oAuthAccountService.unlinkSocialAccount(1L, "google"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SOCIAL_ACCOUNT_NOT_FOUND);
+        verify(socialAccountRepository, never()).delete(any());
+    }
+
+    // 존재하지 않는 회원 ID로 해제를 시도하면 소셜계정 조회 전에 회원 존재 여부부터 검증해 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원이면_해제시_예외가_발생한다() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> oAuthAccountService.unlinkSocialAccount(1L, "google"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verify(socialAccountRepository, never()).findAllByMemberId(any());
         verify(socialAccountRepository, never()).delete(any());
     }
 
