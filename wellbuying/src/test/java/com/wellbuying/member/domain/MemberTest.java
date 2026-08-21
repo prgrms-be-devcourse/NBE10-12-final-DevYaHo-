@@ -37,6 +37,18 @@ class MemberTest {
         assertThat(member.getProfileImage()).isEqualTo("https://example.com/profile.png");
     }
 
+    // updateProfile() 호출 시 profileImage가 null이면 기존 프로필 이미지가 유지되는지 검증
+    @Test
+    void updateProfile에_프로필_이미지가_null이면_기존_이미지를_유지한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.updateProfile("김철수", "https://example.com/profile.png");
+
+        member.updateProfile("이영희", null);
+
+        assertThat(member.getName()).isEqualTo("이영희");
+        assertThat(member.getProfileImage()).isEqualTo("https://example.com/profile.png");
+    }
+
     // withdraw() 호출 시 deletedAt이 세팅되는지 검증
     @Test
     void withdraw호출시_deletedAt이_세팅된다() {

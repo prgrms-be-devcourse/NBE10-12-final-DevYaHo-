@@ -87,7 +87,7 @@ class MemberServiceTest {
     @Test
     void 존재하는_회원ID로_조회하면_회원정보를_반환한다() {
         Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
         MemberResponse response = memberService.getMe(1L);
 
@@ -98,7 +98,7 @@ class MemberServiceTest {
     // 존재하지 않는 회원 ID로 조회 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
     @Test
     void 존재하지_않는_회원ID로_조회하면_예외가_발생한다() {
-        when(memberRepository.findById(999L)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndDeletedAtIsNull(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> memberService.getMe(999L))
                 .isInstanceOf(BusinessException.class)

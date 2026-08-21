@@ -39,10 +39,10 @@ public class MemberService {
         return SignupResponse.from(saved);
     }
 
-    // memberId로 회원을 조회, 없으면 MEMBER_NOT_FOUND 예외
+    // 탈퇴하지 않은 회원을 memberId로 조회, 없으면 MEMBER_NOT_FOUND 예외
     @Transactional(readOnly = true)
     public MemberResponse getMe(Long memberId) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         return MemberResponse.from(member);
     }
