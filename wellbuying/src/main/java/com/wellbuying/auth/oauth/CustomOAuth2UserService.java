@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         Map<String, Object> attributes = oAuth2User.getAttributes();
 
         OAuthUserInfo userInfo = OAuthUserInfo.of(provider, attributes);
+        if (userInfo.email() == null) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("email_required"),
+                    "이메일 제공에 동의해야 로그인할 수 있습니다.");
+        }
         Member member = oAuthAccountService.findOrCreateMember(provider, userInfo.providerId(), userInfo.email(),
                 userInfo.name(), userInfo.profileImage());
 

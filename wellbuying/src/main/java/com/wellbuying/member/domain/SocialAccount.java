@@ -6,12 +6,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "social_account")
+@Table(name = "social_account",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_social_account_provider_provider_id",
+                columnNames = {"provider", "provider_id"}))
 public class SocialAccount {
 
     @Id
