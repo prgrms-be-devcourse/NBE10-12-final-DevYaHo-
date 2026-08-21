@@ -17,7 +17,8 @@ public enum ErrorCode {
     EMAIL_VERIFICATION_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_429_EMAIL_COOLDOWN", "잠시 후 다시 시도해주세요."),
     REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_NOT_FOUND", "세션이 만료되었습니다. 다시 로그인해주세요."),
     REFRESH_TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_REUSE_DETECTED", "비정상적인 토큰 사용이 감지되어 모든 세션이 종료되었습니다. 다시 로그인해주세요."),
-    SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다.");
+    SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다."),
+    OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다.");
 
     private final HttpStatus status;
     private final String code;

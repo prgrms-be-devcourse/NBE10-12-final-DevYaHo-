@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
+import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
@@ -51,6 +52,9 @@ class AuthServiceTest {
 
     @Mock
     private TokenHasher tokenHasher;
+
+    @Mock
+    private OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
 
     @Mock
     private Claims claims;
@@ -220,6 +224,43 @@ class AuthServiceTest {
         authService.logoutAll(1L);
 
         verify(refreshTokenRepository).deleteAll(1L);
+    }
+
+    // 소셜 로그인 성공 시 토큰을 발급해 Redis에 refresh token을 저장하고, 발급한 토큰을 1회용 교환 코드에 저장하는지 검증
+    @Test
+    void 소셜_로그인_성공시_토큰을_발급하고_교환코드를_저장한다() {
+        when(tokenProvider.createAccessToken(eq(1L), eq(Role.BUYER), anyString())).thenReturn("access-token");
+        when(tokenProvider.createRefreshToken(eq(1L), anyString())).thenReturn("refresh-token");
+        when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
+        when(tokenHasher.hash("refresh-token")).thenReturn("hashed-refresh-token");
+
+        String code = authService.issueOAuthExchangeCode(1L, Role.BUYER);
+
+        assertThat(code).isNotBlank();
+        verify(refreshTokenRepository).save(eq(1L), anyString(), argThatHasHash("hashed-refresh-token"));
+        verify(oAuthExchangeCodeRepository).save(eq(code), any(LoginResponse.class));
+    }
+
+    // 유효한 교환 코드로 요청하면 저장된 토큰을 그대로 반환하는지 검증
+    @Test
+    void 유효한_교환코드로_토큰을_반환한다() {
+        LoginResponse loginResponse = new LoginResponse("access-token", "refresh-token", 1800L, "device-1");
+        when(oAuthExchangeCodeRepository.consume("valid-code")).thenReturn(Optional.of(loginResponse));
+
+        LoginResponse response = authService.exchangeOAuthCode("valid-code");
+
+        assertThat(response).isEqualTo(loginResponse);
+    }
+
+    // 존재하지 않거나 이미 사용된 교환 코드로 요청하면 OAUTH_EXCHANGE_CODE_INVALID 예외가 발생하는지 검증
+    @Test
+    void 유효하지_않은_교환코드면_예외가_발생한다() {
+        when(oAuthExchangeCodeRepository.consume("invalid-code")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.exchangeOAuthCode("invalid-code"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_EXCHANGE_CODE_INVALID);
     }
 
     private RefreshTokenValue argThatHasHash(String hash) {

@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.member.domain.Member;
 import com.wellbuying.member.repository.MemberRepository;
 import java.util.List;
@@ -49,6 +50,9 @@ class AuthControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private AuthService authService;
 
     // 가입된 이메일/비밀번호로 로그인 시 200과 함께 accessToken/refreshToken/deviceId가 응답에 포함되는지 검증
     @Test
@@ -276,6 +280,49 @@ class AuthControllerTest {
                 .andDo(document("auth/logout-all-success"));
 
         assertThat(redisTemplate.hasKey("ReT:" + member.getId())).isFalse();
+    }
+
+    // 소셜 로그인 성공 후 발급된 1회용 교환 코드로 access/refresh 토큰을 정상 교환하는지 검증
+    @Test
+    void 유효한_교환코드로_토큰을_교환한다() throws Exception {
+        Member member = signUpMember("oauth-exchange-success@example.com");
+        String code = authService.issueOAuthExchangeCode(member.getId(), member.getRole());
+
+        String requestBody = """
+                { "code": "%s" }
+                """.formatted(code);
+
+        mockMvc.perform(post("/api/auth/oauth/exchange")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andDo(document("auth/oauth-exchange-success",
+                        requestFields(fieldWithPath("code").description("소셜 로그인 콜백에서 발급받은 1회용 교환 코드")),
+                        responseFields(
+                                fieldWithPath("accessToken").description("Access Token"),
+                                fieldWithPath("refreshToken").description("Refresh Token"),
+                                fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"),
+                                fieldWithPath("deviceId").description("기기 식별자"))));
+    }
+
+    // 존재하지 않거나 이미 사용된 교환 코드로 요청 시 401과 AUTH_401_OAUTH_CODE_INVALID 에러 코드를 반환하는지 검증
+    @Test
+    void 유효하지_않은_교환코드는_실패한다() throws Exception {
+        String requestBody = """
+                { "code": "invalid-code" }
+                """;
+
+        mockMvc.perform(post("/api/auth/oauth/exchange")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_OAUTH_CODE_INVALID"))
+                .andDo(document("auth/oauth-exchange-invalid-code",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
     }
 
     private Member signUpMember(String email) {
