@@ -74,6 +74,17 @@ public class Member {
         return password == null;
     }
 
+    // 이름/프로필 이미지 수정
+    public void updateProfile(String name, String profileImage) {
+        this.name = name;
+        this.profileImage = profileImage;
+    }
+
+    // 회원 탈퇴 - deletedAt을 현재 시각으로 세팅 (soft delete)
+    public void withdraw() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }

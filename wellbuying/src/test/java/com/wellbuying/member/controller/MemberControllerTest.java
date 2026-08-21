@@ -1,11 +1,14 @@
 package com.wellbuying.member.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.document;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.restdocs.payload.PayloadDocumentation.requestFields;
 import static org.springframework.restdocs.payload.PayloadDocumentation.responseFields;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -199,6 +202,92 @@ class MemberControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"))
                 .andDo(document("member/me-unauthorized",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 로그인한 회원이 이름/프로필 이미지 수정 시 200과 함께 수정된 정보가 응답되는지 검증
+    @Test
+    void 로그인한_회원은_내_정보를_수정한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("update-target@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        String requestBody = """
+                {
+                  "name": "김철수",
+                  "profileImageUrl": "https://example.com/profile.png"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/members/me")
+                        .with(authentication(authentication))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("김철수"))
+                .andExpect(jsonPath("$.profileImageUrl").value("https://example.com/profile.png"))
+                .andDo(document("member/update-me-success",
+                        requestFields(
+                                fieldWithPath("name").description("이름"),
+                                fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional()),
+                        responseFields(
+                                fieldWithPath("memberId").description("회원 ID"),
+                                fieldWithPath("email").description("이메일"),
+                                fieldWithPath("name").description("이름"),
+                                fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional(),
+                                fieldWithPath("role").description("권한"))));
+    }
+
+    // 인증 정보 없이 내 정보 수정 시 401과 AUTH_401_REQUIRED 에러 코드를 반환하는지 검증
+    @Test
+    void 인증되지_않은_요청은_내_정보_수정에_실패한다() throws Exception {
+        String requestBody = """
+                {
+                  "name": "김철수",
+                  "profileImageUrl": null
+                }
+                """;
+
+        mockMvc.perform(patch("/api/members/me")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"))
+                .andDo(document("member/update-me-unauthorized",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 로그인한 회원이 탈퇴 시 204와 함께 soft delete되고 모든 기기의 세션이 무효화되는지 검증
+    @Test
+    void 로그인한_회원은_탈퇴한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("withdraw-target@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        redisTemplate.opsForHash().put("ReT:" + member.getId(), "test-device", "dummy-hash");
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        mockMvc.perform(delete("/api/members/me").with(authentication(authentication)))
+                .andExpect(status().isNoContent())
+                .andDo(document("member/withdraw-success"));
+
+        assertThat(memberRepository.findById(member.getId()).orElseThrow().getDeletedAt()).isNotNull();
+        assertThat(redisTemplate.hasKey("ReT:" + member.getId())).isFalse();
+    }
+
+    // 인증 정보 없이 탈퇴 시 401과 AUTH_401_REQUIRED 에러 코드를 반환하는지 검증
+    @Test
+    void 인증되지_않은_요청은_탈퇴에_실패한다() throws Exception {
+        mockMvc.perform(delete("/api/members/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"))
+                .andDo(document("member/withdraw-unauthorized",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));

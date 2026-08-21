@@ -25,4 +25,25 @@ class MemberTest {
         assertThat(member.getPassword()).isNull();
         assertThat(member.isSocialOnly()).isTrue();
     }
+
+    // updateProfile() 호출 시 이름/프로필 이미지가 갱신되는지 검증
+    @Test
+    void updateProfile로_이름과_프로필_이미지를_수정한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+
+        member.updateProfile("김철수", "https://example.com/profile.png");
+
+        assertThat(member.getName()).isEqualTo("김철수");
+        assertThat(member.getProfileImage()).isEqualTo("https://example.com/profile.png");
+    }
+
+    // withdraw() 호출 시 deletedAt이 세팅되는지 검증
+    @Test
+    void withdraw호출시_deletedAt이_세팅된다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+
+        member.withdraw();
+
+        assertThat(member.getDeletedAt()).isNotNull();
+    }
 }
