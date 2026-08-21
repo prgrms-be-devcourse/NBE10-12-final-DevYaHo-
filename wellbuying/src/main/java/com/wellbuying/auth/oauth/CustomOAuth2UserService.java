@@ -1,6 +1,7 @@
 package com.wellbuying.auth.oauth;
 
 import com.wellbuying.auth.service.OAuthAccountService;
+import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.member.domain.Member;
 import java.util.Map;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
@@ -31,8 +32,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             throw new OAuth2AuthenticationException(new OAuth2Error("email_required"),
                     "이메일 제공에 동의해야 로그인할 수 있습니다.");
         }
-        Member member = oAuthAccountService.findOrCreateMember(provider, userInfo.providerId(), userInfo.email(),
-                userInfo.name(), userInfo.profileImage());
+        Member member;
+        try {
+            member = oAuthAccountService.findOrCreateMember(provider, userInfo.providerId(), userInfo.email(),
+                    userInfo.name(), userInfo.profileImage());
+        } catch (BusinessException e) {
+            // 필터 체인 안에서는 AuthenticationException만 FailureHandler로 전달되므로 래핑해서 던짐
+            throw new OAuth2AuthenticationException(new OAuth2Error(e.getErrorCode().getCode()), e.getMessage());
+        }
 
         return new OAuthPrincipal(member.getId(), member.getRole(), attributes);
     }
