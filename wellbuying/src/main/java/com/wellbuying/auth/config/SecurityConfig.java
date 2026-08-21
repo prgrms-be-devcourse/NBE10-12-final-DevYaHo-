@@ -67,8 +67,7 @@ public class SecurityConfig {
         this.socialLinkTicketRepository = socialLinkTicketRepository;
     }
 
-    // link_token 인지 authorizationRequestResolver를 Bean으로 등록 - corsConfigurationSource()와 동일하게
-    // securityFilterChain()에서 이 메서드를 직접 호출해 프록시를 통해 싱글턴을 재사용
+    // link_token 인지 authorizationRequestResolver를 Bean으로 등록 - securityFilterChain()이 파라미터로 주입받아 사용
     @Bean
     public LinkAwareOAuth2AuthorizationRequestResolver linkAwareOAuth2AuthorizationRequestResolver() {
         return new LinkAwareOAuth2AuthorizationRequestResolver(clientRegistrationRepository, socialLinkTicketRepository);
@@ -89,7 +88,8 @@ public class SecurityConfig {
 
     // 인증/인가 필터 체인 설정 - CORS 적용, CSRF/세션 비활성화(STATELESS), 회원가입/로그인만 permitAll, 나머지는 JWT 인증 필요
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+            LinkAwareOAuth2AuthorizationRequestResolver linkAwareOAuth2AuthorizationRequestResolver) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
@@ -102,7 +102,7 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(endpoint -> endpoint.authorizationRequestResolver(
-                                linkAwareOAuth2AuthorizationRequestResolver()))
+                                linkAwareOAuth2AuthorizationRequestResolver))
                         .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                         .successHandler(oAuth2AuthenticationSuccessHandler)
                         .failureHandler(oAuth2AuthenticationFailureHandler))

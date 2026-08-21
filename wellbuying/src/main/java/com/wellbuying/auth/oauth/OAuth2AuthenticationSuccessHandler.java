@@ -44,10 +44,11 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
         response.sendRedirect(redirectUriBuilder.build().toUriString());
     }
 
-    // URI 문자열 파싱 대신 OAuth2AuthenticationToken이 들고 있는 registrationId를 그대로 사용
+    // URI 문자열 파싱 대신 OAuth2AuthenticationToken이 들고 있는 registrationId를 사용
+    // GET /api/members/me/social-accounts 응답(대문자)과 표기를 맞추기 위해 대문자로 변환
     private String extractProvider(Authentication authentication) {
         if (authentication instanceof OAuth2AuthenticationToken oAuth2AuthenticationToken) {
-            return oAuth2AuthenticationToken.getAuthorizedClientRegistrationId();
+            return oAuth2AuthenticationToken.getAuthorizedClientRegistrationId().toUpperCase();
         }
         throw new IllegalArgumentException("Unsupported authentication type: " + authentication.getClass());
     }
