@@ -74,6 +74,19 @@ public class Member {
         return password == null;
     }
 
+    // 이름/프로필 이미지 수정 - profileImage가 null이면(PATCH에서 생략) 기존 값 유지
+    public void updateProfile(String name, String profileImage) {
+        this.name = name;
+        if (profileImage != null) {
+            this.profileImage = profileImage;
+        }
+    }
+
+    // 회원 탈퇴 - deletedAt을 현재 시각으로 세팅 (soft delete)
+    public void withdraw() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }

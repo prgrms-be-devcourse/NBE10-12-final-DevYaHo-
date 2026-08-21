@@ -1,10 +1,12 @@
 package com.wellbuying.member.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.member.dto.EmailVerificationRequest;
 import com.wellbuying.member.dto.MemberResponse;
 import com.wellbuying.member.dto.SignupRequest;
 import com.wellbuying.member.dto.SignupResponse;
+import com.wellbuying.member.dto.UpdateMemberRequest;
 import com.wellbuying.member.dto.VerifyEmailRequest;
 import com.wellbuying.member.service.EmailVerificationService;
 import com.wellbuying.member.service.MemberService;
@@ -12,7 +14,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,10 +26,13 @@ public class MemberController {
 
     private final MemberService memberService;
     private final EmailVerificationService emailVerificationService;
+    private final AuthService authService;
 
-    public MemberController(MemberService memberService, EmailVerificationService emailVerificationService) {
+    public MemberController(MemberService memberService, EmailVerificationService emailVerificationService,
+            AuthService authService) {
         this.memberService = memberService;
         this.emailVerificationService = emailVerificationService;
+        this.authService = authService;
     }
 
     // 이메일 인증 코드 발송 API - 가입되지 않은 이메일이면 6자리 코드를 생성해 메일 발송하고 200 응답
@@ -54,5 +61,21 @@ public class MemberController {
     public ResponseEntity<MemberResponse> me(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
         MemberResponse response = memberService.getMe(authenticatedMember.memberId());
         return ResponseEntity.ok(response);
+    }
+
+    // 내 정보 수정 API - 이름/프로필 이미지를 수정하고 수정된 정보를 반환
+    @PatchMapping("/api/members/me")
+    public ResponseEntity<MemberResponse> updateMe(@AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody UpdateMemberRequest request) {
+        MemberResponse response = memberService.updateProfile(authenticatedMember.memberId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    // 회원 탈퇴 API - soft delete 처리 후 모든 기기의 세션을 무효화(logoutAll 재사용)
+    @DeleteMapping("/api/members/me")
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
+        memberService.withdraw(authenticatedMember.memberId());
+        authService.logoutAll(authenticatedMember.memberId());
+        return ResponseEntity.noContent().build();
     }
 }

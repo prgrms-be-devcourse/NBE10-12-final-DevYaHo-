@@ -16,6 +16,7 @@ import com.wellbuying.member.domain.Role;
 import com.wellbuying.member.dto.MemberResponse;
 import com.wellbuying.member.dto.SignupRequest;
 import com.wellbuying.member.dto.SignupResponse;
+import com.wellbuying.member.dto.UpdateMemberRequest;
 import com.wellbuying.member.repository.MemberRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,7 @@ class MemberServiceTest {
     @Test
     void 존재하는_회원ID로_조회하면_회원정보를_반환한다() {
         Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
         MemberResponse response = memberService.getMe(1L);
 
@@ -97,9 +98,55 @@ class MemberServiceTest {
     // 존재하지 않는 회원 ID로 조회 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
     @Test
     void 존재하지_않는_회원ID로_조회하면_예외가_발생한다() {
-        when(memberRepository.findById(999L)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndDeletedAtIsNull(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> memberService.getMe(999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    // 존재하는 회원의 이름/프로필 이미지를 수정하면 수정된 값이 응답에 반영되는지 검증
+    @Test
+    void 존재하는_회원의_정보를_수정한다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        MemberResponse response = memberService.updateProfile(1L,
+                new UpdateMemberRequest("김철수", "https://example.com/profile.png"));
+
+        assertThat(response.name()).isEqualTo("김철수");
+        assertThat(response.profileImageUrl()).isEqualTo("https://example.com/profile.png");
+    }
+
+    // 존재하지 않거나 이미 탈퇴한 회원 ID로 정보 수정 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원ID로_정보를_수정하면_예외가_발생한다() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.updateProfile(999L, new UpdateMemberRequest("김철수", null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    // 존재하는 회원을 탈퇴시키면 deletedAt이 세팅되는지 검증
+    @Test
+    void 존재하는_회원을_탈퇴시킨다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        memberService.withdraw(1L);
+
+        assertThat(member.getDeletedAt()).isNotNull();
+    }
+
+    // 존재하지 않거나 이미 탈퇴한 회원 ID로 탈퇴 시도 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원ID로_탈퇴하면_예외가_발생한다() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.withdraw(999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
