@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
 import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
@@ -26,6 +27,9 @@ import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.member.domain.Role;
 import com.wellbuying.member.repository.MemberRepository;
 import io.jsonwebtoken.Claims;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -261,6 +265,31 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.OAUTH_EXCHANGE_CODE_INVALID);
+    }
+
+    // 기기 목록 조회 시 토큰 해시는 응답에서 제외하고 lastUsedAt 내림차순으로 정렬해 반환하는지 검증
+    @Test
+    void 기기_목록을_lastUsedAt_내림차순으로_조회한다() {
+        Map<String, RefreshTokenValue> stored = new LinkedHashMap<>();
+        stored.put("device-1", RefreshTokenValue.issued("hash-1", 100L));
+        stored.put("device-2", RefreshTokenValue.issued("hash-2", 200L));
+        when(refreshTokenRepository.findAll(1L)).thenReturn(stored);
+
+        List<DeviceSessionResponse> response = authService.getDevices(1L);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).deviceId()).isEqualTo("device-2");
+        assertThat(response.get(1).deviceId()).isEqualTo("device-1");
+    }
+
+    // 로그인 세션이 없으면 빈 목록을 반환하는지 검증
+    @Test
+    void 로그인된_기기가_없으면_빈_목록을_반환한다() {
+        when(refreshTokenRepository.findAll(1L)).thenReturn(Map.of());
+
+        List<DeviceSessionResponse> response = authService.getDevices(1L);
+
+        assertThat(response).isEmpty();
     }
 
     private RefreshTokenValue argThatHasHash(String hash) {

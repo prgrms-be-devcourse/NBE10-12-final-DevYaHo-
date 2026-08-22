@@ -1,5 +1,6 @@
 package com.wellbuying.auth.service;
 
+import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
 import com.wellbuying.auth.dto.ReissueRequest;
@@ -16,6 +17,8 @@ import com.wellbuying.member.domain.Role;
 import com.wellbuying.member.repository.MemberRepository;
 import io.jsonwebtoken.Claims;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -118,5 +121,14 @@ public class AuthService {
     // 회원의 모든 기기 refresh token 삭제 - 전체 기기 로그아웃
     public void logoutAll(Long memberId) {
         refreshTokenRepository.deleteAll(memberId);
+    }
+
+    // 회원의 모든 기기 로그인 세션 목록 조회 - 토큰 해시는 응답에서 제외하고 lastUsedAt 내림차순 정렬
+    public List<DeviceSessionResponse> getDevices(Long memberId) {
+        return refreshTokenRepository.findAll(memberId).entrySet().stream()
+                .map(entry -> new DeviceSessionResponse(entry.getKey(), entry.getValue().issuedAt(),
+                        entry.getValue().lastUsedAt()))
+                .sorted(Comparator.comparingLong(DeviceSessionResponse::lastUsedAt).reversed())
+                .toList();
     }
 }

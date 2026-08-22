@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
 import static org.springframework.restdocs.headers.HeaderDocumentation.requestHeaders;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -323,6 +324,52 @@ class AuthControllerTest {
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 기기 목록 조회 시 로그인한 모든 기기의 deviceId/issuedAt/lastUsedAt이 반환되고 토큰 해시는 노출되지 않는지 검증
+    @Test
+    void 로그인_기기_목록을_조회한다() throws Exception {
+        Member member = signUpMember("devices-list@example.com");
+        login("devices-list@example.com", "device-1");
+        login("devices-list@example.com", "device-2");
+
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "device-1"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        mockMvc.perform(get("/api/auth/devices").with(authentication(authentication)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].deviceId").isNotEmpty())
+                .andExpect(jsonPath("$[0].issuedAt").isNumber())
+                .andExpect(jsonPath("$[0].lastUsedAt").isNumber())
+                .andDo(document("auth/devices-success",
+                        responseFields(
+                                fieldWithPath("[].deviceId").description("기기 식별자"),
+                                fieldWithPath("[].issuedAt").description("최초 로그인 시각 (epoch seconds)"),
+                                fieldWithPath("[].lastUsedAt").description("마지막 사용 시각 (epoch seconds)"))));
+    }
+
+    // 로그인 세션이 하나도 없으면 빈 배열을 반환하는지 검증
+    @Test
+    void 로그인된_기기가_없으면_빈_목록을_반환한다() throws Exception {
+        Member member = signUpMember("devices-empty@example.com");
+
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "device-1"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        mockMvc.perform(get("/api/auth/devices").with(authentication(authentication)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // 인증 정보 없이 기기 목록을 조회하면 401을 반환하는지 검증
+    @Test
+    void 인증되지_않은_요청은_기기_목록_조회에_실패한다() throws Exception {
+        mockMvc.perform(get("/api/auth/devices"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"));
     }
 
     private Member signUpMember(String email) {
