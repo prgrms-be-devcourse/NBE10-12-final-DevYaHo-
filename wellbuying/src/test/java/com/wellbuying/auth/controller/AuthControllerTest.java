@@ -15,8 +15,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.auth.service.AuthService;
-import com.wellbuying.member.domain.Member;
-import com.wellbuying.member.repository.MemberRepository;
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.repository.MemberRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

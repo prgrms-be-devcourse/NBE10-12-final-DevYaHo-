@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.member.domain.Role;
+import com.wellbuying.domain.member.entity.Role;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
 
