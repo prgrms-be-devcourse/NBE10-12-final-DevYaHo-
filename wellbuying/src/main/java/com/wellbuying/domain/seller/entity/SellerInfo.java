@@ -25,7 +25,7 @@ public class SellerInfo {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
 
-    @Column(name = "bank_code", nullable = false)
+    @Column(name = "bank_code", nullable = false, length = 10)
     private String bankCode;
 
     @Column(name = "bank_name", nullable = false)
