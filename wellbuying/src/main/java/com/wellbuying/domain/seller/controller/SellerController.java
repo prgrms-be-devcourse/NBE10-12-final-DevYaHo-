@@ -1,9 +1,9 @@
 package com.wellbuying.domain.seller.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
-import com.wellbuying.domain.member.dto.SignupResponse;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
+import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.service.SellerInfoService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -32,8 +32,8 @@ public class SellerController {
 
     // 판매자 다이렉트 가입 API - 이메일 인증 완료 확인 후 계정 생성과 셀러 신청을 한 번에 처리 (승인 전까지 role은 BUYER 유지)
     @PostMapping("/api/auth/seller/signup")
-    public ResponseEntity<SignupResponse> signUp(@Valid @RequestBody SellerSignupRequest request) {
-        SignupResponse response = sellerInfoService.signUp(request);
+    public ResponseEntity<SellerSignupResponse> signUp(@Valid @RequestBody SellerSignupRequest request) {
+        SellerSignupResponse response = sellerInfoService.signUp(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

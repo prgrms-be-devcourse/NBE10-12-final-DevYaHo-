@@ -11,11 +11,11 @@ import static org.mockito.Mockito.when;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
-import com.wellbuying.domain.member.dto.SignupResponse;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.service.EmailVerificationService;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
+import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,7 +73,7 @@ class SellerInfoServiceTest {
         when(passwordEncoder.encode("Pass1234!")).thenReturn("encoded-password");
         when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        SignupResponse response = sellerInfoService.signUp(new SellerSignupRequest(
+        SellerSignupResponse response = sellerInfoService.signUp(new SellerSignupRequest(
                 "seller@example.com", "Pass1234!", "홍길동", "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어"));
 
         assertThat(response.email()).isEqualTo("seller@example.com");
