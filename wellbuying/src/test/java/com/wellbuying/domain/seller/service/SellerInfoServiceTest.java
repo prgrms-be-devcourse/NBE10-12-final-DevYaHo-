@@ -71,11 +71,16 @@ class SellerInfoServiceTest {
     void 판매자_다이렉트_가입에_성공한다() {
         when(memberRepository.existsByEmail("seller@example.com")).thenReturn(false);
         when(passwordEncoder.encode("Pass1234!")).thenReturn("encoded-password");
-        when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
+            Member member = invocation.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(member, "id", 1L);
+            return member;
+        });
 
         SellerSignupResponse response = sellerInfoService.signUp(new SellerSignupRequest(
                 "seller@example.com", "Pass1234!", "홍길동", "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어"));
 
+        assertThat(response.memberId()).isEqualTo(1L);
         assertThat(response.email()).isEqualTo("seller@example.com");
         assertThat(response.role().name()).isEqualTo("BUYER");
         verify(sellerInfoRepository).save(any());

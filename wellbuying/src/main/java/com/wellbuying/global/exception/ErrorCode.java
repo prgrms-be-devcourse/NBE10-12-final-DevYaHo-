@@ -22,7 +22,8 @@ public enum ErrorCode {
     SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.CONFLICT, "SOCIAL_409_ALREADY_LINKED", "이미 연동된 소셜 계정입니다."),
     SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "SOCIAL_404_NOT_FOUND", "연동되지 않은 소셜 계정입니다."),
     SOCIAL_ACCOUNT_LAST_LOGIN_METHOD(HttpStatus.CONFLICT, "SOCIAL_409_LAST_LOGIN_METHOD",
-            "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요.");
+            "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요."),
+    DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON_409_DUPLICATE", "이미 존재하는 데이터입니다.");
 
     private final HttpStatus status;
     private final String code;
