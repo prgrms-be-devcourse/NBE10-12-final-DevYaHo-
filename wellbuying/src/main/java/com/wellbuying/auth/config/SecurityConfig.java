@@ -6,6 +6,7 @@ import com.wellbuying.auth.jwt.TokenProvider;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -29,6 +30,14 @@ public class SecurityConfig {
             "/api/auth/login",
             "/api/auth/reissue",
             "/api/auth/seller/signup"
+    };
+
+    // 공동구매 조회(GET)는 로그인 없이도 둘러볼 수 있어야 하므로 별도로 permitAll 처리 - 생성/수정/참여 등 쓰기 작업은 인증 필요
+    private static final String[] GROUP_BUY_PUBLIC_GET_PATHS = {
+            "/api/groupBuys",
+            "/api/groupBuys/*",
+            "/api/groupBuys/*/status",
+            "/api/groupBuys/*/price"
     };
 
     private final TokenProvider tokenProvider;
@@ -75,6 +84,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.GET, GROUP_BUY_PUBLIC_GET_PATHS).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .addFilterBefore(new JwtAuthenticationFilter(tokenProvider), UsernamePasswordAuthenticationFilter.class);
