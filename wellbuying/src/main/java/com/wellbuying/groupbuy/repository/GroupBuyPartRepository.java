@@ -5,6 +5,9 @@ import com.wellbuying.groupbuy.domain.GroupBuyPartStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface GroupBuyPartRepository extends JpaRepository<GroupBuyPart, Long> {
 
@@ -23,4 +26,12 @@ public interface GroupBuyPartRepository extends JpaRepository<GroupBuyPart, Long
 
     // 실시간 상태 조회용 참여자 수 집계
     long countByGroupBuyIdAndStatus(Long groupBuyId, GroupBuyPartStatus status);
+
+    // 공동구매 성사 시 확정 참여자 전원의 최종 단가를 한 문장으로 반영 - GroupBuyCloseProcessor가 건별 트랜잭션에서 호출하므로
+    // 엔티티를 다시 조회/변경 감지에 태우지 않고 바로 반영해 N+1을 만들지 않는다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE GroupBuyPart p SET p.appliedPrice = :finalPrice "
+            + "WHERE p.groupBuyId = :groupBuyId AND p.status = :status")
+    void applyFinalPriceToConfirmedParts(@Param("groupBuyId") Long groupBuyId, @Param("finalPrice") int finalPrice,
+            @Param("status") GroupBuyPartStatus status);
 }

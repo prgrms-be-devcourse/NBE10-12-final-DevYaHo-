@@ -106,4 +106,29 @@ class GroupBuyPartRepositoryTest {
 
         assertThat(results).extracting(GroupBuyPart::getId).containsExactlyInAnyOrder(part1.getId(), part2.getId());
     }
+
+    // applyFinalPriceToConfirmedParts가 해당 공동구매의 CONFIRMED 참여자 전원에게만 최종가를 반영하고,
+    // 취소된 참여나 다른 공동구매의 참여는 건드리지 않는지 검증 (GroupBuyCloseProcessor가 건별 트랜잭션에서 사용하는 벌크 UPDATE)
+    @Test
+    void applyFinalPriceToConfirmedParts는_해당_공동구매의_CONFIRMED_참여자에게만_최종가를_반영한다() {
+        Long groupBuyId = saveGroupBuy();
+        Long otherGroupBuyId = saveGroupBuy();
+        GroupBuyPart confirmed1 = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, saveMember(), 10));
+        GroupBuyPart confirmed2 = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, saveMember(), 20));
+        GroupBuyPart canceled = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, saveMember(), 5));
+        canceled.cancel();
+        groupBuyPartRepository.save(canceled);
+        GroupBuyPart otherGroupBuyPart = groupBuyPartRepository.save(
+                GroupBuyPart.confirm(otherGroupBuyId, saveMember(), 30));
+
+        groupBuyPartRepository.applyFinalPriceToConfirmedParts(groupBuyId, 12_000, GroupBuyPartStatus.CONFIRMED);
+
+        assertThat(groupBuyPartRepository.findById(confirmed1.getId()).orElseThrow().getAppliedPrice())
+                .isEqualTo(12_000);
+        assertThat(groupBuyPartRepository.findById(confirmed2.getId()).orElseThrow().getAppliedPrice())
+                .isEqualTo(12_000);
+        assertThat(groupBuyPartRepository.findById(canceled.getId()).orElseThrow().getAppliedPrice()).isNull();
+        assertThat(groupBuyPartRepository.findById(otherGroupBuyPart.getId()).orElseThrow().getAppliedPrice())
+                .isNull();
+    }
 }

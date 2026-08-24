@@ -3,6 +3,8 @@ package com.wellbuying.groupbuy.event;
 import com.wellbuying.groupbuy.domain.GroupBuy;
 import com.wellbuying.groupbuy.domain.GroupBuyPart;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -11,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class GroupBuyEventPublisher {
 
+    private static final Logger log = LoggerFactory.getLogger(GroupBuyEventPublisher.class);
     private static final String TOPIC = "groupbuy-events";
 
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -39,6 +42,11 @@ public class GroupBuyEventPublisher {
     // 같은 공동구매의 이벤트가 같은 파티션으로 모이도록 groupBuyId를 메시지 키로 사용
     private void send(Long groupBuyId, Object event) {
         String payload = objectMapper.writeValueAsString(event);
-        kafkaTemplate.send(TOPIC, String.valueOf(groupBuyId), payload);
+        kafkaTemplate.send(TOPIC, String.valueOf(groupBuyId), payload)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("공동구매 이벤트 발행 실패 - groupBuyId={}, event={}", groupBuyId, event, ex);
+                    }
+                });
     }
 }

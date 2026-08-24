@@ -14,7 +14,6 @@ import com.wellbuying.groupbuy.domain.GroupBuyPartStatus;
 import com.wellbuying.groupbuy.domain.GroupBuyPrice;
 import com.wellbuying.groupbuy.domain.GroupBuyStatus;
 import com.wellbuying.groupbuy.event.GroupBuyEventPublisher;
-import com.wellbuying.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.groupbuy.repository.GroupBuyRepository;
@@ -40,7 +39,7 @@ class GroupBuyLifecycleSchedulerTest {
     private GroupBuyPriceRepository groupBuyPriceRepository;
 
     @Mock
-    private GroupBuyCounterRepository groupBuyCounterRepository;
+    private GroupBuyCloseProcessor groupBuyCloseProcessor;
 
     @Mock
     private GroupBuyEventPublisher groupBuyEventPublisher;
@@ -67,10 +66,10 @@ class GroupBuyLifecycleSchedulerTest {
         assertThat(groupBuy.getStatus()).isEqualTo(GroupBuyStatus.ONGOING);
     }
 
-    // 마감 시각이 지났고 최소 수량을 달성한 공동구매는 SUCCESS로 확정되고,
-    // 마감 시점의 최종 누적 수량 기준 단가가 확정 참여자에게 소급 적용된 뒤 참여자별 성사 이벤트가 발행되는지 검증
+    // 마감 시각이 지났고 최소 수량을 달성한 공동구매는 GroupBuyCloseProcessor.closeSucceeded로 최종 단가와 함께 위임되고,
+    // 마감 시점의 최종 누적 수량 기준 단가가 확정 참여자에게 소급 적용된 뒤(이벤트 페이로드용) 참여자별 성사 이벤트가 발행되는지 검증
     @Test
-    void 최소_수량을_달성했으면_SUCCESS로_확정하고_최종_단가를_소급_적용한다() {
+    void 최소_수량을_달성했으면_closeSucceeded로_위임하고_최종_단가를_소급_적용한다() {
         GroupBuy groupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         groupBuy.start();
@@ -85,41 +84,51 @@ class GroupBuyLifecycleSchedulerTest {
                 .thenReturn(List.of(
                         GroupBuyPrice.of(1L, 1, 1, 15_000),
                         GroupBuyPrice.of(1L, 2, 100, 12_000)));
+        GroupBuy closedGroupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        closedGroupBuy.start();
+        closedGroupBuy.succeed();
+        when(groupBuyCloseProcessor.closeSucceeded(1L, 12_000)).thenReturn(closedGroupBuy);
 
         scheduler.closeOngoingGroupBuys();
 
-        assertThat(groupBuy.getStatus()).isEqualTo(GroupBuyStatus.SUCCESS);
         // 마감 시점 누적 수량(150)이 100명 구간을 넘겼으므로, 15,000원에 참여했던 사람도 최종가 12,000원으로 소급 적용된다
         assertThat(earlyParticipant.getAppliedPrice()).isEqualTo(12_000);
-        verify(groupBuyEventPublisher).publishCompleted(groupBuy, List.of(earlyParticipant));
+        verify(groupBuyCloseProcessor).closeSucceeded(1L, 12_000);
+        verify(groupBuyCloseProcessor, never()).closeFailed(any());
+        verify(groupBuyEventPublisher).publishCompleted(closedGroupBuy, List.of(earlyParticipant));
         verify(groupBuyEventPublisher, never()).publishFailed(any());
-        verify(groupBuyCounterRepository).deleteAll(List.of(1L));
     }
 
-    // 마감 시각이 지났지만 최소 수량 미달인 공동구매는 FAILED로 확정되고, 실패 이벤트가 한 번만 발행되는지 검증
+    // 마감 시각이 지났지만 최소 수량 미달인 공동구매는 GroupBuyCloseProcessor.closeFailed로 위임되고, 실패 이벤트가 발행되는지 검증
     // (성사되지 않았으므로 가격 구간 조회 자체가 발생하지 않는다)
     @Test
-    void 최소_수량_미달이면_FAILED로_확정하고_실패_이벤트를_발행한다() {
+    void 최소_수량_미달이면_closeFailed로_위임하고_실패_이벤트를_발행한다() {
         GroupBuy groupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         groupBuy.start();
         groupBuy.increaseQuantity(50);
         when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
                 .thenReturn(List.of(groupBuy));
+        GroupBuy closedGroupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        closedGroupBuy.start();
+        closedGroupBuy.fail();
+        when(groupBuyCloseProcessor.closeFailed(1L)).thenReturn(closedGroupBuy);
 
         scheduler.closeOngoingGroupBuys();
 
-        assertThat(groupBuy.getStatus()).isEqualTo(GroupBuyStatus.FAILED);
-        verify(groupBuyEventPublisher).publishFailed(groupBuy);
+        verify(groupBuyCloseProcessor).closeFailed(1L);
+        verify(groupBuyCloseProcessor, never()).closeSucceeded(any(), any(Integer.class));
+        verify(groupBuyEventPublisher).publishFailed(closedGroupBuy);
         verify(groupBuyEventPublisher, never()).publishCompleted(any(), any());
         verify(groupBuyPartRepository, never()).findByGroupBuyIdInAndStatus(any(), any());
         verify(groupBuyPriceRepository, never()).findByGroupBuyIdIn(any());
-        verify(groupBuyCounterRepository).deleteAll(List.of(1L));
     }
 
-    // 여러 공동구매가 한 배치에서 동시에 마감돼도 확정 참여자 조회(findByGroupBuyIdInAndStatus)/가격 구간 조회(findByGroupBuyIdIn)/
-    // 카운터 정리(deleteAll)는 건마다 반복 호출되지 않고 배치 전체에 대해 정확히 한 번씩만 호출되는지 검증 (N+1 회귀 방지),
-    // 그리고 서로 다른 최종가가 그룹별로 뒤섞이지 않고 각자에게 정확히 적용되는지도 함께 검증
+    // 여러 공동구매가 한 배치에서 동시에 마감돼도 확정 참여자 조회(findByGroupBuyIdInAndStatus)/가격 구간 조회(findByGroupBuyIdIn)는
+    // 건마다 반복 호출되지 않고 배치 전체에 대해 정확히 한 번씩만 호출되는지 검증 (N+1 회귀 방지),
+    // 실제 상태 확정(closeSucceeded/closeFailed)은 건별로 호출되고, 서로 다른 최종가가 그룹별로 뒤섞이지 않고 각자에게 정확히 적용되는지도 검증
     @Test
     void 여러_건이_동시에_마감돼도_최종_단가는_그룹별로_정확히_적용되고_조회는_한_번씩만_호출된다() {
         GroupBuy succeeded1 = withId(1L, GroupBuy.create(10L, 1L, "제목1",
@@ -147,12 +156,11 @@ class GroupBuyLifecycleSchedulerTest {
                         GroupBuyPrice.of(1L, 2, 100, 12_000),
                         GroupBuyPrice.of(2L, 1, 1, 15_000),
                         GroupBuyPrice.of(2L, 2, 1_000, 10_000)));
+        when(groupBuyCloseProcessor.closeSucceeded(any(), any(Integer.class))).thenReturn(succeeded1);
+        when(groupBuyCloseProcessor.closeFailed(any())).thenReturn(failed);
 
         scheduler.closeOngoingGroupBuys();
 
-        assertThat(succeeded1.getStatus()).isEqualTo(GroupBuyStatus.SUCCESS);
-        assertThat(succeeded2.getStatus()).isEqualTo(GroupBuyStatus.SUCCESS);
-        assertThat(failed.getStatus()).isEqualTo(GroupBuyStatus.FAILED);
         // 공동구매 1은 150명(12,000원 구간), 공동구매 2는 1,000명(10,000원 구간) - 서로 다른 최종가가 뒤섞이지 않는다
         assertThat(part1.getAppliedPrice()).isEqualTo(12_000);
         assertThat(part2.getAppliedPrice()).isEqualTo(10_000);
@@ -160,8 +168,37 @@ class GroupBuyLifecycleSchedulerTest {
         verify(groupBuyPartRepository, times(1)).findByGroupBuyIdInAndStatus(any(), any());
         verify(groupBuyPartRepository, never()).findByGroupBuyIdAndStatus(any(), any());
         verify(groupBuyPriceRepository, times(1)).findByGroupBuyIdIn(any());
-        // Redis 카운터 정리도 건별 delete가 아니라 배치 전체에 대해 딱 1번의 deleteAll로 처리된다
-        verify(groupBuyCounterRepository, times(1)).deleteAll(List.of(1L, 2L, 3L));
-        verify(groupBuyCounterRepository, never()).delete(any());
+        // 실제 상태 확정은 건별로 별도 트랜잭션에 위임된다 (성사 2건 + 실패 1건)
+        verify(groupBuyCloseProcessor).closeSucceeded(1L, 12_000);
+        verify(groupBuyCloseProcessor).closeSucceeded(2L, 10_000);
+        verify(groupBuyCloseProcessor).closeFailed(3L);
+    }
+
+    // 배치 중 한 건의 마감 처리에서 예외가 나도(예: closeSucceeded 도중 DB 오류) 나머지 건들은 영향받지 않고 정상적으로 마감되는지 검증
+    // (배치 전체를 하나의 트랜잭션으로 묶었다면 한 건의 예외로 전체가 롤백됐을 상황)
+    @Test
+    void 한_건의_마감_처리가_실패해도_나머지_건은_영향받지_않는다() {
+        GroupBuy failing = withId(1L, GroupBuy.create(10L, 1L, "실패할_건",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        failing.start();
+        failing.increaseQuantity(10);
+        GroupBuy healthy = withId(2L, GroupBuy.create(10L, 1L, "정상_건",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        healthy.start();
+        healthy.increaseQuantity(5);
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
+                .thenReturn(List.of(failing, healthy));
+        when(groupBuyCloseProcessor.closeFailed(1L)).thenThrow(new RuntimeException("DB 오류"));
+        GroupBuy closedHealthy = withId(2L, GroupBuy.create(10L, 1L, "정상_건",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        closedHealthy.start();
+        closedHealthy.fail();
+        when(groupBuyCloseProcessor.closeFailed(2L)).thenReturn(closedHealthy);
+
+        scheduler.closeOngoingGroupBuys();
+
+        verify(groupBuyCloseProcessor).closeFailed(1L);
+        verify(groupBuyCloseProcessor).closeFailed(2L);
+        verify(groupBuyEventPublisher).publishFailed(closedHealthy);
     }
 }
