@@ -8,10 +8,12 @@ import com.wellbuying.domain.member.service.EmailVerificationService;
 import com.wellbuying.domain.seller.entity.SellerInfo;
 import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
+import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,8 +59,9 @@ public class SellerInfoService {
     }
 
     // 관리자의 상태별 셀러 신청 목록 조회
-    public List<SellerInfo> findByStatus(SellerStatus status) {
-        return sellerInfoRepository.findAllByStatus(status);
+    @Transactional(readOnly = true)
+    public Page<SellerInfoResponse> findByStatus(SellerStatus status, Pageable pageable) {
+        return sellerInfoRepository.findAllByStatus(status, pageable).map(SellerInfoResponse::from);
     }
 
     // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 ACTIVE로 전환하고 MEMBERS.role을 SELLER로 변경

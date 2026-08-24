@@ -1,4 +1,4 @@
-package com.wellbuying.domain.admin.dto;
+package com.wellbuying.domain.seller.dto;
 
 import com.wellbuying.domain.seller.entity.SellerInfo;
 import com.wellbuying.domain.seller.entity.SellerStatus;

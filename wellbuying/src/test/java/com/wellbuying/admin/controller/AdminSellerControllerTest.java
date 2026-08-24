@@ -147,7 +147,7 @@ class AdminSellerControllerTest {
                 .andExpect(jsonPath("$.code").value("SELLER_409_ALREADY_PROCESSED"));
     }
 
-    // 상태별 셀러 신청 목록 조회가 PENDING 목록만 반환하는지 검증
+    // 상태별 셀러 신청 목록 조회가 PagedModel 형태(content + page 메타데이터)로 PENDING 목록만 반환하는지 검증
     @Test
     void 관리자가_PENDING_셀러_목록_조회에_성공한다() throws Exception {
         Member admin = saveMember("admin-list@example.com", Role.ADMIN);
@@ -157,14 +157,19 @@ class AdminSellerControllerTest {
         mockMvc.perform(get("/api/admin/sellers").param("status", "PENDING")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.content[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
                 .andDo(document("admin/seller-list-success",
                         responseFields(
-                                fieldWithPath("[].id").description("셀러 신청 ID"),
-                                fieldWithPath("[].memberId").description("회원 ID"),
-                                fieldWithPath("[].status").description("상태"),
-                                fieldWithPath("[].bankName").description("은행명"),
-                                fieldWithPath("[].companyName").description("사업자명").optional(),
-                                fieldWithPath("[].createdAt").description("신청 일시"))));
+                                fieldWithPath("content[].id").description("셀러 신청 ID"),
+                                fieldWithPath("content[].memberId").description("회원 ID"),
+                                fieldWithPath("content[].status").description("상태"),
+                                fieldWithPath("content[].bankName").description("은행명"),
+                                fieldWithPath("content[].companyName").description("사업자명").optional(),
+                                fieldWithPath("content[].createdAt").description("신청 일시"),
+                                fieldWithPath("page.size").description("페이지 크기"),
+                                fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
+                                fieldWithPath("page.totalElements").description("전체 개수"),
+                                fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
 }

@@ -1,9 +1,12 @@
 package com.wellbuying.domain.admin.controller;
 
-import com.wellbuying.domain.admin.dto.SellerInfoResponse;
+import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.service.SellerInfoService;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,11 +30,9 @@ public class AdminSellerController {
 
     // 상태별 셀러 신청 목록 조회 (예: ?status=PENDING으로 승인 대기 목록 조회)
     @GetMapping
-    public ResponseEntity<List<SellerInfoResponse>> list(@RequestParam SellerStatus status) {
-        List<SellerInfoResponse> responses = sellerInfoService.findByStatus(status).stream()
-                .map(SellerInfoResponse::from)
-                .toList();
-        return ResponseEntity.ok(responses);
+    public ResponseEntity<Page<SellerInfoResponse>> list(@RequestParam SellerStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(sellerInfoService.findByStatus(status, pageable));
     }
 
     // 셀러 승인 - SELLER_INFO.status를 ACTIVE로, MEMBERS.role을 SELLER로 변경
