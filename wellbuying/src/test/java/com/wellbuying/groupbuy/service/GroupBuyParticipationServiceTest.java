@@ -102,7 +102,10 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(1L))
                 .thenReturn(List.of(GroupBuyPrice.of(1L, 1, 1, 15_000)));
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // 벌크 UPDATE는 mock이라 실제 DB 반영이 일어나지 않으므로, 재조회(findByGroupBuyIdAndStatus)가
+        // 벌크 UPDATE 이후의 DB 상태(최종가가 이미 반영된 상태)를 반환한다고 가정하고 미리 값을 채워둔다
         GroupBuyPart confirmedPart = GroupBuyPart.confirm(1L, 100L, 100);
+        confirmedPart.applyFinalPrice(15_000);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(confirmedPart));
 
@@ -110,6 +113,8 @@ class GroupBuyParticipationServiceTest {
 
         assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
         assertThat(confirmedPart.getAppliedPrice()).isEqualTo(15_000);
+        // 확정 참여자 전원의 최종가는 개별 dirty checking이 아니라 벌크 UPDATE 한 문장으로 반영되는지 검증 (N+1 방지)
+        verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 15_000, GroupBuyPartStatus.CONFIRMED);
         verify(groupBuyEventPublisher).publishCompleted(groupBuy, List.of(confirmedPart));
     }
 
@@ -135,8 +140,11 @@ class GroupBuyParticipationServiceTest {
             savedPartHolder[0] = invocation.getArgument(0);
             return savedPartHolder[0];
         });
-        // 참여 시점엔 가격을 저장하지 않으므로 아직 null인 상태로 시작
+        // 참여 시점엔 가격을 저장하지 않으므로 아직 null이었다가, 매진 확정 시 벌크 UPDATE로 최종가가 반영된다.
+        // 벌크 UPDATE는 mock이라 실제 DB 반영이 일어나지 않으므로, 재조회가 그 이후의 DB 상태를 반환한다고
+        // 가정하고 미리 최종가(10,000원)를 채워둔다
         GroupBuyPart earlyParticipant = GroupBuyPart.confirm(1L, 200L, 50);
+        earlyParticipant.applyFinalPrice(10_000);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenAnswer(invocation -> List.of(earlyParticipant, savedPartHolder[0]));
 
@@ -145,6 +153,7 @@ class GroupBuyParticipationServiceTest {
 
         assertThat(response.appliedPrice()).isEqualTo(10_000);
         assertThat(earlyParticipant.getAppliedPrice()).isEqualTo(10_000);
+        verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 10_000, GroupBuyPartStatus.CONFIRMED);
     }
 
     // Redis 원자적 카운터가 재고 초과로 -1을 반환하면 GROUP_BUY_SOLD_OUT 예외가 발생하고 DB에는 아무것도 저장되지 않는지 검증

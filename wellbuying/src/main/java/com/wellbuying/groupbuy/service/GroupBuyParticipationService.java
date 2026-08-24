@@ -79,11 +79,18 @@ public class GroupBuyParticipationService {
                         .findByGroupBuyIdOrderByTierOrderAsc(groupBuyId);
                 int finalPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers,
                         updatedGroupBuy.getCurrentQuantity());
+                // 확정 참여자 전원에게 최종 단가를 벌크 UPDATE 한 문장으로 반영한다 - 엔티티를 조회해 하나씩
+                // applyFinalPrice()로 mutate하면 참여자 수(N)만큼 dirty checking UPDATE가 나가므로,
+                // 그 대신 DB에 직접 반영한다. clearAutomatically라 실행 직후 영속성 컨텍스트가 비워진다
+                groupBuyPartRepository.applyFinalPriceToConfirmedParts(groupBuyId, finalPrice,
+                        GroupBuyPartStatus.CONFIRMED);
+                // Kafka 이벤트 발행용 확정 참여자 목록 - 위 벌크 UPDATE가 같은 트랜잭션 안에서 이미 반영된 뒤
+                // 재조회하는 것이라 최종가가 그대로 채워져 있다 (여기서 다시 forEach로 mutate하면 방금 피한
+                // dirty checking UPDATE가 그대로 재발하므로 절대 건드리지 않는다)
                 List<GroupBuyPart> confirmedParts = groupBuyPartRepository
                         .findByGroupBuyIdAndStatus(groupBuyId, GroupBuyPartStatus.CONFIRMED);
-                confirmedParts.forEach(confirmedPart -> confirmedPart.applyFinalPrice(finalPrice));
-                // 위 재조회로 confirmedParts 안의 엔티티는 방금 저장한 part와 별개의 객체 인스턴스이므로,
-                // 응답에 최종가가 정확히 반영되도록 part에도 동일하게 채워준다
+                // 방금 저장한 part는 위 clear로 인해 confirmedParts 안의 엔티티와 별개의(detached) 객체이므로,
+                // 응답에 최종가가 정확히 반영되도록 직접 채워준다 (detached라 이 mutation은 DB에 반영되지 않는다)
                 part.applyFinalPrice(finalPrice);
                 AfterCommitExecutor.run(() -> groupBuyEventPublisher.publishCompleted(updatedGroupBuy, confirmedParts));
             }
