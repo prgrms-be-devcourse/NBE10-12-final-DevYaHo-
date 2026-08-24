@@ -2,6 +2,7 @@ package com.wellbuying.auth.controller;
 
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
+import com.wellbuying.auth.dto.OAuthExchangeRequest;
 import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
@@ -50,5 +51,12 @@ public class AuthController {
     public ResponseEntity<Void> logoutAll(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
         authService.logoutAll(authenticatedMember.memberId());
         return ResponseEntity.noContent().build();
+    }
+
+    // 소셜 로그인 콜백에서 발급받은 1회용 교환 코드를 access/refresh 토큰으로 교환
+    @PostMapping("/api/auth/oauth/exchange")
+    public ResponseEntity<LoginResponse> exchangeOAuthCode(@Valid @RequestBody OAuthExchangeRequest request) {
+        LoginResponse response = authService.exchangeOAuthCode(request.code());
+        return ResponseEntity.ok(response);
     }
 }

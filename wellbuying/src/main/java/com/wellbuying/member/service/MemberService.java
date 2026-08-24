@@ -6,6 +6,7 @@ import com.wellbuying.member.domain.Member;
 import com.wellbuying.member.dto.MemberResponse;
 import com.wellbuying.member.dto.SignupRequest;
 import com.wellbuying.member.dto.SignupResponse;
+import com.wellbuying.member.dto.UpdateMemberRequest;
 import com.wellbuying.member.repository.MemberRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,11 +39,28 @@ public class MemberService {
         return SignupResponse.from(saved);
     }
 
-    // memberId로 회원을 조회, 없으면 MEMBER_NOT_FOUND 예외
+    // 탈퇴하지 않은 회원을 memberId로 조회, 없으면 MEMBER_NOT_FOUND 예외
     @Transactional(readOnly = true)
     public MemberResponse getMe(Long memberId) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         return MemberResponse.from(member);
+    }
+
+    // 탈퇴하지 않은 회원의 이름/프로필 이미지를 수정, 없으면 MEMBER_NOT_FOUND 예외
+    @Transactional
+    public MemberResponse updateProfile(Long memberId, UpdateMemberRequest request) {
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        member.updateProfile(request.name(), request.profileImageUrl());
+        return MemberResponse.from(member);
+    }
+
+    // 탈퇴하지 않은 회원을 soft delete (deletedAt 세팅), 없으면 MEMBER_NOT_FOUND 예외
+    @Transactional
+    public void withdraw(Long memberId) {
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        member.withdraw();
     }
 }
