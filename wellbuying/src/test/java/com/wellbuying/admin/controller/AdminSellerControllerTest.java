@@ -172,4 +172,17 @@ class AdminSellerControllerTest {
                                 fieldWithPath("page.totalElements").description("전체 개수"),
                                 fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
+
+    // 존재하지 않는 필드로 정렬 요청 시 500이 아닌 400을 반환하는지 검증 (PropertyReferenceException 처리)
+    @Test
+    void 잘못된_정렬_필드로_목록_조회시_400을_반환한다() throws Exception {
+        Member admin = saveMember("admin-invalid-sort@example.com", Role.ADMIN);
+
+        mockMvc.perform(get("/api/admin/sellers")
+                        .param("status", "PENDING")
+                        .param("sort", "wrongProperty,desc")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"));
+    }
 }
