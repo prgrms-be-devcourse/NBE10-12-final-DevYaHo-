@@ -18,7 +18,25 @@ public enum ErrorCode {
     REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_NOT_FOUND", "세션이 만료되었습니다. 다시 로그인해주세요."),
     REFRESH_TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "AUTH_401_REFRESH_REUSE_DETECTED", "비정상적인 토큰 사용이 감지되어 모든 세션이 종료되었습니다. 다시 로그인해주세요."),
     SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다."),
-    OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다.");
+    OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다."),
+    SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.CONFLICT, "SOCIAL_409_ALREADY_LINKED", "이미 연동된 소셜 계정입니다."),
+    SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "SOCIAL_404_NOT_FOUND", "연동되지 않은 소셜 계정입니다."),
+    SOCIAL_ACCOUNT_LAST_LOGIN_METHOD(HttpStatus.CONFLICT, "SOCIAL_409_LAST_LOGIN_METHOD",
+            "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요."),
+    GROUP_BUY_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUPBUY_404_NOT_FOUND", "존재하지 않는 공동구매입니다."),
+    GROUP_BUY_FORBIDDEN(HttpStatus.FORBIDDEN, "GROUPBUY_403_FORBIDDEN", "해당 공동구매에 대한 권한이 없습니다."),
+    GROUP_BUY_INVALID_PERIOD(HttpStatus.BAD_REQUEST, "GROUPBUY_400_INVALID_PERIOD", "시작일은 마감일보다 이전이어야 합니다."),
+    GROUP_BUY_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "GROUPBUY_400_INVALID_QUANTITY", "최소 수량은 최대 수량보다 클 수 없습니다."),
+    GROUP_BUY_UPDATE_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_UPDATE_NOT_ALLOWED", "시작 전(READY) 상태에서만 정보를 수정할 수 있습니다."),
+    GROUP_BUY_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_CANCEL_NOT_ALLOWED", "시작 전(READY) 상태에서만 취소할 수 있습니다."),
+    GROUP_BUY_NOT_ONGOING(HttpStatus.CONFLICT, "GROUPBUY_409_NOT_ONGOING", "진행 중인 공동구매가 아닙니다."),
+    GROUP_BUY_SOLD_OUT(HttpStatus.CONFLICT, "GROUPBUY_409_SOLD_OUT", "잔여 수량이 부족합니다."),
+    GROUP_BUY_PRICE_TIER_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "GROUPBUY_500_PRICE_TIER_NOT_FOUND", "가격 구간 정보를 찾을 수 없습니다."),
+    GROUP_BUY_PART_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUPBUY_404_PART_NOT_FOUND", "존재하지 않는 참여 내역입니다."),
+    GROUP_BUY_PART_FORBIDDEN(HttpStatus.FORBIDDEN, "GROUPBUY_403_PART_FORBIDDEN", "해당 참여 내역에 대한 권한이 없습니다."),
+    GROUP_BUY_PART_ALREADY_CANCELED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_ALREADY_CANCELED", "이미 취소된 참여 내역입니다."),
+    GROUP_BUY_PART_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_CANCEL_NOT_ALLOWED", "진행 중인 공동구매만 참여를 취소할 수 있습니다."),
+    DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON_409_DUPLICATE", "이미 존재하는 데이터입니다.");
 
     private final HttpStatus status;
     private final String code;

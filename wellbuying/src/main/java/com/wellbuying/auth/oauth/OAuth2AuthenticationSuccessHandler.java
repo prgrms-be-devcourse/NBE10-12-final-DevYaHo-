@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -23,16 +24,32 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
     }
 
     // 콜백 리다이렉트 URL에 토큰을 직접 노출하지 않기 위해 1회용 교환 코드를 발급해 프론트로 리다이렉트
+    // 로그인 상태에서의 추가 연동이면 기존 토큰이 그대로 유효하므로 교환 코드 없이 결과만 리다이렉트
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
             Authentication authentication) throws IOException, ServletException {
         OAuthPrincipal principal = (OAuthPrincipal) authentication.getPrincipal();
-        String code = authService.issueOAuthExchangeCode(principal.getMemberId(), principal.getRole());
 
-        String redirectUri = UriComponentsBuilder.fromUriString(oAuthProperties.successRedirectUri())
-                .queryParam("code", code)
-                .build()
-                .toUriString();
-        response.sendRedirect(redirectUri);
+        UriComponentsBuilder redirectUriBuilder = UriComponentsBuilder.fromUriString(
+                oAuthProperties.successRedirectUri());
+        if (principal.isLinked()) {
+            String provider = extractProvider(authentication);
+            redirectUriBuilder.queryParam("linked", true)
+                    .queryParam("provider", provider);
+        } else {
+            String code = authService.issueOAuthExchangeCode(principal.getMemberId(), principal.getRole());
+            redirectUriBuilder.queryParam("code", code);
+        }
+
+        response.sendRedirect(redirectUriBuilder.build().toUriString());
+    }
+
+    // URI 문자열 파싱 대신 OAuth2AuthenticationToken이 들고 있는 registrationId를 사용
+    // GET /api/members/me/social-accounts 응답(대문자)과 표기를 맞추기 위해 대문자로 변환
+    private String extractProvider(Authentication authentication) {
+        if (authentication instanceof OAuth2AuthenticationToken oAuth2AuthenticationToken) {
+            return oAuth2AuthenticationToken.getAuthorizedClientRegistrationId().toUpperCase();
+        }
+        throw new IllegalArgumentException("Unsupported authentication type: " + authentication.getClass());
     }
 }
