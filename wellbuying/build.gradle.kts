@@ -21,6 +21,8 @@ repositories {
 
 extra["snippetsDir"] = file("build/generated-snippets")
 
+val querydslVersion = "7.5"  // https://openfeign.github.io/querydsl/ 에서 최신 버전 확인 후 필요시 교체
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-security")
@@ -42,6 +44,10 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    implementation("io.github.openfeign.querydsl:querydsl-jpa:$querydslVersion")
+    annotationProcessor("io.github.openfeign.querydsl:querydsl-apt:$querydslVersion:jpa")
+    annotationProcessor("jakarta.persistence:jakarta.persistence-api")
+    annotationProcessor("jakarta.annotation:jakarta.annotation-api")
 }
 
 tasks.withType<Test> {
@@ -55,4 +61,24 @@ tasks.test {
 tasks.asciidoctor {
     inputs.dir(project.extra["snippetsDir"]!!)
     dependsOn(tasks.test)
+}
+
+val querydslDir = "build/generated/querydsl"
+
+sourceSets {
+    main {
+        java {
+            srcDirs += file(querydslDir)
+        }
+    }
+}
+
+tasks.withType<JavaCompile> {
+    options.generatedSourceOutputDirectory.set(file(querydslDir))
+}
+
+tasks.named("clean") {
+    doLast {
+        file(querydslDir).deleteRecursively()
+    }
 }
