@@ -6,10 +6,12 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.service.EmailVerificationService;
 import com.wellbuying.domain.seller.entity.SellerInfo;
+import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
+import java.util.List;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,5 +54,36 @@ public class SellerInfoService {
         sellerInfoRepository.save(SellerInfo.apply(member.getId(), request.bankCode(), request.bankName(),
                 request.accountNumber(), request.accountHolder(), request.companyName()));
         return SellerSignupResponse.from(member);
+    }
+
+    // 관리자의 상태별 셀러 신청 목록 조회
+    public List<SellerInfo> findByStatus(SellerStatus status) {
+        return sellerInfoRepository.findAllByStatus(status);
+    }
+
+    // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 ACTIVE로 전환하고 MEMBERS.role을 SELLER로 변경
+    @Transactional
+    public void approve(Long sellerId) {
+        SellerInfo sellerInfo = findPendingSellerInfo(sellerId);
+        sellerInfo.approve();
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(sellerInfo.getMemberId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        member.activateAsSeller();
+    }
+
+    // 셀러 거절 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 TERMINATED로 전환 (role은 변경하지 않음)
+    @Transactional
+    public void reject(Long sellerId) {
+        SellerInfo sellerInfo = findPendingSellerInfo(sellerId);
+        sellerInfo.reject();
+    }
+
+    private SellerInfo findPendingSellerInfo(Long sellerId) {
+        SellerInfo sellerInfo = sellerInfoRepository.findById(sellerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_FOUND));
+        if (sellerInfo.getStatus() != SellerStatus.PENDING) {
+            throw new BusinessException(ErrorCode.SELLER_ALREADY_PROCESSED);
+        }
+        return sellerInfo;
     }
 }

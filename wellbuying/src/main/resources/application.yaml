@@ -73,3 +73,8 @@ cors:
 oauth:
   success-redirect-uri: ${OAUTH_SUCCESS_REDIRECT_URI:http://localhost:3000/oauth/callback}
   failure-redirect-uri: ${OAUTH_FAILURE_REDIRECT_URI:http://localhost:3000/oauth/callback}
+
+admin-seed:
+  enabled: ${ADMIN_SEED_ENABLED:false}
+  email: ${ADMIN_SEED_EMAIL:admin@wellbuying.local}
+  password: ${ADMIN_SEED_PASSWORD:CHANGE_ME_local_dev_admin_password}

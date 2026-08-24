@@ -11,8 +11,13 @@ import static org.mockito.Mockito.when;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.service.EmailVerificationService;
+import com.wellbuying.domain.seller.entity.SellerInfo;
+import com.wellbuying.domain.seller.entity.SellerStatus;
+import java.util.Optional;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
@@ -111,5 +116,61 @@ class SellerInfoServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
         verify(sellerInfoRepository, never()).save(any());
+    }
+
+    private SellerInfo pendingSellerInfo(Long id, Long memberId) {
+        SellerInfo sellerInfo = SellerInfo.apply(memberId, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+        ReflectionTestUtils.setField(sellerInfo, "id", id);
+        return sellerInfo;
+    }
+
+    // PENDING 상태의 셀러 신청을 승인하면 status가 ACTIVE로, 회원 role이 SELLER로 바뀌는지 검증
+    @Test
+    void 셀러_승인에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        Member member = Member.signUp("seller@example.com", "encoded-password", "홍길동");
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+        when(memberRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(member));
+
+        sellerInfoService.approve(1L);
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.ACTIVE);
+        assertThat(member.getRole()).isEqualTo(Role.SELLER);
+    }
+
+    // PENDING 상태의 셀러 신청을 거절하면 status가 TERMINATED로 바뀌고 role은 변경되지 않는지 검증
+    @Test
+    void 셀러_거절에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        sellerInfoService.reject(1L);
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.TERMINATED);
+        verify(memberRepository, never()).findByIdAndDeletedAtIsNull(any());
+    }
+
+    // 존재하지 않는 sellerId로 승인/거절 시도 시 SELLER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_셀러_신청은_승인_거절에_실패한다() {
+        when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sellerInfoService.approve(999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
+    }
+
+    // 이미 처리된(PENDING이 아닌) 셀러 신청은 다시 승인/거절할 수 없는지 검증
+    @Test
+    void 이미_처리된_셀러_신청은_승인_거절에_실패한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        assertThatThrownBy(() -> sellerInfoService.reject(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_ALREADY_PROCESSED);
     }
 }
