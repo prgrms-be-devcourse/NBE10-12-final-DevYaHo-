@@ -2,8 +2,10 @@ package com.wellbuying.groupbuy.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.wellbuying.groupbuy.domain.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
 import java.util.List;
+
+import com.wellbuying.domain.groupbuy.service.GroupBuyPriceCalculator;
 import org.junit.jupiter.api.Test;
 
 class GroupBuyPriceCalculatorTest {

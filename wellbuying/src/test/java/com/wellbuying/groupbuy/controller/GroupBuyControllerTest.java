@@ -13,13 +13,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
-import com.wellbuying.groupbuy.domain.GroupBuy;
-import com.wellbuying.groupbuy.domain.GroupBuyPart;
-import com.wellbuying.groupbuy.domain.GroupBuyPrice;
-import com.wellbuying.groupbuy.redis.GroupBuyCounterRepository;
-import com.wellbuying.groupbuy.repository.GroupBuyPartRepository;
-import com.wellbuying.groupbuy.repository.GroupBuyPriceRepository;
-import com.wellbuying.groupbuy.repository.GroupBuyRepository;
+import com.wellbuying.domain.groupbuy.domain.GroupBuy;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
