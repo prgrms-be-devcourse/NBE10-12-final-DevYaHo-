@@ -2,6 +2,8 @@ package com.wellbuying.groupbuy.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyPartStatus;
 import org.junit.jupiter.api.Test;
 
 class GroupBuyPartTest {

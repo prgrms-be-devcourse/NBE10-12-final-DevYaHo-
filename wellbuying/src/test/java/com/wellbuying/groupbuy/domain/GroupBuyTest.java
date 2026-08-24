@@ -3,6 +3,9 @@ package com.wellbuying.groupbuy.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+
+import com.wellbuying.domain.groupbuy.domain.GroupBuy;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
 import org.junit.jupiter.api.Test;
 
 class GroupBuyTest {

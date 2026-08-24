@@ -2,8 +2,9 @@ package com.wellbuying.groupbuy.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.wellbuying.groupbuy.domain.GroupBuy;
-import com.wellbuying.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.domain.GroupBuy;
+import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.LocalDateTime;
