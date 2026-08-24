@@ -50,3 +50,9 @@ capcature/
 .env
 .env.*
 !.env.example
+
+
+### Antigravity ###
+code_reviews
+
+commit_diff.patch

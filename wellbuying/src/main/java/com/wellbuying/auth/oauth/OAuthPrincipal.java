@@ -1,6 +1,6 @@
 package com.wellbuying.auth.oauth;
 
-import com.wellbuying.member.domain.Role;
+import com.wellbuying.domain.member.entity.Role;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
