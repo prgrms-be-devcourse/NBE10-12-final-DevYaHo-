@@ -1,5 +1,6 @@
 package com.wellbuying.auth.controller;
 
+import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
 import com.wellbuying.auth.dto.OAuthExchangeRequest;
@@ -8,8 +9,10 @@ import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.auth.service.AuthService;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -57,6 +60,14 @@ public class AuthController {
     @PostMapping("/api/auth/oauth/exchange")
     public ResponseEntity<LoginResponse> exchangeOAuthCode(@Valid @RequestBody OAuthExchangeRequest request) {
         LoginResponse response = authService.exchangeOAuthCode(request.code());
+        return ResponseEntity.ok(response);
+    }
+
+    // 로그인 기기 목록 조회 API - 현재 회원의 모든 활성 세션을 lastUsedAt 내림차순으로 반환
+    @GetMapping("/api/auth/devices")
+    public ResponseEntity<List<DeviceSessionResponse>> getDevices(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
+        List<DeviceSessionResponse> response = authService.getDevices(authenticatedMember.memberId());
         return ResponseEntity.ok(response);
     }
 }

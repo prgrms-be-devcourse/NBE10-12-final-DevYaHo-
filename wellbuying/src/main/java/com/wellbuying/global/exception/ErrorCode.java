@@ -35,7 +35,8 @@ public enum ErrorCode {
     GROUP_BUY_PART_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUPBUY_404_PART_NOT_FOUND", "존재하지 않는 참여 내역입니다."),
     GROUP_BUY_PART_FORBIDDEN(HttpStatus.FORBIDDEN, "GROUPBUY_403_PART_FORBIDDEN", "해당 참여 내역에 대한 권한이 없습니다."),
     GROUP_BUY_PART_ALREADY_CANCELED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_ALREADY_CANCELED", "이미 취소된 참여 내역입니다."),
-    GROUP_BUY_PART_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_CANCEL_NOT_ALLOWED", "진행 중인 공동구매만 참여를 취소할 수 있습니다.");
+    GROUP_BUY_PART_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_CANCEL_NOT_ALLOWED", "진행 중인 공동구매만 참여를 취소할 수 있습니다."),
+    DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON_409_DUPLICATE", "이미 존재하는 데이터입니다.");
 
     private final HttpStatus status;
     private final String code;

@@ -2,6 +2,7 @@ package com.wellbuying.auth.token;
 
 import com.wellbuying.auth.jwt.JwtProperties;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +47,15 @@ public class RefreshTokenRepository {
             return Optional.empty();
         }
         return Optional.of(objectMapper.readValue((String) value, RefreshTokenValue.class));
+    }
+
+    // memberId의 모든 기기 refresh token 정보 조회 (HGETALL) - deviceId -> RefreshTokenValue
+    public Map<String, RefreshTokenValue> findAll(Long memberId) {
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(key(memberId));
+        Map<String, RefreshTokenValue> result = new LinkedHashMap<>();
+        entries.forEach((deviceId, json) ->
+                result.put((String) deviceId, objectMapper.readValue((String) json, RefreshTokenValue.class)));
+        return result;
     }
 
     // rotate_refresh_token.lua 실행 - grace 기간 내 경쟁 요청까지 허용하는 RTR 원자적 회전 (1=성공, 0=세션없음, -1=재사용감지로 전체세션삭제)

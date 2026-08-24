@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.groupbuy.domain.GroupBuy;
 import com.wellbuying.groupbuy.domain.GroupBuyStatus;
-import com.wellbuying.member.domain.Member;
-import com.wellbuying.member.repository.MemberRepository;
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

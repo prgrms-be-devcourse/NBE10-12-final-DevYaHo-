@@ -2,7 +2,7 @@ package com.wellbuying.auth.oauth;
 
 import com.wellbuying.auth.service.OAuthAccountService;
 import com.wellbuying.global.exception.BusinessException;
-import com.wellbuying.member.domain.Member;
+import com.wellbuying.domain.member.entity.Member;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.util.Map;
