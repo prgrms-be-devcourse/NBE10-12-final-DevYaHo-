@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { DealCard } from "@/components/deal/DealCard";
@@ -37,13 +37,16 @@ export default function ExplorePage() {
   });
   const [visibleCount, setVisibleCount] = useState(6);
 
-  useEffect(() => {
+  const searchParamsKey = searchParams.toString();
+  const [syncedParamsKey, setSyncedParamsKey] = useState(searchParamsKey);
+  if (searchParamsKey !== syncedParamsKey) {
+    setSyncedParamsKey(searchParamsKey);
     const q = searchParams.get("q");
     if (q !== null) setQuery(q);
     const param = searchParams.get("sort");
     if (isSort(param)) setSort(param);
     setVisibleCount(6);
-  }, [searchParams]);
+  }
 
   const baseDeals = scheduledView ? scheduledDeals() : visibleDeals();
 
