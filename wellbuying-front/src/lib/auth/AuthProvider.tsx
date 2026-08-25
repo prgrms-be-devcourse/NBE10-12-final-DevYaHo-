@@ -17,7 +17,8 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // TEMP-DEV-STUB: remove before shipping — lets us render authenticated pages without a live backend.
-const DEV_FAKE_ROLE: "BUYER" | "SELLER" | "ADMIN" | null = "ADMIN";
+// 실제 로그인/소셜 로그인 플로우 개발·테스트를 위해 비활성화함 (docs/front/phase1-social-login-plan.md 참고).
+const DEV_FAKE_ROLE: "BUYER" | "SELLER" | "ADMIN" | null = null;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
