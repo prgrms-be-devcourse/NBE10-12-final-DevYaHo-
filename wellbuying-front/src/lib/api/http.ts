@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth/token-storage";
 import type { ErrorResponse, ReissueResponse } from "@/lib/api/types";
 
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export class ApiError extends Error {

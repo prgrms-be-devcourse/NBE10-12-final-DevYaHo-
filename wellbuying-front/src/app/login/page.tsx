@@ -8,12 +8,19 @@ import { Banner } from "@/components/ui/Banner";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { ApiError } from "@/lib/api/http";
 import {
+  getOAuthAuthorizationUrl,
   login,
   sendVerificationCode,
   sellerSignup,
   signup,
   verifyEmail,
 } from "@/lib/api/auth";
+import type { OAuthProvider } from "@/lib/api/types";
+
+const SOCIAL_PROVIDERS: { provider: OAuthProvider; label: string }[] = [
+  { provider: "GOOGLE", label: "구글로 계속하기" },
+  { provider: "KAKAO", label: "카카오로 계속하기" },
+];
 
 type Mode = "login" | "signup";
 
@@ -356,6 +363,28 @@ export default function LoginPage() {
               {mode === "login" ? "로그인" : "회원가입"}
             </Button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-wb-line" />
+            <span className="text-xs text-wb-secondary">또는</span>
+            <div className="h-px flex-1 bg-wb-line" />
+          </div>
+
+          <div className="space-y-2">
+            {SOCIAL_PROVIDERS.map(({ provider, label }) => (
+              <Button
+                key={provider}
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => {
+                  window.location.href = getOAuthAuthorizationUrl(provider);
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <p className="text-center text-xs text-wb-secondary">1차 MVP · 회원 플로우</p>

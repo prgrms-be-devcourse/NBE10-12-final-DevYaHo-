@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, Users, Wallet } from "lucide-react";
+import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, UserCheck, Users, Wallet } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
@@ -14,6 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/dashboard", label: "대시보드", icon: LayoutDashboard },
     { href: "/admin/deals", label: "공동구매 관리", icon: Package },
     { href: "/admin/reviews", label: "상품 심사", icon: ShieldCheck, badge: pendingReviewCount },
+    { href: "/admin/sellers", label: "판매자 승인", icon: UserCheck },
     { href: "/admin/settlements", label: "정산 관리", icon: Wallet, badge: readySettlementCount },
     { href: "/admin/members", label: "회원 현황", icon: Users },
     { href: "/profile", label: "설정", icon: Settings },

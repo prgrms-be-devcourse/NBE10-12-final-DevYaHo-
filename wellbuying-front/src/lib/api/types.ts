@@ -1,5 +1,7 @@
 export type Role = "ADMIN" | "SELLER" | "BUYER";
 
+export type OAuthProvider = "GOOGLE" | "KAKAO";
+
 export type LoginRequest = {
   email: string;
   password: string;
@@ -39,6 +41,26 @@ export type MemberResponse = {
   role: Role;
 };
 
+export type UpdateMemberRequest = {
+  name: string;
+  profileImageUrl?: string;
+};
+
+export type SocialAccountsResponse = {
+  providers: OAuthProvider[];
+};
+
+export type SocialLinkResponse = {
+  redirectUrl: string;
+};
+
+// issuedAt/lastUsedAt은 epoch seconds (밀리초 아님)
+export type DeviceSessionResponse = {
+  deviceId: string;
+  issuedAt: number;
+  lastUsedAt: number;
+};
+
 export type SellerApplyRequest = {
   bankCode: string;
   bankName: string;
@@ -48,6 +70,17 @@ export type SellerApplyRequest = {
 };
 
 export type SellerSignupRequest = SignupRequest & SellerApplyRequest;
+
+export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
+
+export type SellerInfoResponse = {
+  id: number;
+  memberId: number;
+  status: SellerStatus;
+  bankName: string;
+  companyName: string | null;
+  createdAt: string;
+};
 
 export type ErrorResponse = {
   code: string;
