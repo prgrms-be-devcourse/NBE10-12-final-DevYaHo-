@@ -17,7 +17,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: "loading",
   member: null,
 
-  setMember: (member) => set({ member }),
+  setMember: (member) => set({ member, status: member ? "authenticated" : "unauthenticated" }),
 
   refreshMember: async () => {
     if (!getAccessToken()) {
