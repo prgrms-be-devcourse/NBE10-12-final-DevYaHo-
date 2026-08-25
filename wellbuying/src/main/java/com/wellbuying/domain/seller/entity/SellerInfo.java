@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -15,7 +16,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "seller_info")
+@Table(name = "seller_info",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_seller_info_member_id",
+                columnNames = "member_id"))
 public class SellerInfo {
 
     @Id
