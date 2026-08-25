@@ -18,7 +18,6 @@ import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 // 컨트롤러 계층만 띄워서, 쿼리 파라미터가 서비스로 잘 전달되고 응답이 JSON으로 잘 나가는지만 검증 (서비스 로직은 ProductServiceTest에서 이미 검증함)
 @WebMvcTest(ProductController.class)
