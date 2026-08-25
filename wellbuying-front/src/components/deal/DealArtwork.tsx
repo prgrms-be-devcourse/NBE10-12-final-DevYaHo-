@@ -1,10 +1,15 @@
-import { Droplet, Leaf, Shirt, type LucideIcon } from "lucide-react";
+import { Coffee, Droplet, Gift, Leaf, Package, Palette, Shirt, Sparkles, type LucideIcon } from "lucide-react";
 import { TINT_GRADIENTS, type Deal } from "@/lib/mock/types";
 
 const ICONS: Record<string, LucideIcon> = {
   droplet: Droplet,
   leaf: Leaf,
   shirt: Shirt,
+  coffee: Coffee,
+  gift: Gift,
+  package: Package,
+  palette: Palette,
+  sparkles: Sparkles,
 };
 
 export function DealArtwork({ deal, className = "" }: { deal: Deal; className?: string }) {

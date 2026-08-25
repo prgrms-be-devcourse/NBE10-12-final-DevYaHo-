@@ -38,6 +38,8 @@ type DemoState = {
   lastBatchRun: string | null;
 };
 
+const SCHEDULED_DEAL_IDS = new Set(["deal-candle", "deal-scarf", "deal-yuja", "deal-campmat"]);
+
 function initialState(): DemoState {
   return {
     deals: SAMPLE_DEALS,
@@ -45,7 +47,12 @@ function initialState(): DemoState {
     favoriteIds: new Set(),
     participations: [],
     orders: [],
-    dealStatuses: Object.fromEntries(SAMPLE_DEALS.map((deal) => [deal.id, "recruiting" as DealStatus])),
+    dealStatuses: Object.fromEntries(
+      SAMPLE_DEALS.map((deal) => [
+        deal.id,
+        (SCHEDULED_DEAL_IDS.has(deal.id) ? "scheduled" : "recruiting") as DealStatus,
+      ]),
+    ),
     producerDealIds: new Set(SAMPLE_PRODUCER_DEAL_IDS),
     submissions: SAMPLE_SUBMISSIONS,
     reviewStatuses: Object.fromEntries(SAMPLE_SUBMISSIONS.map((item) => [item.id, "pending" as ReviewStatus])),
@@ -78,6 +85,7 @@ type DemoStoreValue = {
   dealById: (id: string) => Deal | undefined;
   participants: (dealId: string) => number;
   visibleDeals: () => Deal[];
+  scheduledDeals: () => Deal[];
   hasActiveParticipation: (dealId: string) => boolean;
   canCancelBeforeStart: (dealId: string) => boolean;
 
@@ -116,6 +124,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   const visibleDeals = useCallback(
     () => state.deals.filter((deal) => state.dealStatuses[deal.id] === "recruiting"),
+    [state.deals, state.dealStatuses],
+  );
+
+  const scheduledDeals = useCallback(
+    () => state.deals.filter((deal) => state.dealStatuses[deal.id] === "scheduled"),
     [state.deals, state.dealStatuses],
   );
 
@@ -343,6 +356,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     dealById,
     participants,
     visibleDeals,
+    scheduledDeals,
     hasActiveParticipation,
     canCancelBeforeStart,
 
