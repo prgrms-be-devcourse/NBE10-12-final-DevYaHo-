@@ -47,6 +47,13 @@ public class SecurityConfig {
             "/api/groupBuys/*/price"
     };
 
+    // 상품/카테고리 조회(GET)는 로그인 없이도 둘러볼 수 있어야 하므로 별도로 permitAll 처리
+    private static final String[] PRODUCT_PUBLIC_GET_PATHS = {
+            "/api/products",
+            "/api/products/*",
+            "/api/categories"
+    };
+
     private final TokenProvider tokenProvider;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final CorsProperties corsProperties;
@@ -108,6 +115,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, GROUP_BUY_PUBLIC_GET_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.GET, PRODUCT_PUBLIC_GET_PATHS).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .oauth2Login(oauth2 -> oauth2
