@@ -3,6 +3,7 @@ package com.wellbuying.domain.product.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
+import java.util.List;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
@@ -109,6 +110,21 @@ class ProductQueryRepositoryTest {
         Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
 
         assertThat(result.getContent().get(0).productName()).isEqualTo("인기많은상품");
+    }
+
+    // 인기순(POPULAR) 정렬 시 ProductCount가 없어 viewCount가 NULL인 상품은 맨 뒤로 밀린다
+    @Test
+    void search_인기순_정렬시_조회수_없는_상품은_맨_뒤로_간다() {
+        Product noCount = productRepository.save(Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url"));
+        Product withCount = productRepository.save(Product.register(TEST_SELLER_ID, testCategoryId, "조회수있는상품", "설명", 10000, "url"));
+        productCountRepository.save(withViewCount(withCount.getId(), 10L));
+        // noCount는 ProductCount 저장 안 함 → LEFT JOIN 후 viewCount = NULL
+
+        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.POPULAR);
+        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+
+        List<String> names = result.getContent().stream().map(ProductSummaryResponse::productName).toList();
+        assertThat(names.indexOf("조회수있는상품")).isLessThan(names.indexOf("조회수없는상품"));
     }
 
     // 가격 오름차순(PRICE_ASC) 정렬 시 저렴한 상품이 먼저 나온다

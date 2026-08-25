@@ -78,7 +78,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
             return product.id.desc();
         }
         return switch (sortType) {
-            case POPULAR -> productCount.viewCount.desc();
+            case POPULAR -> productCount.viewCount.desc().nullsLast();
             case PRICE_ASC -> product.startPrice.asc();
             case PRICE_DESC -> product.startPrice.desc();
             case LATEST -> product.id.desc();
