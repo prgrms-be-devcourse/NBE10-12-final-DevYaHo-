@@ -69,6 +69,11 @@ public class Member {
         return new Member(email, null, name, Role.BUYER);
     }
 
+    // 로컬 개발용 admin 계정 시드 전용 - 가입 API를 통해서는 ADMIN으로 생성될 수 없음
+    public static Member seedAdmin(String email, String encodedPassword, String name) {
+        return new Member(email, encodedPassword, name, Role.ADMIN);
+    }
+
     // 비밀번호가 없는(소셜 로그인 전용) 계정인지 확인
     public boolean isSocialOnly() {
         return password == null;
@@ -85,6 +90,11 @@ public class Member {
     // 회원 탈퇴 - deletedAt을 현재 시각으로 세팅 (soft delete)
     public void withdraw() {
         this.deletedAt = LocalDateTime.now();
+    }
+
+    // 셀러 승인 시 role을 SELLER로 변경 (거절 시에는 호출하지 않음 - role은 BUYER 유지)
+    public void activateAsSeller() {
+        this.role = Role.SELLER;
     }
 
     public Long getId() {
