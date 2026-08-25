@@ -7,6 +7,7 @@ import { DealEditorModal } from "@/components/producer/DealEditorModal";
 import { ProducerStatusPill } from "@/components/producer/ProducerStatusPill";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { compactCount, compactWon } from "@/lib/format";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
 import { activeTier, won } from "@/lib/mock/types";
 
@@ -36,8 +37,8 @@ export default function ProducerDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard icon={Radio} title="운영 중" value={`${recruitingCount}건`} />
-        <MetricCard icon={Users} title="전체 참여" value={`${totalParticipants.toLocaleString("ko-KR")}명`} />
-        <MetricCard icon={LineChart} title="예상 매출" value={won(estimatedSales)} />
+        <MetricCard icon={Users} title="전체 참여" value={compactCount(totalParticipants, "명")} />
+        <MetricCard icon={LineChart} title="예상 매출" value={compactWon(estimatedSales)} />
       </div>
 
       <div className="rounded-2xl border border-wb-line bg-wb-surface p-6">

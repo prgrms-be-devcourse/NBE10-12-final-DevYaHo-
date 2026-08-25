@@ -71,17 +71,6 @@ export type SellerApplyRequest = {
 
 export type SellerSignupRequest = SignupRequest & SellerApplyRequest;
 
-export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
-
-export type SellerInfoResponse = {
-  id: number;
-  memberId: number;
-  status: SellerStatus;
-  bankName: string;
-  companyName: string | null;
-  createdAt: string;
-};
-
 export type ErrorResponse = {
   code: string;
   message: string;

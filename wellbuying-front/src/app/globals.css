@@ -31,22 +31,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-
-    --wb-canvas: #111213;
-    --wb-surface: #1b1c1d;
-    --wb-tag-surface: #222325;
-    --wb-ink: #ededed;
-    --wb-secondary: #9a9a9a;
-    --wb-line: #2e2f30;
-    --wb-green: #337d4d;
-    --wb-light-green: #243b2b;
-    --wb-orange: #ed8c45;
-  }
-}
+/* 시스템 다크모드 설정과 무관하게 항상 라이트 테마로 고정 */
 
 body {
   background: var(--wb-canvas);
