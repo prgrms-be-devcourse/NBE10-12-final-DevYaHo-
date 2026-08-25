@@ -3,8 +3,10 @@ package com.wellbuying.domain.product.repository;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.entity.ProductSortType;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.entity.QProduct;
 import com.wellbuying.domain.product.entity.QProductCount;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
@@ -34,11 +36,11 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
-                        productCount.viewCount))
+                        Expressions.numberTemplate(Long.class, "coalesce({0}, 0)", productCount.viewCount)))
                 .from(product)
                 .leftJoin(productCount).on(productCount.productId.eq(product.id))
                 .where(
-                        product.available.isTrue(),
+                        product.status.eq(ProductStatus.ON_SALE),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
                         priceLoe(condition.maxPrice())
