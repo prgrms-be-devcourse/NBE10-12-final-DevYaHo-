@@ -3,6 +3,8 @@ package com.wellbuying.domain.product.service;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.dto.CategoryTreeResponse;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,9 +41,13 @@ public class CategoryService {
     private List<CategoryTreeResponse> buildTree(Long parentId, Map<Long, List<ProductCategory>> byParent,
                                                  Set<Long> visited) {
         List<ProductCategory> children = byParent.getOrDefault(parentId, List.of());
-        return children.stream()
-                .filter(c -> visited.add(c.getId()))
-                .map(c -> new CategoryTreeResponse(c.getId(), c.getCategoryName(), buildTree(c.getId(), byParent, visited)))
-                .toList();
+        List<CategoryTreeResponse> result = new ArrayList<>();
+        for (ProductCategory child : children) {
+            if (visited.add(child.getId())) {
+                result.add(new CategoryTreeResponse(child.getId(), child.getCategoryName(),
+                        buildTree(child.getId(), byParent, visited)));
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 }
