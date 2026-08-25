@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +32,7 @@ export default function LiveGroupBuyDetailPage() {
   const [myPart, setMyPart] = useState<GroupBuyPartMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [resourceNotFound, setResourceNotFound] = useState(false);
 
   const [quantity, setQuantity] = useState(1);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,7 +60,12 @@ export default function LiveGroupBuyDetailPage() {
       try {
         await reload();
       } catch (e) {
-        if (!ignore) setLoadError(e instanceof ApiError ? e.message : "공동구매 정보를 불러오지 못했어요.");
+        if (ignore) return;
+        if (e instanceof ApiError && e.status === 404) {
+          setResourceNotFound(true);
+        } else {
+          setLoadError(e instanceof ApiError ? e.message : "공동구매 정보를 불러오지 못했어요.");
+        }
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -101,8 +107,8 @@ export default function LiveGroupBuyDetailPage() {
     }
   }
 
-  if (!Number.isFinite(groupBuyId)) {
-    return <div className="p-9 text-sm text-wb-secondary">잘못된 공동구매 주소예요.</div>;
+  if (!Number.isFinite(groupBuyId) || resourceNotFound) {
+    notFound();
   }
 
   if (loading) {
@@ -112,7 +118,7 @@ export default function LiveGroupBuyDetailPage() {
   if (loadError || !detail || !status) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-9">
-        <Banner tone="error">{loadError ?? "공동구매를 찾을 수 없어요."}</Banner>
+        <Banner tone="error">{loadError ?? "공동구매 정보를 불러오지 못했어요."}</Banner>
       </div>
     );
   }

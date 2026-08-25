@@ -1,9 +1,12 @@
-export type ColorToken = "herb" | "citrus" | "ocean";
+export type ColorToken = "herb" | "citrus" | "ocean" | "berry" | "sand" | "sky";
 
 export const TINT_GRADIENTS: Record<ColorToken, string> = {
   herb: "linear-gradient(135deg, #baD49b, #e8e8b8)",
   citrus: "linear-gradient(135deg, #fac05e, #fee3a1)",
   ocean: "linear-gradient(135deg, #80b8bb, #c4e0dc)",
+  berry: "linear-gradient(135deg, #e39bb0, #f3c9d6)",
+  sand: "linear-gradient(135deg, #d9b98a, #f0ddc0)",
+  sky: "linear-gradient(135deg, #9bb8e3, #cfe0f5)",
 };
 
 export type PriceTier = {
@@ -46,6 +49,15 @@ export function activeTier(deal: Deal, people: number): PriceTier {
 export function nextTier(deal: Deal, people: number): PriceTier | null {
   const sorted = [...deal.tiers].sort((a, b) => a.minimumPeople - b.minimumPeople);
   return sorted.find((tier) => people < tier.minimumPeople) ?? null;
+}
+
+export function activeTierIndex(deal: Deal, people: number): number {
+  const sorted = [...deal.tiers].sort((a, b) => a.minimumPeople - b.minimumPeople);
+  let index = 0;
+  sorted.forEach((tier, i) => {
+    if (people >= tier.minimumPeople) index = i;
+  });
+  return index;
 }
 
 export type DealStatus =

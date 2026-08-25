@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { Heart, PieChart } from "lucide-react";
 import { DealArtwork } from "@/components/deal/DealArtwork";
 import { ParticipationModal } from "@/components/consumer/ParticipationModal";
@@ -21,7 +21,7 @@ export default function DealDetailPage() {
 
   const deal = dealById(params.id);
   if (!deal) {
-    return <div className="p-9 text-sm text-wb-secondary">공동구매를 찾을 수 없어요.</div>;
+    notFound();
   }
 
   const people = participants(deal.id);

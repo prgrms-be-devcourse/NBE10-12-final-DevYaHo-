@@ -1,22 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { notFound } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { Role } from "@/lib/api/types";
 
 function RoleCheck({ role, children }: { role: Role; children: React.ReactNode }) {
   const { member } = useAuth();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (member && member.role !== role) {
-      router.replace("/home");
-    }
-  }, [member, role, router]);
+  if (member && member.role !== role) {
+    notFound();
+  }
 
-  if (!member || member.role !== role) {
+  if (!member) {
     return (
       <div className="flex flex-1 items-center justify-center py-24 text-sm text-wb-secondary">
         불러오는 중...

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/Tag";
+import { compactCount } from "@/lib/format";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
 
 export default function AdminMembersPage() {
@@ -28,12 +29,12 @@ export default function AdminMembersPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold text-wb-secondary">전체 회원</p>
-          <p className="mt-1.5 text-xl font-bold">2,481명</p>
+          <p className="mt-1.5 text-xl font-bold">{compactCount(2481, "명")}</p>
           <p className="text-xs font-semibold text-wb-green">이번 달 +184</p>
         </Card>
         <Card>
           <p className="text-xs font-semibold text-wb-secondary">활성 회원</p>
-          <p className="mt-1.5 text-xl font-bold">1,926명</p>
+          <p className="mt-1.5 text-xl font-bold">{compactCount(1926, "명")}</p>
           <p className="text-xs font-semibold text-wb-green">최근 30일</p>
         </Card>
         <Card>

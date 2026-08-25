@@ -58,4 +58,14 @@ class MemberTest {
 
         assertThat(member.getDeletedAt()).isNotNull();
     }
+
+    // activateAsSeller() 호출 시 role이 SELLER로 바뀌는지 검증
+    @Test
+    void activateAsSeller호출시_role이_SELLER로_바뀐다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+
+        member.activateAsSeller();
+
+        assertThat(member.getRole()).isEqualTo(Role.SELLER);
+    }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { DealCard } from "@/components/deal/DealCard";
 import { Button } from "@/components/ui/Button";
@@ -9,25 +10,49 @@ import { activeTier, type Deal } from "@/lib/mock/types";
 
 const CATEGORIES = ["전체", "식품", "생활", "패션"];
 
-type Sort = "popular" | "priceLow" | "priceHigh" | "closing";
+type Sort = "popular" | "new" | "priceLow" | "priceHigh" | "closing";
 
 const SORT_LABEL: Record<Sort, string> = {
   popular: "인기순",
+  new: "신상품순",
   priceLow: "낮은 가격순",
   priceHigh: "높은 가격순",
   closing: "마감 임박순",
 };
 
+function isSort(value: string | null): value is Sort {
+  return !!value && value in SORT_LABEL;
+}
+
 export default function ExplorePage() {
-  const { visibleDeals, participants } = useDemoStore();
-  const [query, setQuery] = useState("");
+  const { visibleDeals, scheduledDeals, participants } = useDemoStore();
+  const searchParams = useSearchParams();
+  const scheduledView = searchParams.get("status") === "scheduled";
+
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [category, setCategory] = useState("전체");
-  const [sort, setSort] = useState<Sort>("popular");
+  const [sort, setSort] = useState<Sort>(() => {
+    const param = searchParams.get("sort");
+    return isSort(param) ? param : "popular";
+  });
   const [visibleCount, setVisibleCount] = useState(6);
+
+  const searchParamsKey = searchParams.toString();
+  const [syncedParamsKey, setSyncedParamsKey] = useState(searchParamsKey);
+  if (searchParamsKey !== syncedParamsKey) {
+    setSyncedParamsKey(searchParamsKey);
+    const q = searchParams.get("q");
+    if (q !== null) setQuery(q);
+    const param = searchParams.get("sort");
+    if (isSort(param)) setSort(param);
+    setVisibleCount(6);
+  }
+
+  const baseDeals = scheduledView ? scheduledDeals() : visibleDeals();
 
   const filtered = useMemo(() => {
     const price = (deal: Deal) => activeTier(deal, participants(deal.id)).price;
-    const result = visibleDeals().filter((deal) => {
+    const result = baseDeals.filter((deal) => {
       const matchesCategory = category === "전체" || deal.category === category;
       const matchesQuery =
         query.trim().length === 0 ||
@@ -44,11 +69,13 @@ export default function ExplorePage() {
           return price(b) - price(a);
         case "closing":
           return a.daysLeft - b.daysLeft;
+        case "new":
+          return baseDeals.indexOf(b) - baseDeals.indexOf(a);
         default:
           return participants(b.id) - participants(a.id);
       }
     });
-  }, [visibleDeals, participants, category, query, sort]);
+  }, [baseDeals, participants, category, query, sort]);
 
   const visible = filtered.slice(0, visibleCount);
 
@@ -62,8 +89,12 @@ export default function ExplorePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-9">
       <div>
-        <h1 className="text-3xl font-bold">공동구매 둘러보기</h1>
-        <p className="mt-1 text-sm text-wb-secondary">카테고리와 가격을 비교해 나에게 맞는 상품을 찾아보세요.</p>
+        <h1 className="text-3xl font-bold">{scheduledView ? "진행 예정 공동구매" : "공동구매 둘러보기"}</h1>
+        <p className="mt-1 text-sm text-wb-secondary">
+          {scheduledView
+            ? "곧 시작하는 공동구매를 미리 만나보세요."
+            : "카테고리와 가격을 비교해 나에게 맞는 상품을 찾아보세요."}
+        </p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">

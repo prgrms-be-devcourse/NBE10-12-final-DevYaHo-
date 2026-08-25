@@ -1,6 +1,7 @@
 package com.wellbuying.global.exception;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,5 +32,12 @@ public class GlobalExceptionHandler {
                 .orElse(ErrorCode.INVALID_INPUT.getMessage());
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+    }
+
+    // 잘못된 sort 필드명(?sort=wrongProperty)은 SQL이 생성되기 전 리포지토리 프록시 단계에서 실패 - 클라이언트 잘못이므로 500이 아닌 400으로 응답
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handlePropertyReferenceException(PropertyReferenceException e) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, "정렬할 수 없는 필드입니다: " + e.getPropertyName()));
     }
 }

@@ -5,8 +5,8 @@ import { Banknote, ChevronRight, Package, Users2, Wallet } from "lucide-react";
 import { DealArtwork } from "@/components/deal/DealArtwork";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { compactCount, compactWon } from "@/lib/format";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { won } from "@/lib/mock/types";
 
 const SERVICES = [
   { name: "Spring Boot", latency: "18ms" },
@@ -32,9 +32,9 @@ export default function AdminDashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard icon={Users2} title="진행 공동구매" value={`${activeDeals.length}건`} detail="모집 중" />
-        <MetricCard icon={Package} title="현재 참여자" value={`${totalParticipants.toLocaleString("ko-KR")}명`} />
+        <MetricCard icon={Package} title="현재 참여자" value={compactCount(totalParticipants, "명")} />
         <MetricCard icon={Banknote} title="심사 대기" value={`${pendingReviewCount}건`} detail="확인 필요" />
-        <MetricCard icon={Wallet} title="정산 대기" value={won(readySettlementAmount)} detail={`${readySettlementCount}건`} />
+        <MetricCard icon={Wallet} title="정산 대기" value={compactWon(readySettlementAmount)} detail={`${readySettlementCount}건`} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">

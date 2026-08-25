@@ -5,8 +5,9 @@ import { PlayCircle } from "lucide-react";
 import { Banner } from "@/components/ui/Banner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusPill } from "@/components/ui/Tag";
+import { compactWon, won } from "@/lib/format";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { SETTLEMENT_STATUS_LABEL, won, type SettlementStatus } from "@/lib/mock/types";
+import { SETTLEMENT_STATUS_LABEL, type SettlementStatus } from "@/lib/mock/types";
 
 const TONE: Record<SettlementStatus, "orange" | "green" | "red"> = {
   ready: "orange",
@@ -39,7 +40,7 @@ export default function AdminSettlementsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-wb-line bg-wb-surface p-5">
           <p className="text-xs font-semibold text-wb-secondary">이번 정산 대기 금액</p>
-          <p className="mt-2 text-2xl font-bold">{won(readySettlementAmount)}</p>
+          <p className="mt-2 text-2xl font-bold">{compactWon(readySettlementAmount)}</p>
           <p className="mt-1 text-xs font-semibold text-wb-green">검증 완료 {readySettlementCount}건</p>
         </div>
         <div className="rounded-2xl border border-wb-line bg-wb-surface p-5">

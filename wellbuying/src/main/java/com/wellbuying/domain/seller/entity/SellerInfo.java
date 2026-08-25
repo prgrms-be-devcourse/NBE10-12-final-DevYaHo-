@@ -91,6 +91,17 @@ public class SellerInfo {
         return new SellerInfo(memberId, bankCode, bankName, accountNumber, accountHolder, companyName);
     }
 
+    // 셀러 승인 - status를 ACTIVE로 전환하고 승인 시각을 기록 ("PENDING이어야만 승인 가능"이라는 검증은 서비스 레이어 책임)
+    public void approve() {
+        this.status = SellerStatus.ACTIVE;
+        this.approvedAt = LocalDateTime.now();
+    }
+
+    // 셀러 거절 - status를 TERMINATED로 전환 (approvedAt은 기록하지 않음)
+    public void reject() {
+        this.status = SellerStatus.TERMINATED;
+    }
+
     public Long getId() {
         return id;
     }
@@ -101,5 +112,17 @@ public class SellerInfo {
 
     public SellerStatus getStatus() {
         return status;
+    }
+
+    public String getBankName() {
+        return bankName;
+    }
+
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 }
