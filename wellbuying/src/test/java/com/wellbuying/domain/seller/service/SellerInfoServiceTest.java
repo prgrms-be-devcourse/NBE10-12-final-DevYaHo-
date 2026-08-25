@@ -19,6 +19,7 @@ import com.wellbuying.domain.seller.entity.SellerStatus;
 import java.util.Optional;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.wellbuying.domain.seller.dto.SellerApplyRequest;
+import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
@@ -50,7 +51,7 @@ class SellerInfoServiceTest {
     // 신청 이력이 없는 회원이 셀러 신청 시 SellerInfo가 저장되는지 검증
     @Test
     void 기존_회원이_셀러_신청에_성공한다() {
-        when(sellerInfoRepository.existsByMemberId(1L)).thenReturn(false);
+        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.empty());
 
         sellerInfoService.apply(1L,
                 new SellerApplyRequest("088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어"));
@@ -58,16 +59,31 @@ class SellerInfoServiceTest {
         verify(sellerInfoRepository).save(any());
     }
 
-    // 이미 신청 이력이 있는 회원이 다시 신청하면 SELLER_APPLICATION_ALREADY_EXISTS 예외가 발생하고 저장이 일어나지 않는지 검증
+    // PENDING/ACTIVE 신청 이력이 있는 회원이 다시 신청하면 SELLER_APPLICATION_ALREADY_EXISTS 예외가 발생하고 저장이 일어나지 않는지 검증
     @Test
     void 이미_신청_이력이_있으면_셀러_신청에_실패한다() {
-        when(sellerInfoRepository.existsByMemberId(1L)).thenReturn(true);
+        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(pendingSellerInfo(1L, 1L)));
 
         assertThatThrownBy(() -> sellerInfoService.apply(1L,
                 new SellerApplyRequest("088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_APPLICATION_ALREADY_EXISTS);
+        verify(sellerInfoRepository, never()).save(any());
+    }
+
+    // 거절(TERMINATED)된 이력이 있는 회원이 재신청하면 기존 행이 PENDING으로 갱신되고 별도 저장은 호출되지 않는지 검증
+    @Test
+    void 거절된_회원이_재신청에_성공한다() {
+        SellerInfo terminated = pendingSellerInfo(1L, 1L);
+        terminated.reject();
+        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(terminated));
+
+        sellerInfoService.apply(1L,
+                new SellerApplyRequest("004", "국민은행", "110-987-654321", "김철수", "웰바잉스토어2"));
+
+        assertThat(terminated.getStatus()).isEqualTo(SellerStatus.PENDING);
+        assertThat(terminated.getBankName()).isEqualTo("국민은행");
         verify(sellerInfoRepository, never()).save(any());
     }
 
@@ -172,5 +188,27 @@ class SellerInfoServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_ALREADY_PROCESSED);
+    }
+
+    // 신청 이력이 있는 회원의 내 셀러 신청 상태 조회가 성공하는지 검증
+    @Test
+    void 내_셀러_신청_상태_조회에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        when(sellerInfoRepository.findByMemberId(10L)).thenReturn(Optional.of(sellerInfo));
+
+        SellerInfoResponse response = sellerInfoService.getMyStatus(10L);
+
+        assertThat(response.status()).isEqualTo(SellerStatus.PENDING);
+    }
+
+    // 신청 이력이 없는 회원이 상태 조회 시 SELLER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 신청_이력이_없으면_내_셀러_신청_상태_조회에_실패한다() {
+        when(sellerInfoRepository.findByMemberId(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sellerInfoService.getMyStatus(10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
     }
 }

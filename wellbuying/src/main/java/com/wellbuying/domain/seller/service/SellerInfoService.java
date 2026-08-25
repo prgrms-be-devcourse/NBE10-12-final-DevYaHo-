@@ -12,6 +12,7 @@ import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,11 +35,18 @@ public class SellerInfoService {
         this.emailVerificationService = emailVerificationService;
     }
 
-    // 기존 회원의 셀러 신청 - 이미 신청/가입 이력이 있으면(status 무관) SELLER_APPLICATION_ALREADY_EXISTS 예외, 없으면 PENDING 상태로 생성
+    // 기존 회원의 셀러 신청 - 신청 이력이 없으면 PENDING으로 신규 생성, TERMINATED(거절) 이력이 있으면 재신청으로 갱신, 그 외(PENDING/ACTIVE) 이력이 있으면 예외
     @Transactional
     public void apply(Long memberId, SellerApplyRequest request) {
-        if (sellerInfoRepository.existsByMemberId(memberId)) {
-            throw new BusinessException(ErrorCode.SELLER_APPLICATION_ALREADY_EXISTS);
+        Optional<SellerInfo> existing = sellerInfoRepository.findByMemberId(memberId);
+        if (existing.isPresent()) {
+            SellerInfo sellerInfo = existing.get();
+            if (sellerInfo.getStatus() != SellerStatus.TERMINATED) {
+                throw new BusinessException(ErrorCode.SELLER_APPLICATION_ALREADY_EXISTS);
+            }
+            sellerInfo.reapply(request.bankCode(), request.bankName(), request.accountNumber(),
+                    request.accountHolder(), request.companyName());
+            return;
         }
         sellerInfoRepository.save(SellerInfo.apply(memberId, request.bankCode(), request.bankName(),
                 request.accountNumber(), request.accountHolder(), request.companyName()));
@@ -62,6 +70,14 @@ public class SellerInfoService {
     @Transactional(readOnly = true)
     public Page<SellerInfoResponse> findByStatus(SellerStatus status, Pageable pageable) {
         return sellerInfoRepository.findAllByStatus(status, pageable).map(SellerInfoResponse::from);
+    }
+
+    // 내 셀러 신청 상태 조회 - 신청 이력이 없으면 SELLER_NOT_FOUND
+    @Transactional(readOnly = true)
+    public SellerInfoResponse getMyStatus(Long memberId) {
+        SellerInfo sellerInfo = sellerInfoRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_FOUND));
+        return SellerInfoResponse.from(sellerInfo);
     }
 
     // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 ACTIVE로 전환하고 MEMBERS.role을 SELLER로 변경

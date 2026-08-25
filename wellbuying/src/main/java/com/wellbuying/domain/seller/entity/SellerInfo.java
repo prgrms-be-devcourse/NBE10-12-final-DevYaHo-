@@ -102,6 +102,17 @@ public class SellerInfo {
         this.status = SellerStatus.TERMINATED;
     }
 
+    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("TERMINATED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
+    public void reapply(String bankCode, String bankName, String accountNumber, String accountHolder,
+            String companyName) {
+        this.bankCode = bankCode;
+        this.bankName = bankName;
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
+        this.companyName = companyName;
+        this.status = SellerStatus.PENDING;
+    }
+
     public Long getId() {
         return id;
     }
