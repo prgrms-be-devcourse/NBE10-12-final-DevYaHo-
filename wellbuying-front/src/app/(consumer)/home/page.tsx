@@ -57,6 +57,11 @@ export default function HomePage() {
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [slide, setSlide] = useState(0);
+  const [prevCategory, setPrevCategory] = useState(category);
+  if (category !== prevCategory) {
+    setPrevCategory(category);
+    setSlide(0);
+  }
 
   const deals = visibleDeals();
   const filtered = category === "전체" ? deals : deals.filter((deal) => deal.category === category);
@@ -88,10 +93,6 @@ export default function HomePage() {
   }, [scheduledDeals, category]);
 
   const newArrivals = useMemo(() => [...filtered].reverse().slice(0, NEW_ARRIVAL_COUNT), [filtered]);
-
-  useEffect(() => {
-    setSlide(0);
-  }, [category]);
 
   useEffect(() => {
     if (promoDeals.length <= 1) return;
