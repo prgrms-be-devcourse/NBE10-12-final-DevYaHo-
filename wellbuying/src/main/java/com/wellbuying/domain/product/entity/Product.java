@@ -2,12 +2,16 @@ package com.wellbuying.domain.product.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "product")
@@ -35,8 +39,10 @@ public class Product {
     @Column(name = "thumbnail_url")
     private String thumbnailUrl;
 
-    @Column(name = "status", nullable = false)
-    private boolean available;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false, columnDefinition = "product_status")
+    private ProductStatus status;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -62,23 +68,23 @@ public class Product {
         this.description = description;
         this.startPrice = startPrice;
         this.thumbnailUrl = thumbnailUrl;
-        this.available = true;
+        this.status = ProductStatus.ON_SALE;
     }
 
-    // 판매자가 입력한 정보로 상품을 생성, 기본적으로 판매 가능(available=true) 상태로 시작
+    // 판매자가 입력한 정보로 상품을 생성, 기본적으로 판매 가능(ON_SALE) 상태로 시작
     public static Product register(Long sellerId, Long categoryId, String productName,
                                    String description, Integer startPrice, String thumbnailUrl) {
         return new Product(sellerId, categoryId, productName, description, startPrice, thumbnailUrl);
     }
 
-    // 판매 가능 상태를 false로 변경해 품절 처리
+    // 판매 가능 상태를 SOLD_OUT으로 변경해 품절 처리
     public void markSoldOut() {
-        this.available = false;
+        this.status = ProductStatus.SOLD_OUT;
     }
 
-    // 품절 상태를 다시 판매 가능으로 변경
+    // 품절 상태를 다시 ON_SALE로 변경
     public void markAvailable() {
-        this.available = true;
+        this.status = ProductStatus.ON_SALE;
     }
 
     public Long getId() {
@@ -110,7 +116,7 @@ public class Product {
     }
 
     public boolean isAvailable() {
-        return available;
+        return status == ProductStatus.ON_SALE;
     }
 
     public LocalDateTime getCreatedAt() {
