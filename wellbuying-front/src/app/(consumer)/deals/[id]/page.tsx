@@ -47,12 +47,12 @@ export default function DealDetailPage() {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
 
   const reload = useCallback(async () => {
-    const detailRes = await getGroupBuy(groupBuyId);
-    const [statusRes, myPartRes, productRes] = await Promise.all([
+    const [detailRes, statusRes, myPartRes] = await Promise.all([
+      getGroupBuy(groupBuyId),
       getGroupBuyStatus(groupBuyId),
       getMyGroupBuyParticipation(groupBuyId),
-      getProduct(detailRes.productId),
     ]);
+    const productRes = await getProduct(detailRes.productId);
     setDetail(detailRes);
     setStatus(statusRes);
     setMyPart(myPartRes);

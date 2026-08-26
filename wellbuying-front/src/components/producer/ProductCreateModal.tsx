@@ -85,8 +85,8 @@ export function ProductCreateModal({
       setError("카테고리를 선택해주세요.");
       return;
     }
-    if (!startPrice || startPrice < 0) {
-      setError("판매가를 입력해주세요.");
+    if (!Number.isFinite(startPrice) || startPrice <= 0) {
+      setError("판매가는 0원보다 크게 입력해주세요.");
       return;
     }
     setSubmitting(true);

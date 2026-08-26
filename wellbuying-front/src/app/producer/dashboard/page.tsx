@@ -54,7 +54,9 @@ export default function ProducerDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const page = await listMyGroupBuys({ size: 100 });
+      // TODO: 항목마다 getGroupBuy/getGroupBuyStatus를 개별 호출하는 N+1 구조라, 백엔드에 대시보드용
+      // 벌크 조회 API가 추가되기 전까지는 동시 요청 폭주를 막기 위해 size를 보수적으로 제한한다.
+      const page = await listMyGroupBuys({ size: 20 });
       const loaded = await Promise.all(
         page.content.map(async (item) => {
           const [detail, status] = await Promise.all([getGroupBuy(item.id), getGroupBuyStatus(item.id)]);

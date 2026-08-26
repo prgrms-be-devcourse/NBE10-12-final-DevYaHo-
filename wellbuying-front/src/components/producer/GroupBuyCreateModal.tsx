@@ -96,6 +96,16 @@ export function GroupBuyCreateModal({
       setError("제목과 시작/마감 일시를 입력해주세요.");
       return;
     }
+    for (let i = 0; i < tiers.length - 1; i += 1) {
+      if (tiers[i].thresholdQuantity >= tiers[i + 1].thresholdQuantity) {
+        setError("다음 구간의 기준 수량은 이전 구간보다 커야 해요.");
+        return;
+      }
+      if (tiers[i].unitPrice <= tiers[i + 1].unitPrice) {
+        setError("다음 구간의 판매 단가는 이전 구간보다 저렴해야 해요.");
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const priceTiers: GroupBuyPriceTier[] = tiers.map((tier, index) => ({
