@@ -18,9 +18,7 @@ import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
-import java.util.ArrayList;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.restdocs.test.autoconfigure.AutoConfigureRestDocs;
@@ -29,7 +27,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -57,33 +54,11 @@ class AuthControllerTest extends AbstractIntegrationTest {
     @Autowired
     private AuthService authService;
 
-    // 로그인 시 lastLoginAt 갱신이 REQUIRES_NEW로 별도 커넥션/트랜잭션에서 일어나 테스트의 @Transactional 롤백 밖에서
-    // 커밋되므로, commitFixture()로 강제 커밋한 회원 fixture는 자동 롤백되지 않는다 - 테스트 종료 시 직접 정리해야 함
-    private final List<Long> committedMemberIds = new ArrayList<>();
-
-    @AfterEach
-    void cleanUpCommittedFixtures() {
-        if (committedMemberIds.isEmpty()) {
-            return;
-        }
-        // 직전 테스트 로직(예: reissue 실패 케이스)에서 발생한 예외로 현재 트랜잭션이 rollback-only로
-        // 마킹돼 있을 수 있어, 그대로 커밋을 시도하면 UnexpectedRollbackException이 발생한다.
-        // 일단 롤백해 마킹을 걷어낸 뒤 새 트랜잭션에서 삭제를 커밋한다.
-        TestTransaction.end();
-        TestTransaction.start();
-        memberRepository.deleteAllById(committedMemberIds);
-        committedMemberIds.forEach(id -> redisTemplate.delete("ReT:" + id));
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        committedMemberIds.clear();
-    }
-
     // 가입된 이메일/비밀번호로 로그인 시 200과 함께 accessToken/refreshToken/deviceId가 응답에 포함되는지 검증
     @Test
     void 이메일과_비밀번호로_로그인에_성공한다() throws Exception {
-        Member member = memberRepository.save(
+        memberRepository.save(
                 Member.signUp("login-success@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
-        commitFixture(member);
 
         String requestBody = """
                 {
@@ -399,22 +374,10 @@ class AuthControllerTest extends AbstractIntegrationTest {
 
     private Member signUpMember(String email) {
         Member member = memberRepository.save(Member.signUp(email, passwordEncoder.encode("Pass1234!"), "홍길동"));
-        commitFixture(member);
-        return member;
-    }
-
-    // 로그인 성공 시 lastLoginAt 갱신이 REQUIRES_NEW로 별도 커넥션/트랜잭션에서 일어나므로,
-    // 테스트의 @Transactional 롤백 트랜잭션에 남아있는(아직 커밋 안 된) 회원 fixture는 그 별도 트랜잭션에서 보이지 않는다.
-    // 따라서 로그인을 유발하는 테스트에서는 fixture 저장 직후 커밋해 별도 트랜잭션에서도 조회 가능하게 하고,
-    // 커밋된 회원은 cleanUpCommittedFixtures()에서 직접 삭제해 다른 테스트로 데이터가 새지 않게 한다.
-    private void commitFixture(Member member) {
-        committedMemberIds.add(member.getId());
         // 컨테이너는 매 실행마다 새로 뜨지만(id가 1부터 재시작) Redis는 로컬 인스턴스를 그대로 재사용하므로,
         // 과거 실행에서 같은 id로 남은 세션 데이터가 있을 수 있어 사용 전에 미리 지운다
         redisTemplate.delete("ReT:" + member.getId());
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        return member;
     }
 
     private String login(String email, String deviceId) throws Exception {

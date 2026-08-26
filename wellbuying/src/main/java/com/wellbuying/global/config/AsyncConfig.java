@@ -21,4 +21,16 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    // 로그인 활동(lastLoginAt/휴면 전환) 갱신 전용 스레드풀 - MemberLoginEventListener.handleLoginEvent의 @Async("memberEventExecutor")에서 사용
+    @Bean(name = "memberEventExecutor")
+    public Executor memberEventExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("member-event-");
+        executor.initialize();
+        return executor;
+    }
 }

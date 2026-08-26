@@ -106,6 +106,21 @@ class AdminMemberControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[0].status").value(MemberStatus.WITHDRAWN.name()));
     }
 
+    // ?sort= 파라미터로 정렬 기준을 지정하면 QueryDSL 조회에도 실제로 반영되는지 검증 (기본값인 createdAt desc 하드코딩이 아닌지 확인)
+    @Test
+    void sort_파라미터로_지정한_기준으로_정렬된다() throws Exception {
+        Member admin = saveMember("admin-sort@example.com", Role.ADMIN);
+        saveMember("b-sort@example.com", Role.BUYER);
+        saveMember("a-sort@example.com", Role.BUYER);
+
+        mockMvc.perform(get("/api/admin/members").param("sort", "email,asc")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].email").value("a-sort@example.com"))
+                .andExpect(jsonPath("$.content[1].email").value("admin-sort@example.com"))
+                .andExpect(jsonPath("$.content[2].email").value("b-sort@example.com"));
+    }
+
     // ADMIN이 아닌 회원이 목록 조회 API를 호출하면 403을 반환하는지 검증
     @Test
     void 관리자가_아니면_회원_목록_조회에_실패한다() throws Exception {

@@ -15,11 +15,13 @@ import com.wellbuying.domain.member.repository.SocialAccountRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
 import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -86,8 +88,8 @@ public class MemberService {
     }
 
     // 로그인 시점마다 호출 - lastLoginAt 갱신 전에 기존 값을 기준으로 휴면 전환 여부를 먼저 판단
-    // AuthService가 readOnly 트랜잭션에서 호출하므로 REQUIRES_NEW로 별도 쓰기 트랜잭션을 연다
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    // MemberLoginEventListener가 AuthService의 트랜잭션 커밋 이후 비동기로 호출하므로 부모 트랜잭션과 커넥션을 공유하지 않는다
+    @Transactional
     public void updateLoginActivity(Long memberId) {
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -104,5 +106,16 @@ public class MemberService {
     @Transactional(readOnly = true)
     public Page<MemberSummaryResponse> findMembers(Role role, MemberStatus status, Pageable pageable) {
         return memberRepository.search(role, status, pageable);
+    }
+
+    // 휴면 전환 배치 1건 처리 - MemberDormancyScheduler와 별도 빈이어야 @Transactional 프록시가 동작한다(자기 자신 호출 시 AOP 미적용)
+    // 대상을 batchSize만큼만 조회해 벌크 UPDATE하고, 이 배치에서 실제로 전환된 건수를 반환 - 0이면 스케줄러가 반복을 종료
+    @Transactional
+    public int markDormantBatch(LocalDateTime threshold, int batchSize) {
+        List<Long> ids = memberRepository.findIdsForDormancy(MemberStatus.ACTIVE, threshold, Limit.of(batchSize));
+        if (ids.isEmpty()) {
+            return 0;
+        }
+        return memberRepository.bulkMarkDormantByIds(MemberStatus.DORMANT, ids);
     }
 }

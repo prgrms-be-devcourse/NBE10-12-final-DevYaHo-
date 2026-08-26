@@ -1,14 +1,11 @@
 package com.wellbuying.domain.member.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.wellbuying.domain.member.entity.Member;
-import com.wellbuying.domain.member.entity.MemberStatus;
-import com.wellbuying.domain.member.repository.MemberRepository;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -18,23 +15,32 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MemberDormancySchedulerTest {
 
+    private static final int BATCH_SIZE = 500;
+
     @Mock
-    private MemberRepository memberRepository;
+    private MemberService memberService;
 
     @InjectMocks
     private MemberDormancyScheduler scheduler;
 
-    // 배치 대상으로 조회된 회원들이 모두 DORMANT로 전환되는지 검증
+    // 대상이 없으면 배치를 1회만 호출하고 종료하는지 검증
     @Test
-    void 배치_대상_회원을_모두_DORMANT로_전환한다() {
-        Member member1 = Member.signUp("dormant1@example.com", "encoded-password", "홍길동");
-        Member member2 = Member.signUp("dormant2@example.com", "encoded-password", "김철수");
-        when(memberRepository.findByStatusAndLastLoginAtBefore(eq(MemberStatus.ACTIVE), any(), any()))
-                .thenReturn(List.of(member1, member2));
+    void 대상이_없으면_배치를_한번만_호출하고_종료한다() {
+        when(memberService.markDormantBatch(any(), eq(BATCH_SIZE))).thenReturn(0);
 
         scheduler.markDormantMembers();
 
-        assertThat(member1.getStatus()).isEqualTo(MemberStatus.DORMANT);
-        assertThat(member2.getStatus()).isEqualTo(MemberStatus.DORMANT);
+        verify(memberService, times(1)).markDormantBatch(any(), eq(BATCH_SIZE));
+    }
+
+    // 배치가 batchSize만큼 꽉 찬 경우, 더 이상 전환할 대상이 없어질 때까지(0건 반환) 반복 호출하는지 검증
+    @Test
+    void 전환된_건수가_0이_될때까지_배치를_반복_호출한다() {
+        when(memberService.markDormantBatch(any(), eq(BATCH_SIZE)))
+                .thenReturn(BATCH_SIZE, BATCH_SIZE, 3, 0);
+
+        scheduler.markDormantMembers();
+
+        verify(memberService, times(4)).markDormantBatch(any(), eq(BATCH_SIZE));
     }
 }
