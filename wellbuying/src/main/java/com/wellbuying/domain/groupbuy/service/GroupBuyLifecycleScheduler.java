@@ -1,12 +1,10 @@
 package com.wellbuying.domain.groupbuy.service;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
-import com.wellbuying.domain.groupbuy.event.AfterCommitExecutor;
-import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
@@ -36,16 +34,14 @@ public class GroupBuyLifecycleScheduler {
     private final GroupBuyPartRepository groupBuyPartRepository;
     private final GroupBuyPriceRepository groupBuyPriceRepository;
     private final GroupBuyCloseProcessor groupBuyCloseProcessor;
-    private final GroupBuyEventPublisher groupBuyEventPublisher;
 
     public GroupBuyLifecycleScheduler(GroupBuyRepository groupBuyRepository,
             GroupBuyPartRepository groupBuyPartRepository, GroupBuyPriceRepository groupBuyPriceRepository,
-            GroupBuyCloseProcessor groupBuyCloseProcessor, GroupBuyEventPublisher groupBuyEventPublisher) {
+            GroupBuyCloseProcessor groupBuyCloseProcessor) {
         this.groupBuyRepository = groupBuyRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
         this.groupBuyPriceRepository = groupBuyPriceRepository;
         this.groupBuyCloseProcessor = groupBuyCloseProcessor;
-        this.groupBuyEventPublisher = groupBuyEventPublisher;
     }
 
     // 시작 시각이 지난 READY 공동구매를 ONGOING으로 전환
@@ -103,11 +99,10 @@ public class GroupBuyLifecycleScheduler {
             List<GroupBuyPrice> priceTiers = priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of());
             int finalPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
             confirmedParts.forEach(part -> part.applyFinalPrice(finalPrice));
-            GroupBuy closedGroupBuy = groupBuyCloseProcessor.closeSucceeded(groupBuy.getId(), finalPrice);
-            AfterCommitExecutor.run(() -> groupBuyEventPublisher.publishCompleted(closedGroupBuy, confirmedParts));
+            // 상태 확정과 이벤트(아웃박스) 기록은 GroupBuyCloseProcessor의 트랜잭션 안에서 함께 처리된다
+            groupBuyCloseProcessor.closeSucceeded(groupBuy.getId(), finalPrice, confirmedParts);
         } else {
-            GroupBuy closedGroupBuy = groupBuyCloseProcessor.closeFailed(groupBuy.getId());
-            AfterCommitExecutor.run(() -> groupBuyEventPublisher.publishFailed(closedGroupBuy));
+            groupBuyCloseProcessor.closeFailed(groupBuy.getId());
         }
     }
 }

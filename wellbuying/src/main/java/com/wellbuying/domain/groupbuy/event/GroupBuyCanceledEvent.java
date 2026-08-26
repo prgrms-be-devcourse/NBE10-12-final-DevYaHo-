@@ -1,6 +1,6 @@
 package com.wellbuying.domain.groupbuy.event;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import java.time.LocalDateTime;
 
 // 공동구매 취소(시작 전) 이벤트 - 참여자가 없는 상태에서만 취소 가능하므로 집계 단위로 1건만 발행

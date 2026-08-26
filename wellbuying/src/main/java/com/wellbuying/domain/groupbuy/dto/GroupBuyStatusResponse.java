@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.dto;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import java.time.Duration;
 import java.time.LocalDateTime;
 

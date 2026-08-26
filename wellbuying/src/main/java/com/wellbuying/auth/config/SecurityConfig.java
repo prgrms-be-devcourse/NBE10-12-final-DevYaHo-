@@ -116,6 +116,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/groupBuys/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, GROUP_BUY_PUBLIC_GET_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, PRODUCT_PUBLIC_GET_PATHS).permitAll()

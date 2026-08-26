@@ -78,3 +78,6 @@ admin-seed:
   enabled: ${ADMIN_SEED_ENABLED:false}
   email: ${ADMIN_SEED_EMAIL:admin@wellbuying.local}
   password: ${ADMIN_SEED_PASSWORD:CHANGE_ME_local_dev_admin_password}
+
+groupbuy-seed:
+  enabled: ${GROUPBUY_SEED_ENABLED:false}
