@@ -10,15 +10,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 // Lua 스크립트(participate_groupbuy.lua) 기반 원자적 카운터의 동시성 정확성을 실제 Redis로 검증
-@SpringBootTest
-class GroupBuyCounterRepositoryTest {
+class GroupBuyCounterRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private GroupBuyCounterRepository groupBuyCounterRepository;

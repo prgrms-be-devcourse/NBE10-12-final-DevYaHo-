@@ -2,14 +2,13 @@ package com.wellbuying.auth.oauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.AbstractIntegrationTest;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-@SpringBootTest
-class SocialLinkTicketRepositoryTest {
+class SocialLinkTicketRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private SocialLinkTicketRepository socialLinkTicketRepository;

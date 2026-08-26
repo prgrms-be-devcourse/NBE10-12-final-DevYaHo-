@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -15,7 +16,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "seller_info")
+@Table(name = "seller_info",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_seller_info_member_id",
+                columnNames = "member_id"))
 public class SellerInfo {
 
     @Id
@@ -100,6 +104,17 @@ public class SellerInfo {
     // 셀러 거절 - status를 TERMINATED로 전환 (approvedAt은 기록하지 않음)
     public void reject() {
         this.status = SellerStatus.TERMINATED;
+    }
+
+    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("TERMINATED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
+    public void reapply(String bankCode, String bankName, String accountNumber, String accountHolder,
+            String companyName) {
+        this.bankCode = bankCode;
+        this.bankName = bankName;
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
+        this.companyName = companyName;
+        this.status = SellerStatus.PENDING;
     }
 
     public Long getId() {

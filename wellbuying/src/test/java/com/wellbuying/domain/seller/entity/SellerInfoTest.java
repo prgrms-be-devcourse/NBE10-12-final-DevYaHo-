@@ -33,4 +33,17 @@ class SellerInfoTest {
 
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.TERMINATED);
     }
+
+    // reapply() 호출 시 status가 PENDING으로 되돌아가고 신청 정보가 새 값으로 갱신되는지 검증
+    @Test
+    void reapply호출시_status가_PENDING으로_되돌아가고_정보가_갱신된다() {
+        SellerInfo sellerInfo = SellerInfo.apply(1L, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+        sellerInfo.reject();
+
+        sellerInfo.reapply("004", "국민은행", "110-987-654321", "김철수", "웰바잉스토어2");
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.PENDING);
+        assertThat(sellerInfo.getBankName()).isEqualTo("국민은행");
+        assertThat(sellerInfo.getCompanyName()).isEqualTo("웰바잉스토어2");
+    }
 }

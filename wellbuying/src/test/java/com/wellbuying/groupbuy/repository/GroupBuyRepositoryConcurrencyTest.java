@@ -2,6 +2,7 @@ package com.wellbuying.groupbuy.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.groupbuy.domain.GroupBuy;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
@@ -16,14 +17,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 // @DataJpaTest(트랜잭션 롤백 기반)로는 여러 스레드가 진짜로 동시에 커밋하는 상황을 재현할 수 없어,
 // 트랜잭션 경계 없이 실제 커밋이 일어나는 @SpringBootTest로 검증한다
-@SpringBootTest
-class GroupBuyRepositoryConcurrencyTest {
+class GroupBuyRepositoryConcurrencyTest extends AbstractIntegrationTest {
 
     @Autowired
     private GroupBuyRepository groupBuyRepository;

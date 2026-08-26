@@ -5,10 +5,12 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.restdocs.payload.PayloadDocumentation.requestFields;
 import static org.springframework.restdocs.payload.PayloadDocumentation.responseFields;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -19,7 +21,6 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.restdocs.test.autoconfigure.AutoConfigureRestDocs;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,11 +29,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
 @AutoConfigureMockMvc
 @AutoConfigureRestDocs
 @Transactional
-class SellerControllerTest {
+class SellerControllerTest extends AbstractIntegrationTest {
 
     private static final String EMAIL_VERIFIED_KEY_PREFIX = "email:verified:";
 
@@ -112,6 +112,39 @@ class SellerControllerTest {
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 거절(TERMINATED)된 회원이 다시 신청하면 201을 반환하고 기존 행이 PENDING으로 갱신되는지 검증
+    @Test
+    void 거절된_회원은_재신청에_성공한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("reapply-success@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        SellerInfo sellerInfo = sellerInfoRepository.save(
+                SellerInfo.apply(member.getId(), "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어"));
+        sellerInfo.reject();
+        sellerInfoRepository.save(sellerInfo);
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+        String requestBody = """
+                {
+                  "bankCode": "004",
+                  "bankName": "국민은행",
+                  "accountNumber": "110-987-654321",
+                  "accountHolder": "김철수",
+                  "companyName": "웰바잉스토어2"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/seller/apply")
+                        .with(authentication(authentication))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+
+        SellerInfo updated = sellerInfoRepository.findById(sellerInfo.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(updated.getStatus())
+                .isEqualTo(com.wellbuying.domain.seller.entity.SellerStatus.PENDING);
     }
 
     // 인증 정보 없이 셀러 신청 시 401과 AUTH_401_REQUIRED 에러 코드를 반환하는지 검증
@@ -235,5 +268,57 @@ class SellerControllerTest {
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 신청 이력이 있는 회원이 내 셀러 신청 상태를 조회하면 200과 상태 정보를 반환하는지 검증
+    @Test
+    void 내_셀러_신청_상태_조회에_성공한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("seller-info-success@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        sellerInfoRepository.save(
+                SellerInfo.apply(member.getId(), "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어"));
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        mockMvc.perform(get("/api/members/me/seller-info")
+                        .with(authentication(authentication)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andDo(document("seller/my-seller-info-success",
+                        responseFields(
+                                fieldWithPath("id").description("셀러 신청 ID"),
+                                fieldWithPath("memberId").description("회원 ID"),
+                                fieldWithPath("status").description("상태"),
+                                fieldWithPath("bankName").description("은행명"),
+                                fieldWithPath("companyName").description("사업자명").optional(),
+                                fieldWithPath("createdAt").description("신청 일시"))));
+    }
+
+    // 신청 이력이 없는 회원이 내 셀러 신청 상태를 조회하면 404와 SELLER_404_NOT_FOUND를 반환하는지 검증
+    @Test
+    void 신청_이력이_없으면_내_셀러_신청_상태_조회에_실패한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("seller-info-not-found@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        mockMvc.perform(get("/api/members/me/seller-info")
+                        .with(authentication(authentication)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SELLER_404_NOT_FOUND"))
+                .andDo(document("seller/my-seller-info-not-found",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 인증 정보 없이 내 셀러 신청 상태 조회 시 401을 반환하는지 검증
+    @Test
+    void 인증되지_않은_요청은_내_셀러_신청_상태_조회에_실패한다() throws Exception {
+        mockMvc.perform(get("/api/members/me/seller-info"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"));
     }
 }
