@@ -26,6 +26,7 @@ import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.member.service.MemberService;
 import io.jsonwebtoken.Claims;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,6 +63,9 @@ class AuthServiceTest {
 
     @Mock
     private Claims claims;
+
+    @Mock
+    private MemberService memberService;
 
     @InjectMocks
     private AuthService authService;

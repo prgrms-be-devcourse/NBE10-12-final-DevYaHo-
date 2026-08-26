@@ -197,6 +197,7 @@ class MemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("email").description("이메일"),
                                 fieldWithPath("name").description("이름"),
                                 fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional(),
+                                fieldWithPath("phoneNumber").description("전화번호").optional(),
                                 fieldWithPath("role").description("권한"))));
     }
 
@@ -244,6 +245,7 @@ class MemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("email").description("이메일"),
                                 fieldWithPath("name").description("이름"),
                                 fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional(),
+                                fieldWithPath("phoneNumber").description("전화번호").optional(),
                                 fieldWithPath("role").description("권한"))));
     }
 

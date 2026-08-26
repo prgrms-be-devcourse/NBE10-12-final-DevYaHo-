@@ -15,6 +15,7 @@ import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.member.service.MemberService;
 import io.jsonwebtoken.Claims;
 import java.time.Instant;
 import java.util.Comparator;
@@ -33,16 +34,18 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
     private final OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
+    private final MemberService memberService;
 
     public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             TokenProvider tokenProvider, RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
-            OAuthExchangeCodeRepository oAuthExchangeCodeRepository) {
+            OAuthExchangeCodeRepository oAuthExchangeCodeRepository, MemberService memberService) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenHasher = tokenHasher;
         this.oAuthExchangeCodeRepository = oAuthExchangeCodeRepository;
+        this.memberService = memberService;
     }
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
@@ -68,6 +71,7 @@ public class AuthService {
 
         long now = Instant.now().getEpochSecond();
         refreshTokenRepository.save(memberId, deviceId, RefreshTokenValue.issued(tokenHasher.hash(refreshToken), now));
+        memberService.updateLoginActivity(memberId);
 
         return new LoginResponse(accessToken, refreshToken, tokenProvider.getAccessTokenExpirationSeconds(),
                 deviceId);
@@ -96,6 +100,7 @@ public class AuthService {
 
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        memberService.updateLoginActivity(memberId);
 
         String oldTokenHash = tokenHasher.hash(request.refreshToken());
         String newAccessToken = tokenProvider.createAccessToken(memberId, member.getRole(), deviceId);

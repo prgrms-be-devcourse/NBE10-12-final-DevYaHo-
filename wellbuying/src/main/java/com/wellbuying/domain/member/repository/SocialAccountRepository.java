@@ -15,4 +15,7 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, Lo
 
     // 회원이 해당 provider를 이미 연동했는지 확인 - 추가 연동 시 (member_id, provider) UNIQUE 제약 위반을 사전에 차단하기 위해 사용
     boolean existsByMemberIdAndProvider(Long memberId, String provider);
+
+    // 회원 탈퇴 시 연동된 소셜 계정을 모두 삭제
+    void deleteAllByMemberId(Long memberId);
 }

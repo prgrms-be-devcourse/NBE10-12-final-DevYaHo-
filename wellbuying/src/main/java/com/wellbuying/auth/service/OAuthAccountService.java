@@ -55,7 +55,7 @@ public class OAuthAccountService {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         Member member = Member.socialOnly(email, name);
-        member.updateProfile(name, profileImage);
+        member.updateProfile(name, profileImage, null);
         Member savedMember = memberRepository.save(member);
         socialAccountRepository.save(SocialAccount.create(savedMember.getId(), provider, providerId));
         return savedMember;
