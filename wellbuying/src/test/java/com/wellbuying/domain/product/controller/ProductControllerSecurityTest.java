@@ -121,17 +121,17 @@ class ProductControllerSecurityTest {
                 .andExpect(jsonPath("$.code").value("PRODUCT_404_CATEGORY_NOT_FOUND"));
     }
 
-    // SELLER의 ON_SALE + SOLD_OUT 상품이 GET /api/products/mine에서 상태 무관하게 모두 포함되는지 검증
+    // SELLER의 상품이 GET /api/products/mine에서 상태(APPROVED/PENDING)와 무관하게 모두 포함되는지 검증
     @Test
-    void SELLER의_SOLD_OUT포함_상품_전체가_내_상품_조회에_반환된다() throws Exception {
+    void SELLER의_상태무관_상품_전체가_내_상품_조회에_반환된다() throws Exception {
         Member seller = saveMember("seller-mine-security@example.com", Role.SELLER);
         ProductCategory category = saveCategory();
 
+        Product approved = Product.register(seller.getId(), category.getId(), "승인된상품", null, 10000, null);
+        approved.approve();
+        productRepository.save(approved);
         productRepository.save(
-                Product.register(seller.getId(), category.getId(), "판매중상품", null, 10000, null));
-        Product soldOut = Product.register(seller.getId(), category.getId(), "품절상품", null, 20000, null);
-        soldOut.markSoldOut();
-        productRepository.save(soldOut);
+                Product.register(seller.getId(), category.getId(), "대기중상품", null, 20000, null));
 
         mockMvc.perform(get("/api/products/mine")
                         .with(authentication(authOf(seller))))
