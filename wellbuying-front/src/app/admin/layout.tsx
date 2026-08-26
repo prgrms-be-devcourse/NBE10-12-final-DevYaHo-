@@ -17,12 +17,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/sellers", label: "판매자 승인", icon: UserCheck },
     { href: "/admin/settlements", label: "정산 관리", icon: Wallet, badge: readySettlementCount },
     { href: "/admin/members", label: "회원 현황", icon: Users },
-    { href: "/profile", label: "설정", icon: Settings },
+    { href: "/profile", label: "내 정보", icon: Settings },
   ];
 
   return (
     <RequireRole role="ADMIN">
-      <AppShell title="관리자" navItems={navItems} workspaceLinks={WORKSPACE_LINKS}>
+      <AppShell title="관리자" navItems={navItems} workspaceLinks={WORKSPACE_LINKS} layout="sidebar">
         {children}
       </AppShell>
     </RequireRole>

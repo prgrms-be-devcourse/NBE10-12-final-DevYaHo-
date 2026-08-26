@@ -1,22 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
-import { DealCard } from "@/components/deal/DealCard";
+import { DealsSubNav } from "@/components/consumer/DealsSubNav";
+import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { Button } from "@/components/ui/Button";
-import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { activeTier, type Deal } from "@/lib/mock/types";
+import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
+import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
-const CATEGORIES = ["전체", "식품", "생활", "패션"];
-
-type Sort = "popular" | "new" | "priceLow" | "priceHigh" | "closing";
+type Sort = "popular" | "new" | "closing";
 
 const SORT_LABEL: Record<Sort, string> = {
   popular: "인기순",
   new: "신상품순",
-  priceLow: "낮은 가격순",
-  priceHigh: "높은 가격순",
   closing: "마감 임박순",
 };
 
@@ -25,9 +22,11 @@ function isSort(value: string | null): value is Sort {
 }
 
 export default function ExplorePage() {
-  const { visibleDeals, scheduledDeals, participants } = useDemoStore();
   const searchParams = useSearchParams();
   const scheduledView = searchParams.get("status") === "scheduled";
+  const { items: ongoing, loading: ongoingLoading } = useGroupBuyList("ONGOING");
+  const { items: scheduled, loading: scheduledLoading } = useGroupBuyList("READY");
+  const loading = scheduledView ? scheduledLoading : ongoingLoading;
 
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [category, setCategory] = useState("전체");
@@ -37,45 +36,38 @@ export default function ExplorePage() {
   });
   const [visibleCount, setVisibleCount] = useState(6);
 
-  const searchParamsKey = searchParams.toString();
-  const [syncedParamsKey, setSyncedParamsKey] = useState(searchParamsKey);
-  if (searchParamsKey !== syncedParamsKey) {
-    setSyncedParamsKey(searchParamsKey);
-    const q = searchParams.get("q");
-    if (q !== null) setQuery(q);
+  useEffect(() => {
+    // q가 사라지면(예: 다른 탭 클릭으로 ?q= 없는 URL로 이동) 검색창도 같이 비워야 한다 -
+    // 이전 값을 그대로 남겨두면 주소창과 검색창이 서로 다른 값을 보여주게 된다
+    setQuery(searchParams.get("q") ?? "");
     const param = searchParams.get("sort");
     if (isSort(param)) setSort(param);
     setVisibleCount(6);
-  }
+  }, [searchParams]);
 
-  const baseDeals = scheduledView ? scheduledDeals() : visibleDeals();
+  const baseDeals = scheduledView ? scheduled : ongoing;
 
   const filtered = useMemo(() => {
-    const price = (deal: Deal) => activeTier(deal, participants(deal.id)).price;
-    const result = baseDeals.filter((deal) => {
-      const matchesCategory = category === "전체" || deal.category === category;
+    const result = baseDeals.filter((item) => {
+      const matchesCategory = category === "전체" || item.category === category;
       const matchesQuery =
         query.trim().length === 0 ||
-        deal.title.toLowerCase().includes(query.toLowerCase()) ||
-        deal.producer.toLowerCase().includes(query.toLowerCase());
+        item.title.toLowerCase().includes(query.toLowerCase()) ||
+        item.producerName.toLowerCase().includes(query.toLowerCase());
       return matchesCategory && matchesQuery;
     });
 
-    return result.sort((a, b) => {
+    return [...result].sort((a: GroupBuyCardView, b: GroupBuyCardView) => {
       switch (sort) {
-        case "priceLow":
-          return price(a) - price(b);
-        case "priceHigh":
-          return price(b) - price(a);
         case "closing":
           return a.daysLeft - b.daysLeft;
         case "new":
           return baseDeals.indexOf(b) - baseDeals.indexOf(a);
         default:
-          return participants(b.id) - participants(a.id);
+          return b.currentQuantity - a.currentQuantity;
       }
     });
-  }, [baseDeals, participants, category, query, sort]);
+  }, [baseDeals, category, query, sort]);
 
   const visible = filtered.slice(0, visibleCount);
 
@@ -87,7 +79,31 @@ export default function ExplorePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-6 py-9">
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-9">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <DealsSubNav
+            categories={CATALOG_CATEGORIES}
+            categoryValue={category}
+            onCategoryChange={(value) => {
+              setCategory(value);
+              setVisibleCount(6);
+            }}
+          />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
+          >
+            {Object.entries(SORT_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div>
         <h1 className="text-3xl font-bold">{scheduledView ? "진행 예정 공동구매" : "공동구매 둘러보기"}</h1>
         <p className="mt-1 text-sm text-wb-secondary">
@@ -97,54 +113,13 @@ export default function ExplorePage() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex h-12 flex-1 items-center gap-2.5 rounded-xl border border-wb-line bg-wb-surface px-4">
-          <Search className="h-4 w-4 shrink-0 text-wb-secondary" />
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setVisibleCount(6);
-            }}
-            placeholder="상품이나 생산자를 검색해보세요"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-wb-secondary"
-          />
-        </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as Sort)}
-          className="h-12 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-        >
-          {Object.entries(SORT_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {CATEGORIES.map((item) => (
-          <button
-            key={item}
-            onClick={() => {
-              setCategory(item);
-              setVisibleCount(6);
-            }}
-            className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-              category === item ? "bg-wb-green text-white" : "bg-wb-canvas text-wb-secondary"
-            }`}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-
       <div className="flex items-center justify-between">
         <p className="text-base font-bold">검색 결과 {filtered.length}개</p>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <p className="py-20 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-20 text-center">
           <Search className="h-9 w-9 text-wb-green" strokeWidth={1.5} />
           <p className="text-lg font-bold">조건에 맞는 공동구매가 없어요</p>
@@ -155,9 +130,9 @@ export default function ExplorePage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((deal) => (
-              <DealCard key={deal.id} deal={deal} />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {visible.map((item) => (
+              <GroupBuyCard key={item.id} item={item} />
             ))}
           </div>
           {filtered.length > visible.length && (

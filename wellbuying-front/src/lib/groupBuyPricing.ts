@@ -8,3 +8,12 @@ export function resolveCurrentUnitPrice(priceTiers: GroupBuyPriceTier[], current
   const tier = reached.at(-1) ?? sorted[0];
   return tier ? tier.unitPrice : null;
 }
+
+// 아직 도달하지 않은 다음 가격 구간(더 내려갈 가격이 남았는지) — 없으면 이미 최저가.
+export function resolveNextTier(
+  priceTiers: GroupBuyPriceTier[],
+  currentQuantity: number,
+): GroupBuyPriceTier | null {
+  const sorted = [...priceTiers].sort((a, b) => a.thresholdQuantity - b.thresholdQuantity);
+  return sorted.find((tier) => tier.thresholdQuantity > currentQuantity) ?? null;
+}

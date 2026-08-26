@@ -1,193 +1,361 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { notFound, useParams } from "next/navigation";
-import { Heart, PieChart } from "lucide-react";
-import { DealArtwork } from "@/components/deal/DealArtwork";
-import { ParticipationModal } from "@/components/consumer/ParticipationModal";
+import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
+import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Tag } from "@/components/ui/Tag";
-import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { DEAL_STATUS_LABEL, activeTier, nextTier, tierProfit, tierMargin, won } from "@/lib/mock/types";
+import { TextField } from "@/components/ui/TextField";
+import {
+  cancelGroupBuyParticipation,
+  getGroupBuy,
+  getGroupBuyStatus,
+  getMyGroupBuyParticipation,
+  participateInGroupBuy,
+} from "@/lib/api/groupBuy";
+import { ApiError } from "@/lib/api/http";
+import { getProduct } from "@/lib/api/product";
+import type {
+  GroupBuyDetailResponse,
+  GroupBuyPartMeResponse,
+  GroupBuyStatusResponse,
+  ProductDetailResponse,
+} from "@/lib/api/types";
+import { formatDateTime, formatRemaining, won } from "@/lib/format";
+import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
+import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
+
+// 공동구매(groupBuyId) 자체가 없을 때만 404 페이지로 보내야 한다. 상태/내 참여/상품 조회의 404는
+// 별개 자원의 문제이므로 여기서 일반 에러로 바꿔, 존재하는 공동구매를 "찾을 수 없음"으로 잘못 표시하지 않는다.
+function demote404(e: unknown): never {
+  if (e instanceof ApiError && e.status === 404) {
+    throw new ApiError(500, { code: e.code, message: e.message });
+  }
+  throw e;
+}
 
 export default function DealDetailPage() {
   const params = useParams<{ id: string }>();
-  const { dealById, participants, favoriteIds, toggleFavorite, dealStatuses, hasActiveParticipation } =
-    useDemoStore();
-  const [showParticipation, setShowParticipation] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const groupBuyId = Number(params.id);
 
-  const deal = dealById(params.id);
-  if (!deal) {
+  const [detail, setDetail] = useState<GroupBuyDetailResponse | null>(null);
+  const [status, setStatus] = useState<GroupBuyStatusResponse | null>(null);
+  const [myPart, setMyPart] = useState<GroupBuyPartMeResponse | null>(null);
+  const [product, setProduct] = useState<ProductDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [resourceNotFound, setResourceNotFound] = useState(false);
+
+  const [quantity, setQuantity] = useState(1);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation">("story");
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+
+  const reload = useCallback(async () => {
+    const [detailRes, statusRes, myPartRes] = await Promise.all([
+      getGroupBuy(groupBuyId),
+      getGroupBuyStatus(groupBuyId).catch(demote404),
+      getMyGroupBuyParticipation(groupBuyId).catch(demote404),
+    ]);
+    const productRes = await getProduct(detailRes.productId).catch(demote404);
+    setDetail(detailRes);
+    setStatus(statusRes);
+    setMyPart(myPartRes);
+    setProduct(productRes);
+  }, [groupBuyId]);
+
+  useEffect(() => {
+    if (!Number.isFinite(groupBuyId)) return;
+    let ignore = false;
+
+    async function load() {
+      setLoading(true);
+      setLoadError(null);
+      setThumbnailFailed(false);
+      try {
+        await reload();
+      } catch (e) {
+        if (ignore) return;
+        if (e instanceof ApiError && e.status === 404) {
+          setResourceNotFound(true);
+        } else {
+          setLoadError(e instanceof ApiError ? e.message : "공동구매 정보를 불러오지 못했어요.");
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [groupBuyId, reload]);
+
+  async function handleParticipate() {
+    setActionError(null);
+    setActionMessage(null);
+    setSubmitting(true);
+    try {
+      await participateInGroupBuy(groupBuyId, { quantity });
+      await reload();
+      setActionMessage("참여가 완료됐어요.");
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : "참여 처리 중 오류가 발생했어요.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCancelParticipation(partId: number) {
+    setActionError(null);
+    setActionMessage(null);
+    setSubmitting(true);
+    try {
+      await cancelGroupBuyParticipation(groupBuyId, partId);
+      await reload();
+      setActionMessage("참여를 취소했어요.");
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : "참여 취소 중 오류가 발생했어요.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!Number.isFinite(groupBuyId) || resourceNotFound) {
     notFound();
   }
 
-  const people = participants(deal.id);
-  const tier = activeTier(deal, people);
-  const status = dealStatuses[deal.id] ?? "recruiting";
-  const participated = hasActiveParticipation(deal.id);
-  const isFavorite = favoriteIds.has(deal.id);
+  if (loading) {
+    return <div className="p-9 text-sm text-wb-secondary">불러오는 중...</div>;
+  }
 
-  const buttonLabel = participated
-    ? "이미 참여한 공동구매예요"
-    : status === "recruiting"
-      ? "공동구매 참여하기"
-      : DEAL_STATUS_LABEL[status];
+  if (loadError || !detail || !status || !product) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-9">
+        <Banner tone="error">{loadError ?? "공동구매 정보를 불러오지 못했어요."}</Banner>
+      </div>
+    );
+  }
+
+  const catalog = resolveCatalogEntry(detail.productName);
+  const canParticipate = status.status === "ONGOING" && !myPart?.participated;
+  const currentPrice = resolveCurrentUnitPrice(detail.priceTiers, status.currentQuantity);
+  const achievementRate =
+    detail.maxQuantity === 0 ? 0 : Math.round((status.currentQuantity / detail.maxQuantity) * 100);
+
+  const sortedTiers = [...detail.priceTiers].sort((a, b) => a.thresholdQuantity - b.thresholdQuantity);
+  const reachedTiers = sortedTiers.filter((t) => t.thresholdQuantity <= status.currentQuantity);
+  const activeTierOrder = reachedTiers.at(-1)?.tierOrder ?? sortedTiers[0]?.tierOrder;
+
+  const TABS = [
+    { key: "story" as const, label: "스토리" },
+    { key: "tiers" as const, label: "가격 구간" },
+    { key: "participation" as const, label: "내 참여" },
+  ];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
-      <div className="grid gap-7 rounded-2xl border border-wb-line bg-wb-surface p-6 md:grid-cols-2">
-        <DealArtwork deal={deal} className="h-64 w-full md:h-full" />
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-2">
-              <Tag>{deal.category}</Tag>
-              <Tag highlighted>마감 D-{deal.daysLeft}</Tag>
-            </div>
-            <button
-              onClick={() => toggleFavorite(deal.id)}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-wb-line"
-            >
-              <Heart className={`h-4 w-4 ${isFavorite ? "fill-wb-orange text-wb-orange" : "text-wb-ink"}`} />
-            </button>
+    <div className="mx-auto max-w-6xl px-6 py-9">
+      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+        <div className="min-w-0 space-y-6">
+          <div className="space-y-1">
+            <p className="text-xs text-wb-secondary">
+              {catalog.producerName} · {detail.productCategory}
+            </p>
+            <h1 className="text-2xl">{detail.title}</h1>
           </div>
-          <h1 className="mt-4 text-2xl font-bold">{deal.title}</h1>
-          <p className="mt-2 text-sm font-semibold text-wb-green">{deal.producer}</p>
-          <p className="mt-3 text-sm leading-relaxed text-wb-secondary">{deal.summary}</p>
 
-          <div className="mt-auto space-y-3 pt-6">
-            <p className="text-xs font-bold text-wb-secondary">현재 {people.toLocaleString("ko-KR")}명 가격</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold">{won(tier.price)}</span>
-              <span className="text-sm text-wb-secondary">/ 개</span>
-            </div>
-            <Button
-              className="w-full"
-              disabled={participated || status !== "recruiting"}
-              onClick={() => setShowParticipation(true)}
-            >
-              {buttonLabel}
-            </Button>
+          {product.thumbnailUrl && !thumbnailFailed ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
+            <img
+              src={product.thumbnailUrl}
+              alt={detail.title}
+              className="aspect-[4/3] w-full rounded-2xl object-cover"
+              onError={() => setThumbnailFailed(true)}
+            />
+          ) : (
+            <GroupBuyArtwork entry={catalog} className="aspect-[4/3] w-full" />
+          )}
+
+          <div className="flex gap-1 border-b border-wb-line">
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                  activeTab === tab.key
+                    ? "border-wb-green text-wb-green"
+                    : "border-transparent text-wb-secondary hover:text-wb-ink"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        </div>
-      </div>
 
-      {showSuccess && (
-        <Banner tone="success">
-          공동구매 참여가 완료됐어요. 왼쪽 &lsquo;참여 내역&rsquo;에서 진행 상태를 확인할 수 있어요.
-        </Banner>
-      )}
-
-      <PriceJourneyCard dealId={deal.id} />
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <TransparencyCard tier={tier} />
-        <ProducerStoryCard deal={deal} />
-      </div>
-
-      <ParticipationModal
-        deal={deal}
-        open={showParticipation}
-        onClose={() => {
-          setShowParticipation(false);
-          setShowSuccess(true);
-        }}
-      />
-    </div>
-  );
-}
-
-function PriceJourneyCard({ dealId }: { dealId: string }) {
-  const { dealById, participants } = useDemoStore();
-  const deal = dealById(dealId)!;
-  const people = participants(dealId);
-  const next = nextTier(deal, people);
-  const current = activeTier(deal, people);
-
-  return (
-    <div className="space-y-5 rounded-2xl border border-wb-line bg-wb-surface p-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-bold">함께할수록 내려가는 가격</h2>
-          <p className="mt-1 text-sm text-wb-green">
-            {next
-              ? `${(next.minimumPeople - people).toLocaleString("ko-KR")}명만 더 모이면 ${won(next.price)}`
-              : "가장 낮은 가격 구간에 도달했어요"}
-          </p>
-        </div>
-        <p className="text-sm font-bold">현재 {people.toLocaleString("ko-KR")}명</p>
-      </div>
-      <ProgressBar value={people / deal.targetPeople} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {deal.tiers.map((t) => {
-          const active = current.minimumPeople === t.minimumPeople;
-          return (
-            <div
-              key={t.minimumPeople}
-              className={`rounded-xl p-4 ${active ? "bg-wb-light-green/60" : "bg-wb-canvas"}`}
-            >
-              <p className={`text-xs font-semibold ${active ? "text-wb-green" : "text-wb-secondary"}`}>
-                {t.minimumPeople.toLocaleString("ko-KR")}명부터
+          {activeTab === "story" && (
+            <div className="space-y-4">
+              {catalog.summary && <p className="text-base">{catalog.summary}</p>}
+              {(product.description || catalog.detail) && (
+                <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>
+              )}
+              <p className="text-sm text-wb-secondary">
+                모집 기간 {formatDateTime(detail.startAt)} ~ {formatDateTime(detail.endAt)}
               </p>
-              <p className="mt-1.5 text-lg font-bold">{won(t.price)}</p>
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+          )}
 
-function TransparencyCard({ tier }: { tier: ReturnType<typeof activeTier> }) {
-  return (
-    <div className="space-y-4 rounded-2xl border border-wb-line bg-wb-surface p-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-base font-bold">이 가격은 이렇게 만들어져요</h2>
-          <p className="text-xs text-wb-secondary">현재 가격 구간 기준 · 1개</p>
-        </div>
-        <PieChart className="h-6 w-6 text-wb-green/70" />
-      </div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2.5">
-          <span className="h-6 w-2 rounded bg-wb-light-green" /> 생산·포장·유통
-        </span>
-        <span className="font-bold">{won(tier.cost)}</span>
-      </div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2.5">
-          <span className="h-6 w-2 rounded bg-wb-orange/70" /> 생산자 이익
-        </span>
-        <span className="font-bold">{won(tierProfit(tier))}</span>
-      </div>
-      <div className="flex items-center justify-between border-t border-wb-line pt-3 text-sm font-bold">
-        <span>판매 가격</span>
-        <span>{won(tier.price)}</span>
-      </div>
-      <p className="rounded-lg bg-wb-canvas p-3 text-xs text-wb-secondary">
-        생산자 이익률 {tierMargin(tier)}% · 수량이 늘어도 생산자의 개당 이익은 지켜요.
-      </p>
-    </div>
-  );
-}
+          {activeTab === "tiers" && (
+            <div className="space-y-3">
+              <p className="text-sm text-wb-secondary">참여 수량이 늘어날수록 가격이 내려가요.</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {sortedTiers.map((tier) => {
+                  const active = tier.tierOrder === activeTierOrder;
+                  return (
+                    <div
+                      key={tier.tierOrder}
+                      className={`rounded-xl p-4 ${active ? "bg-wb-light-green/60" : "bg-wb-canvas"}`}
+                    >
+                      <p className={`text-xs font-semibold ${active ? "text-wb-green" : "text-wb-secondary"}`}>
+                        {tier.thresholdQuantity.toLocaleString("ko-KR")}개부터
+                      </p>
+                      <p className="mt-1.5 text-lg font-bold">{won(tier.unitPrice)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-function ProducerStoryCard({ deal }: { deal: ReturnType<typeof useDemoStore>["deals"][number] }) {
-  return (
-    <div className="space-y-4 rounded-2xl border border-wb-line bg-wb-surface p-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-wb-light-green">
-          <span className="text-sm font-bold text-wb-green">{deal.producer.slice(0, 1)}</span>
+          {activeTab === "participation" &&
+            (myPart?.participated && myPart.part ? (
+              <div className="space-y-3">
+                <p className="text-sm text-wb-secondary">
+                  {myPart.part.quantity.toLocaleString("ko-KR")}개 ·{" "}
+                  {myPart.part.appliedPrice !== null ? (
+                    <>확정 단가 {won(myPart.part.appliedPrice)}</>
+                  ) : (
+                    <>
+                      현재 예상가 {currentPrice !== null ? won(currentPrice) : "-"}
+                      <span className="text-xs"> (공동구매 성사 시 전원 동일한 최종가로 확정돼요)</span>
+                    </>
+                  )}
+                </p>
+                {status.status === "ONGOING" && myPart.part.status === "CONFIRMED" && (
+                  <Button
+                    variant="secondary"
+                    loading={submitting}
+                    onClick={() => handleCancelParticipation(myPart.part!.id)}
+                  >
+                    참여 취소
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-wb-secondary">
+                아직 참여하지 않았어요. 오른쪽에서 수량을 정하고 참여해보세요.
+              </p>
+            ))}
         </div>
-        <div>
-          <p className="text-sm font-bold">{deal.producer}</p>
-          <p className="text-xs font-semibold text-wb-green">생산 정보 인증</p>
-        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <div className="space-y-4 rounded-2xl border border-wb-line bg-wb-surface p-6">
+            <GroupBuyStatusTag status={status.status} />
+
+            <div>
+              <p className="text-xs text-wb-secondary">현재 가격</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-3xl font-bold">{currentPrice !== null ? won(currentPrice) : "-"}</p>
+                {currentPrice !== null && product.startPrice > currentPrice && (
+                  <p className="text-sm text-wb-secondary line-through">{won(product.startPrice)}</p>
+                )}
+              </div>
+            </div>
+
+            <ProgressBar value={detail.maxQuantity === 0 ? 0 : status.currentQuantity / detail.maxQuantity} />
+
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div>
+                <p className="text-sm font-bold text-wb-green">{achievementRate}%</p>
+                <p className="text-wb-secondary">달성률</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold">{formatRemaining(status.remainingSeconds)}</p>
+                <p className="text-wb-secondary">남은 시간</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold">{status.participantCount.toLocaleString("ko-KR")}명</p>
+                <p className="text-wb-secondary">참여자</p>
+              </div>
+            </div>
+
+            <dl className="space-y-1.5 border-t border-wb-line pt-3 text-xs">
+              <div className="flex justify-between">
+                <dt className="text-wb-secondary">참여 수량</dt>
+                <dd>
+                  {status.currentQuantity.toLocaleString("ko-KR")} / {detail.maxQuantity.toLocaleString("ko-KR")}개
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-wb-secondary">최소 성사 수량</dt>
+                <dd>{detail.minQuantity.toLocaleString("ko-KR")}개</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="shrink-0 text-wb-secondary">모집 기간</dt>
+                <dd className="text-right">
+                  {formatDateTime(detail.startAt)} ~ {formatDateTime(detail.endAt)}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="space-y-3 border-t border-wb-line pt-4">
+              {myPart?.participated && myPart.part ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-wb-green">이미 참여했어요</p>
+                  <p className="text-xs text-wb-secondary">{myPart.part.quantity.toLocaleString("ko-KR")}개 참여 중</p>
+                  {status.status === "ONGOING" && myPart.part.status === "CONFIRMED" && (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      loading={submitting}
+                      onClick={() => handleCancelParticipation(myPart.part!.id)}
+                    >
+                      참여 취소
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <TextField
+                    label="참여 수량"
+                    type="number"
+                    min={1}
+                    value={quantity}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setQuantity(Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1);
+                    }}
+                  />
+                  <Button className="w-full" disabled={!canParticipate} loading={submitting} onClick={handleParticipate}>
+                    {status.status !== "ONGOING" ? "참여할 수 없어요" : "참여하기"}
+                  </Button>
+                </div>
+              )}
+              {actionMessage && <Banner tone="success">{actionMessage}</Banner>}
+              {actionError && <Banner tone="error">{actionError}</Banner>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-wb-line bg-wb-surface p-4">
+            <p className="text-sm font-semibold">{catalog.producerName}</p>
+            <p className="text-xs text-wb-secondary">생산자</p>
+          </div>
+        </aside>
       </div>
-      <h3 className="text-base font-bold">왜 이 상품을 만들었나요?</h3>
-      <p className="text-sm leading-relaxed text-wb-secondary">{deal.detail}</p>
-      <p className="text-xs font-semibold text-wb-green">원산지·제조 공정 상세 정보 공개</p>
     </div>
   );
 }

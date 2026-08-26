@@ -115,6 +115,8 @@ export type GroupBuyUpdateRequest = {
 export type GroupBuyDetailResponse = {
   id: number;
   productId: number;
+  productName: string;
+  productCategory: string;
   producerId: number;
   title: string;
   status: GroupBuyStatus;
@@ -124,6 +126,7 @@ export type GroupBuyDetailResponse = {
   maxQuantity: number;
   priceTiers: GroupBuyPriceTier[];
   createdAt: string;
+  suspended: boolean;
 };
 
 export type GroupBuyStatusResponse = {
@@ -138,6 +141,8 @@ export type GroupBuyStatusResponse = {
 export type GroupBuySummaryResponse = {
   id: number;
   productId: number;
+  productName: string;
+  productCategory: string;
   producerId: number;
   title: string;
   status: GroupBuyStatus;
@@ -145,10 +150,73 @@ export type GroupBuySummaryResponse = {
   endAt: string;
   currentQuantity: number;
   maxQuantity: number;
+  suspended: boolean;
 };
 
 export type GroupBuyPartCreateRequest = {
   quantity: number;
+};
+
+export type GroupBuySuspensionStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export type GroupBuySuspensionRequestCreateRequest = {
+  reason?: string;
+};
+
+export type GroupBuySuspensionRequestResponse = {
+  id: number;
+  groupBuyId: number;
+  groupBuyTitle: string;
+  requesterId: number;
+  reason: string | null;
+  status: GroupBuySuspensionStatus;
+  requestedAt: string;
+  decidedAt: string | null;
+};
+
+export type ProductDetailResponse = {
+  id: number;
+  productName: string;
+  description: string | null;
+  startPrice: number;
+  thumbnailUrl: string | null;
+  available: boolean;
+};
+
+export type ProductCreateRequest = {
+  categoryId: number;
+  productName: string;
+  description?: string;
+  startPrice: number;
+  thumbnailUrl?: string;
+};
+
+export type ProductStatus = "ON_SALE" | "SOLD_OUT";
+
+// GET /api/products/mine 응답 - 판매자 본인이 등록한 상품(상태 무관) 조회
+export type ProductMineResponse = {
+  id: number;
+  productName: string;
+  startPrice: number;
+  thumbnailUrl: string | null;
+  status: ProductStatus;
+  createdAt: string;
+};
+
+export type CategoryTreeResponse = {
+  id: number;
+  categoryName: string;
+  children: CategoryTreeResponse[];
+};
+
+// 백엔드가 Slice<T>를 직렬화한 형태 - Page와 달리 총 개수를 세지 않아 page 메타데이터가 없다
+export type SliceResponse<T> = {
+  content: T[];
+  size: number;
+  number: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
 };
 
 // appliedPrice는 공동구매가 성사되기 전까지 null - 백엔드는 참여 시점에 가격을 계산/저장하지 않고

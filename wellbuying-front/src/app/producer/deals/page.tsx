@@ -1,125 +1,153 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
-import { DealArtwork } from "@/components/deal/DealArtwork";
-import { DealEditorModal } from "@/components/producer/DealEditorModal";
-import { ProducerStatusPill } from "@/components/producer/ProducerStatusPill";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Plus, Users } from "lucide-react";
+import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
+import { GroupBuyCreateModal } from "@/components/producer/GroupBuyCreateModal";
+import { SuspensionRequestModal } from "@/components/producer/SuspensionRequestModal";
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Tag } from "@/components/ui/Tag";
-import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { activeTier, won, type Deal } from "@/lib/mock/types";
+import { StatusPill } from "@/components/ui/Tag";
+import { cancelGroupBuy, listMyGroupBuys } from "@/lib/api/groupBuy";
+import { ApiError } from "@/lib/api/http";
+import type { GroupBuySummaryResponse } from "@/lib/api/types";
+import { formatDateTime } from "@/lib/format";
 
 export default function ProducerDealsPage() {
-  const { deals, producerDealIds, participants, dealStatuses, setDealStatus, completeDeal, canCancelBeforeStart } =
-    useDemoStore();
+  const [items, setItems] = useState<GroupBuySummaryResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
-  const [cancelDealId, setCancelDealId] = useState<string | null>(null);
-  const [completeDealId, setCompleteDealId] = useState<string | null>(null);
+  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
+  const [suspensionTargetId, setSuspensionTargetId] = useState<number | null>(null);
 
-  const producerDeals = deals.filter((deal) => producerDealIds.has(deal.id));
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await listMyGroupBuys({ size: 100 });
+      setItems(page.content);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      await reload();
+    }
+    load();
+  }, [reload]);
+
+  async function handleCancel(id: number) {
+    setError(null);
+    try {
+      await cancelGroupBuy(id);
+      await reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "취소 처리 중 오류가 발생했어요.");
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">공동구매 관리</h1>
-          <p className="mt-1 text-sm text-wb-secondary">임시저장부터 모집 종료까지 상태를 직접 확인할 수 있어요.</p>
+        <div className="flex items-center gap-2.5">
+          <Users className="h-6 w-6 text-wb-green" />
+          <div>
+            <h1 className="text-3xl font-bold">공동구매관리</h1>
+            <p className="mt-1 text-sm text-wb-secondary">내가 개설한 공동구매를 만들고 관리하세요.</p>
+          </div>
         </div>
         <Button onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4" /> 공동구매 개설
         </Button>
       </div>
 
-      <div className="space-y-4">
-        {producerDeals.map((deal) => {
-          const status = dealStatuses[deal.id] ?? "draft";
-          const people = participants(deal.id);
-          return (
-            <div key={deal.id} className="space-y-4 rounded-2xl border border-wb-line bg-wb-surface p-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex gap-4">
-                  <DealArtwork deal={deal} className="h-24 w-32 shrink-0" />
-                  <div>
-                    <div className="mb-1.5 flex gap-2">
-                      <ProducerStatusPill status={status} />
-                      <Tag>{deal.category}</Tag>
-                    </div>
-                    <p className="line-clamp-2 text-lg font-bold">{deal.title}</p>
-                    <p className="mt-1 text-xs text-wb-secondary">
-                      현재 {people.toLocaleString("ko-KR")}명 · 목표 {deal.targetPeople.toLocaleString("ko-KR")}명 ·
-                      D-{deal.daysLeft}
-                    </p>
+      {error && <Banner tone="error">{error}</Banner>}
+
+      {loading ? (
+        <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="아직 만든 공동구매가 없어요"
+          message="공동구매 개설 버튼을 눌러 첫 공동구매를 만들어보세요."
+        />
+      ) : (
+        <div className="space-y-4">
+          {items.map((item) => (
+            <div key={item.id} className="space-y-4 rounded-2xl border border-wb-line bg-wb-surface p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="mb-1.5 flex gap-2">
+                    <GroupBuyStatusTag status={item.status} />
+                    {item.suspended && <StatusPill tone="red">판매정지</StatusPill>}
+                    <span className="text-xs text-wb-secondary">{item.productName}</span>
                   </div>
+                  <Link href={`/producer/deals/${item.id}`} className="line-clamp-2 text-lg font-bold hover:underline">
+                    {item.title}
+                  </Link>
+                  <p className="mt-1 text-xs text-wb-secondary">
+                    {formatDateTime(item.startAt)} ~ {formatDateTime(item.endAt)}
+                  </p>
                 </div>
-                <p className="text-lg font-bold sm:text-right">{won(activeTier(deal, people).price)}</p>
+                <p className="text-sm font-bold sm:text-right">
+                  {item.currentQuantity.toLocaleString("ko-KR")} / {item.maxQuantity.toLocaleString("ko-KR")}개
+                </p>
               </div>
 
-              <ProgressBar value={people / deal.targetPeople} />
+              <ProgressBar value={item.maxQuantity === 0 ? 0 : item.currentQuantity / item.maxQuantity} />
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  disabled={status === "completed" || status === "cancelled"}
-                  onClick={() => setEditingDeal(deal)}
-                >
-                  수정
-                </Button>
-                {(status === "draft" || status === "scheduled" || status === "paused") && (
-                  <Button variant="secondary" onClick={() => setDealStatus(deal.id, "recruiting")}>
-                    {status === "paused" ? "모집 재개" : "지금 공개"}
-                  </Button>
-                )}
-                {status === "recruiting" && (
-                  <>
-                    <Button variant="secondary" onClick={() => setDealStatus(deal.id, "paused")}>
-                      일시 중지
-                    </Button>
-                    <Button variant="secondary" onClick={() => setCompleteDealId(deal.id)}>
-                      모집 종료
-                    </Button>
-                  </>
-                )}
-                {canCancelBeforeStart(deal.id) && (
+              <div className="flex items-center gap-4">
+                <Link href={`/producer/deals/${item.id}`} className="text-sm font-semibold text-wb-green hover:underline">
+                  상세 조회
+                </Link>
+                {item.status === "READY" && (
                   <button
-                    onClick={() => setCancelDealId(deal.id)}
-                    className="ml-auto text-sm font-semibold text-red-600"
+                    onClick={() => setCancelTargetId(item.id)}
+                    className="text-sm font-semibold text-red-600"
                   >
                     공동구매 취소
                   </button>
                 )}
+                {item.status === "ONGOING" && !item.suspended && (
+                  <button
+                    onClick={() => setSuspensionTargetId(item.id)}
+                    className="text-sm font-semibold text-red-600"
+                  >
+                    판매정지 요청
+                  </button>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <DealEditorModal open={showCreate} onClose={() => setShowCreate(false)} />
-      <DealEditorModal
-        open={editingDeal !== null}
-        editing={editingDeal}
-        onClose={() => setEditingDeal(null)}
-      />
+      <GroupBuyCreateModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={reload} />
 
       <ConfirmDialog
-        open={cancelDealId !== null}
-        onClose={() => setCancelDealId(null)}
-        onConfirm={() => cancelDealId && setDealStatus(cancelDealId, "cancelled")}
+        open={cancelTargetId !== null}
+        onClose={() => setCancelTargetId(null)}
+        onConfirm={() => cancelTargetId !== null && handleCancel(cancelTargetId)}
         title="공동구매를 취소할까요?"
-        message="공개 전 공동구매가 삭제되고 소비자 목록에는 표시되지 않습니다."
+        message="시작 전(오픈 예정) 상태에서만 취소할 수 있어요."
         confirmLabel="공동구매 취소"
         destructive
       />
-      <ConfirmDialog
-        open={completeDealId !== null}
-        onClose={() => setCompleteDealId(null)}
-        onConfirm={() => completeDealId && completeDeal(completeDealId)}
-        title="모집을 종료할까요?"
-        message="현재 참여 인원을 기준으로 최종 가격을 확정하고 참여자에게 결제를 요청합니다."
-        confirmLabel="모집 종료"
+
+      <SuspensionRequestModal
+        open={suspensionTargetId !== null}
+        groupBuyId={suspensionTargetId}
+        onClose={() => setSuspensionTargetId(null)}
+        onRequested={reload}
       />
     </div>
   );

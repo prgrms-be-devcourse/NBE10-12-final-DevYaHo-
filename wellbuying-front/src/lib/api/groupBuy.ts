@@ -9,6 +9,7 @@ import type {
   GroupBuyStatus,
   GroupBuyStatusResponse,
   GroupBuySummaryResponse,
+  GroupBuySuspensionRequestCreateRequest,
   GroupBuyUpdateRequest,
   PageResponse,
 } from "@/lib/api/types";
@@ -66,4 +67,24 @@ export function cancelGroupBuyParticipation(groupBuyId: number, partId: number):
 
 export function getMyGroupBuyParticipation(groupBuyId: number): Promise<GroupBuyPartMeResponse> {
   return http.get<GroupBuyPartMeResponse>(`/api/groupBuys/${groupBuyId}/part/me`, { auth: true });
+}
+
+export function listMyGroupBuys(params?: {
+  status?: GroupBuyStatus;
+  page?: number;
+  size?: number;
+}): Promise<PageResponse<GroupBuySummaryResponse>> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<GroupBuySummaryResponse>>(`/api/groupBuys/mine${suffix}`, { auth: true });
+}
+
+export function requestGroupBuySuspension(
+  groupBuyId: number,
+  request: GroupBuySuspensionRequestCreateRequest,
+): Promise<void> {
+  return http.post<void>(`/api/groupBuys/${groupBuyId}/suspension-requests`, request, { auth: true });
 }
