@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight, ShoppingBag } from "lucide-react";
+import { AccountShell } from "@/components/account/AccountShell";
 import { DealArtwork } from "@/components/deal/DealArtwork";
 import { OrderDetailModal } from "@/components/consumer/OrderDetailModal";
 import { ParticipationDetailModal } from "@/components/consumer/ParticipationDetailModal";
@@ -15,7 +16,7 @@ import {
   won,
 } from "@/lib/mock/types";
 
-export default function OrdersPage() {
+function OrdersContent() {
   const { participations, orders, dealById } = useDemoStore();
   const [selectedParticipationId, setSelectedParticipationId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -31,12 +32,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
-      <div>
-        <h1 className="text-3xl font-bold">참여·주문 내역</h1>
-        <p className="mt-1 text-sm text-wb-secondary">최종 가격 확정부터 결제, 배송, 환불까지 한곳에서 확인해요.</p>
-      </div>
-
+    <div className="space-y-6">
       {orders.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-bold">결제·배송</h2>
@@ -108,5 +104,13 @@ export default function OrdersPage() {
         onClose={() => setSelectedOrderId(null)}
       />
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <AccountShell>
+      <OrdersContent />
+    </AccountShell>
   );
 }

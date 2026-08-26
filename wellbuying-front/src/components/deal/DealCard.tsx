@@ -26,7 +26,7 @@ export function DealCard({ deal, showProgress = false }: { deal: Deal; showProgr
           </div>
         </div>
         <div className="mt-3 space-y-1">
-          <p className="line-clamp-2 min-h-12 text-base font-bold">{deal.title}</p>
+          <p className="line-clamp-2 min-h-12 text-base">{deal.title}</p>
           <p className="text-xs text-wb-secondary">{deal.producer}</p>
         </div>
         <div className="mt-2 flex items-baseline justify-between">

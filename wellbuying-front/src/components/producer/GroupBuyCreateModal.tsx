@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { TextField } from "@/components/ui/TextField";
 import { createGroupBuy } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
-import type { GroupBuyPriceTier } from "@/lib/api/types";
+import { listMyProducts } from "@/lib/api/product";
+import type { GroupBuyPriceTier, ProductMineResponse } from "@/lib/api/types";
 
 type TierInput = { thresholdQuantity: number; unitPrice: number };
 
@@ -19,7 +21,7 @@ function defaultTiers(): [TierInput, TierInput, TierInput] {
   ];
 }
 
-export function LiveGroupBuyCreateModal({
+export function GroupBuyCreateModal({
   open,
   onClose,
   onCreated,
@@ -28,7 +30,9 @@ export function LiveGroupBuyCreateModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [productId, setProductId] = useState(1);
+  const [products, setProducts] = useState<ProductMineResponse[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productId, setProductId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -37,6 +41,31 @@ export function LiveGroupBuyCreateModal({
   const [tiers, setTiers] = useState<[TierInput, TierInput, TierInput]>(defaultTiers());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let ignore = false;
+
+    async function loadProducts() {
+      setProductsLoading(true);
+      try {
+        const list = (await listMyProducts()).content;
+        if (!ignore) {
+          setProducts(list);
+          setProductId((current) => current ?? list[0]?.id ?? null);
+        }
+      } catch {
+        if (!ignore) setProducts([]);
+      } finally {
+        if (!ignore) setProductsLoading(false);
+      }
+    }
+
+    loadProducts();
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
 
   function updateTier(index: number, patch: Partial<TierInput>) {
     setTiers((prev) => {
@@ -47,7 +76,7 @@ export function LiveGroupBuyCreateModal({
   }
 
   function reset() {
-    setProductId(1);
+    setProductId(products[0]?.id ?? null);
     setTitle("");
     setStartAt("");
     setEndAt("");
@@ -59,6 +88,10 @@ export function LiveGroupBuyCreateModal({
 
   async function handleSubmit() {
     setError(null);
+    if (!productId) {
+      setError("공동구매를 열 상품을 선택해주세요.");
+      return;
+    }
     if (!title || !startAt || !endAt) {
       setError("제목과 시작/마감 일시를 입력해주세요.");
       return;
@@ -96,18 +129,37 @@ export function LiveGroupBuyCreateModal({
         reset();
         onClose();
       }}
-      title="새 공동구매 개설 (실서버 연동)"
-      subtitle="실제 백엔드 API(POST /api/groupBuys)로 생성됩니다."
+      title="새 공동구매 개설"
+      subtitle="상품 정보와 가격 구간을 입력해주세요."
       width="560px"
     >
       <div className="space-y-4">
-        <TextField
-          label="상품 ID"
-          type="number"
-          min={1}
-          value={productId}
-          onChange={(e) => setProductId(Number(e.target.value))}
-        />
+        <div>
+          <span className="mb-1 block text-xs font-bold">상품</span>
+          {productsLoading ? (
+            <p className="text-sm text-wb-secondary">불러오는 중...</p>
+          ) : products.length === 0 ? (
+            <div className="rounded-lg bg-wb-canvas p-3 text-sm text-wb-secondary">
+              등록된 상품이 없어요.{" "}
+              <Link href="/producer/products" className="font-semibold text-wb-green hover:underline">
+                상품을 먼저 등록해주세요
+              </Link>
+              .
+            </div>
+          ) : (
+            <select
+              value={productId ?? ""}
+              onChange={(e) => setProductId(Number(e.target.value))}
+              className="h-11 w-full rounded-lg border border-wb-line bg-wb-surface px-3 text-sm font-semibold outline-none"
+            >
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.productName} ({product.startPrice.toLocaleString()}원)
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <TextField label="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
 
         <div className="grid grid-cols-2 gap-3">
@@ -174,7 +226,12 @@ export function LiveGroupBuyCreateModal({
 
         {error && <Banner tone="error">{error}</Banner>}
 
-        <Button className="w-full" loading={submitting} onClick={handleSubmit}>
+        <Button
+          className="w-full"
+          loading={submitting}
+          disabled={!productsLoading && products.length === 0}
+          onClick={handleSubmit}
+        >
           공동구매 생성
         </Button>
       </div>

@@ -1,194 +1,254 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Search } from "lucide-react";
-import { DealArtwork } from "@/components/deal/DealArtwork";
-import { ProducerStatusPill } from "@/components/producer/ProducerStatusPill";
+import { useEffect, useState } from "react";
+import { PauseCircle, ShoppingBag } from "lucide-react";
+import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
-import { ProgressBar } from "@/components/ui/ProgressBar";
-import { StatusPill } from "@/components/ui/Tag";
-import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import { activeTier, won, type Deal } from "@/lib/mock/types";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatusPill, Tag } from "@/components/ui/Tag";
+import {
+  approveSuspensionRequest,
+  listAdminGroupBuys,
+  listSuspensionRequests,
+  rejectSuspensionRequest,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/http";
+import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus } from "@/lib/api/types";
+import { formatDateTime } from "@/lib/format";
 
-export default function AdminDealsPage() {
-  const { deals, dealStatuses, participants } = useDemoStore();
-  const [query, setQuery] = useState("");
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+const SUSPENSION_TABS: { status: GroupBuySuspensionStatus; label: string }[] = [
+  { status: "PENDING", label: "처리 대기" },
+  { status: "APPROVED", label: "승인됨" },
+  { status: "REJECTED", label: "반려됨" },
+];
 
-  const filtered = deals.filter(
-    (deal) =>
-      query.trim().length === 0 ||
-      deal.title.toLowerCase().includes(query.toLowerCase()) ||
-      deal.producer.toLowerCase().includes(query.toLowerCase()),
-  );
+const SUSPENSION_STATUS_TONE: Record<GroupBuySuspensionStatus, "orange" | "green" | "red"> = {
+  PENDING: "orange",
+  APPROVED: "green",
+  REJECTED: "red",
+};
 
-  const recruitingCount = deals.filter((deal) => dealStatuses[deal.id] === "recruiting").length;
-  const pausedCount = deals.filter((deal) => dealStatuses[deal.id] === "paused").length;
+const SUSPENSION_STATUS_LABEL: Record<GroupBuySuspensionStatus, string> = {
+  PENDING: "처리 대기",
+  APPROVED: "승인됨",
+  REJECTED: "반려됨",
+};
+
+function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus }) {
+  const [page, setPage] = useState(0);
+  const [items, setItems] = useState<GroupBuySuspensionRequestResponse[] | null>(null);
+  const [totalPages, setTotalPages] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<number | null>(null);
+
+  useEffect(() => {
+    listSuspensionRequests({ status, page })
+      .then((response) => {
+        setItems(response.content);
+        setTotalPages(response.page.totalPages);
+      })
+      .catch((e) => {
+        setItems([]);
+        setError(e instanceof ApiError ? e.message : "판매정지 요청 목록을 불러오지 못했어요.");
+      });
+  }, [status, page]);
+
+  async function handleApprove(id: number) {
+    setActioningId(id);
+    setError(null);
+    try {
+      await approveSuspensionRequest(id);
+      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "승인에 실패했어요.");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  async function handleReject(id: number) {
+    setActioningId(id);
+    setError(null);
+    try {
+      await rejectSuspensionRequest(id);
+      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "반려에 실패했어요.");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  if (items === null) {
+    return <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>;
+  }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-6 py-9">
-      <div>
-        <p className="text-xs font-bold tracking-wide text-wb-green">GROUP BUYING</p>
-        <h1 className="mt-1 text-3xl font-bold">공동구매 관리</h1>
-        <p className="mt-1 text-sm text-wb-secondary">참여자 수, 가격 구간, 남은 시간을 실시간으로 확인합니다.</p>
-      </div>
+    <div className="space-y-4">
+      {error && <Banner tone="error">{error}</Banner>}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex h-11 flex-1 items-center gap-2.5 rounded-xl border border-wb-line bg-wb-surface px-3.5 sm:max-w-xs">
-          <Search className="h-4 w-4 text-wb-secondary" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="공동구매 또는 생산자 검색"
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </div>
-        <div className="flex gap-2">
-          <StatusPill tone="green">진행 {recruitingCount}</StatusPill>
-          <StatusPill tone="orange">일시중지 {pausedCount}</StatusPill>
-        </div>
-      </div>
-
-      {/* wide table */}
-      <div className="hidden overflow-hidden rounded-2xl border border-wb-line bg-wb-surface md:block">
-        <div className="grid grid-cols-[2fr_1fr_100px_60px_110px_70px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
-          <span>공동구매</span>
-          <span>실시간 참여</span>
-          <span className="text-right">현재 가격</span>
-          <span>마감</span>
-          <span>상태</span>
-          <span />
-        </div>
-        {filtered.map((deal) => {
-          const people = participants(deal.id);
-          const status = dealStatuses[deal.id] ?? "draft";
-          return (
+      {items.length === 0 ? (
+        <EmptyState icon={PauseCircle} title="해당 상태의 요청이 없어요" message="다른 탭을 확인해보세요." />
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
             <div
-              key={deal.id}
-              className="grid grid-cols-[2fr_1fr_100px_60px_110px_70px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
+              key={item.id}
+              className="flex flex-col gap-4 rounded-2xl border border-wb-line bg-wb-surface p-4 sm:flex-row sm:items-center"
             >
-              <div className="flex min-w-0 items-center gap-3">
-                <DealArtwork deal={deal} className="h-11 w-12 shrink-0" />
-                <div className="min-w-0">
-                  <p className="line-clamp-1 text-sm font-bold">{deal.title}</p>
-                  <p className="line-clamp-1 text-xs text-wb-secondary">{deal.producer}</p>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
+                  <Tag>공동구매 #{item.groupBuyId}</Tag>
+                  <span>{formatDateTime(item.requestedAt)}</span>
                 </div>
+                <p className="text-sm font-bold">{item.groupBuyTitle}</p>
+                <p className="text-xs text-wb-secondary">{item.reason ?? "사유 미입력"}</p>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-bold">
-                  {people.toLocaleString("ko-KR")} / {deal.targetPeople.toLocaleString("ko-KR")}명
-                </p>
-                <ProgressBar value={people / deal.targetPeople} />
-              </div>
-              <p className="text-right text-xs font-bold">{won(activeTier(deal, people).price)}</p>
-              <p className="text-xs font-semibold">D-{deal.daysLeft}</p>
-              <ProducerStatusPill status={status} />
-              <Button variant="secondary" onClick={() => setSelectedDeal(deal)} className="!h-8 !px-3 text-xs">
-                관리
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* compact cards */}
-      <div className="space-y-3 md:hidden">
-        {filtered.map((deal) => {
-          const people = participants(deal.id);
-          const status = dealStatuses[deal.id] ?? "draft";
-          return (
-            <div key={deal.id} className="space-y-3 rounded-xl border border-wb-line bg-wb-surface p-4">
-              <div className="flex items-start gap-3">
-                <DealArtwork deal={deal} className="h-12 w-14 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-1 text-sm font-bold">{deal.title}</p>
-                  <p className="line-clamp-1 text-xs text-wb-secondary">{deal.producer}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  <ProducerStatusPill status={status} />
-                  <Button variant="secondary" onClick={() => setSelectedDeal(deal)} className="!h-7 !px-2.5 text-xs">
-                    관리
-                  </Button>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5 text-xs">
-                <span className="font-bold">{people.toLocaleString("ko-KR")}명</span>
-                <ProgressBar value={people / deal.targetPeople} />
-                <span className="font-bold">{won(activeTier(deal, people).price)}</span>
-                <span className="font-semibold">D-{deal.daysLeft}</span>
+              <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-2">
+                <StatusPill tone={SUSPENSION_STATUS_TONE[item.status]}>
+                  {SUSPENSION_STATUS_LABEL[item.status]}
+                </StatusPill>
+                {item.status === "PENDING" && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      loading={actioningId === item.id}
+                      onClick={() => handleReject(item.id)}
+                    >
+                      반려
+                    </Button>
+                    <Button
+                      className="px-3 py-1.5 text-xs"
+                      loading={actioningId === item.id}
+                      onClick={() => handleApprove(item.id)}
+                    >
+                      승인
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <ManageDealModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />
+      {totalPages > 1 && (
+        <div className="flex justify-center gap-2">
+          <Button
+            variant="secondary"
+            className="px-3 py-1.5 text-xs"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            이전
+          </Button>
+          <span className="flex items-center px-2 text-xs text-wb-secondary">
+            {page + 1} / {totalPages}
+          </span>
+          <Button
+            variant="secondary"
+            className="px-3 py-1.5 text-xs"
+            disabled={page + 1 >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            다음
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-function ManageDealModal({ deal, onClose }: { deal: Deal | null; onClose: () => void }) {
-  const { dealStatuses, participants, setDealStatus } = useDemoStore();
-  if (!deal) return null;
+function GroupBuyListSection() {
+  const [items, setItems] = useState<GroupBuySummaryResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const people = participants(deal.id);
-  const status = dealStatuses[deal.id] ?? "draft";
-  const paused = status === "paused";
+  useEffect(() => {
+    listAdminGroupBuys({ size: 50 })
+      .then((response) => setItems(response.content))
+      .catch((e) => {
+        setItems([]);
+        setError(e instanceof ApiError ? e.message : "공동구매 목록을 불러오지 못했어요.");
+      });
+  }, []);
+
+  if (items === null) {
+    return <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>;
+  }
 
   return (
-    <Modal open={deal !== null} onClose={onClose} title="공동구매 운영 상세" subtitle={deal.title} width="560px">
-      <div className="space-y-5">
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-lg bg-wb-canvas p-3">
-            <p className="text-xs text-wb-secondary">참여자</p>
-            <p className="text-lg font-bold">{people.toLocaleString("ko-KR")}명</p>
-          </div>
-          <div className="rounded-lg bg-wb-canvas p-3">
-            <p className="text-xs text-wb-secondary">목표 달성</p>
-            <p className="text-lg font-bold">{Math.round((people / deal.targetPeople) * 100)}%</p>
-          </div>
-          <div className="rounded-lg bg-wb-canvas p-3">
-            <p className="text-xs text-wb-secondary">남은 기간</p>
-            <p className="text-lg font-bold">D-{deal.daysLeft}</p>
-          </div>
-        </div>
+    <div className="space-y-3">
+      {error && <Banner tone="error">{error}</Banner>}
 
-        <div>
-          <p className="mb-2.5 text-sm font-bold">가격 구간</p>
-          <div className="space-y-2">
-            {deal.tiers.map((tier) => {
-              const active = activeTier(deal, people).minimumPeople === tier.minimumPeople;
-              return (
-                <div
-                  key={tier.minimumPeople}
-                  className={`flex items-center justify-between rounded-lg p-3 text-sm ${
-                    active ? "bg-wb-light-green/45" : "bg-wb-canvas"
-                  }`}
-                >
-                  <span className="font-semibold">{tier.minimumPeople.toLocaleString("ko-KR")}명부터</span>
-                  <span className="font-bold">{won(tier.price)}</span>
-                </div>
-              );
-            })}
+      {items.length === 0 ? (
+        <EmptyState icon={ShoppingBag} title="등록된 공동구매가 없어요" message="아직 개설된 공동구매가 없어요." />
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-wb-line bg-wb-surface">
+          <div className="grid grid-cols-[2fr_1fr_100px_100px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
+            <span>공동구매</span>
+            <span>진행률</span>
+            <span>상태</span>
+            <span>판매정지</span>
           </div>
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="grid grid-cols-[2fr_1fr_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
+            >
+              <div className="min-w-0">
+                <p className="line-clamp-1 text-sm font-bold">{item.title}</p>
+                <p className="line-clamp-1 text-xs text-wb-secondary">{item.productName}</p>
+              </div>
+              <p className="text-xs font-bold">
+                {item.currentQuantity.toLocaleString("ko-KR")} / {item.maxQuantity.toLocaleString("ko-KR")}개
+              </p>
+              <GroupBuyStatusTag status={item.status} />
+              {item.suspended ? <StatusPill tone="red">정지됨</StatusPill> : <span className="text-xs text-wb-secondary">-</span>}
+            </div>
+          ))}
         </div>
+      )}
+    </div>
+  );
+}
 
-        <div className="flex items-start gap-2.5 rounded-xl bg-wb-orange/10 p-3.5 text-xs text-wb-secondary">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-wb-orange" />
-          일시중지하면 신규 참여만 막히며 기존 참여 내역은 유지됩니다.
-        </div>
+export default function AdminDealsPage() {
+  const [suspensionStatus, setSuspensionStatus] = useState<GroupBuySuspensionStatus>("PENDING");
 
-        <div className="flex items-center justify-between border-t border-wb-line pt-4">
-          <ProducerStatusPill status={status} />
-          <Button
-            disabled={status !== "recruiting" && status !== "paused"}
-            onClick={() => setDealStatus(deal.id, paused ? "recruiting" : "paused")}
-          >
-            {paused ? "공동구매 재개" : "공동구매 일시중지"}
-          </Button>
-        </div>
+  return (
+    <div className="mx-auto max-w-5xl space-y-8 px-6 py-9">
+      <div>
+        <p className="text-xs font-bold tracking-wide text-wb-green">GROUP BUYING</p>
+        <h1 className="mt-1 text-3xl font-bold">공동구매 관리</h1>
+        <p className="mt-1 text-sm text-wb-secondary">공동구매 현황과 판매정지 요청을 한 화면에서 확인합니다.</p>
       </div>
-    </Modal>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold">판매정지 요청</h2>
+        <div className="flex flex-wrap gap-2">
+          {SUSPENSION_TABS.map((tab) => (
+            <button
+              key={tab.status}
+              onClick={() => setSuspensionStatus(tab.status)}
+              className={`rounded-full px-4 py-2 text-xs font-bold ${
+                suspensionStatus === tab.status
+                  ? "bg-wb-green text-white"
+                  : "border border-wb-line bg-wb-surface text-wb-secondary"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <SuspensionRequestsPanel key={suspensionStatus} status={suspensionStatus} />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold">전체 공동구매 목록</h2>
+        <GroupBuyListSection />
+      </section>
+    </div>
   );
 }
