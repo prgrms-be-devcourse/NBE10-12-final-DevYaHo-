@@ -3,7 +3,6 @@ package com.wellbuying.domain.member.service;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
-import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -11,6 +10,7 @@ import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EmailVerificationService {
@@ -69,14 +69,15 @@ public class EmailVerificationService {
         }
     }
 
-    // 휴면 회원만 재활성화 코드를 받을 수 있음 - 존재하지 않거나 휴면이 아니면 거부
+    // 휴면 회원만 재활성화 코드를 받을 수 있음 - 존재하지 않으면 거부, 배치 미실행으로 아직 ACTIVE인 휴면 대상은 이 시점에 DORMANT로 동기화하여 허용
+    // 쿨다운 체크(예외 가능)를 validateCanReactivate()(마지막에만 예외, 그 전에 markDormant() 가능) 앞에 두어
+    // AuthService.login()과 같은 롤백 문제가 재발하지 않도록 함 - 이 메서드는 noRollbackFor 없이도 안전
+    @Transactional
     public void sendReactivationCode(String email) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        if (member.getStatus() != MemberStatus.DORMANT) {
-            throw new BusinessException(ErrorCode.MEMBER_NOT_DORMANT);
-        }
         emailCooldownGuard.check(REACTIVATION_COOLDOWN_PURPOSE, email);
+        member.validateCanReactivate();
 
         String code = generateCode();
         redisTemplate.opsForValue()

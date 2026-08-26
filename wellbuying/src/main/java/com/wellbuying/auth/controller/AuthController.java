@@ -47,10 +47,11 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    // 휴면 계정 재활성화 코드 검증 API - 성공 시 즉시 ACTIVE로 전환하고 로그인 토큰까지 발급
+    // 휴면 계정 재활성화 코드 검증 API - 성공 시 즉시 ACTIVE로 전환하고 로그인 토큰까지 발급 (X-Device-Id 없으면 서버가 새로 발급)
     @PostMapping("/api/auth/reactivation/verify")
-    public ResponseEntity<LoginResponse> verifyReactivation(@Valid @RequestBody VerifyReactivationRequest request) {
-        LoginResponse response = authService.reactivate(request.email(), request.code());
+    public ResponseEntity<LoginResponse> verifyReactivation(@Valid @RequestBody VerifyReactivationRequest request,
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
+        LoginResponse response = authService.reactivate(request.email(), request.code(), deviceId);
         return ResponseEntity.ok(response);
     }
 

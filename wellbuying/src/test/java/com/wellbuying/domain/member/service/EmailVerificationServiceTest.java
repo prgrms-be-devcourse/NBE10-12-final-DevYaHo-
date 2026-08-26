@@ -12,10 +12,12 @@ import static org.mockito.Mockito.when;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +26,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.test.util.ReflectionTestUtils;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class EmailVerificationServiceTest {
@@ -172,6 +176,20 @@ class EmailVerificationServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);
         verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+    }
+
+    // 배치 미실행으로 status는 ACTIVE지만 6개월 이상 미접속한 휴면 대상 회원이 재활성화 코드를 요청하면 DORMANT로 동기화되고 코드가 발송되는지 검증
+    @Test
+    void 배치_미실행_휴면_대상_회원의_재활성화_코드_요청은_DORMANT로_동기화되며_성공한다() {
+        Member member = Member.signUp("eligible@example.com", "encoded-password", "홍길동");
+        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
+        when(memberRepository.findByEmailAndDeletedAtIsNull("eligible@example.com")).thenReturn(Optional.of(member));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        emailVerificationService.sendReactivationCode("eligible@example.com");
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
+        verify(mailService).sendHtmlEmail(eq("eligible@example.com"), anyString(), anyString());
     }
 
     // 저장된 코드와 일치하는 코드로 재활성화 코드를 검증하면 코드가 삭제되는지 검증

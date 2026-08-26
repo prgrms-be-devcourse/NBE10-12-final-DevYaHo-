@@ -19,6 +19,7 @@ import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -162,6 +164,36 @@ class AuthControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
+    // [Critical] noRollbackFor 수정 검증 - 배치 미실행 휴면 대상 회원의 로그인 차단 시 markDormant() 전환이 실제로 커밋되는지 확인
+    // 이 클래스는 클래스 레벨 @Transactional로 테스트 메서드 전체가 하나의 물리 트랜잭션을 공유하므로,
+    // 단순히 "로그인 시도 후 바로 조회"하면 영속성 컨텍스트 상의 변경만 보일 뿐 실제 커밋 여부를 검증하지 못한다.
+    // TestTransaction.flagForCommit()/end()로 실제 커밋을 강제한 뒤 start()로 새 트랜잭션을 열어 조회해야,
+    // noRollbackFor가 없었다면(버그) rollbackOnly 처리되어 실제로는 롤백됐을 상태 변화를 정확히 잡아낼 수 있다
+    @Test
+    void 휴면_전환_대상_회원의_로그인_차단시_전환된_상태가_실제로_커밋된다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("rollback-check@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
+        memberRepository.save(member);
+
+        String requestBody = """
+                { "email": "rollback-check@example.com", "password": "Pass1234!" }
+                """;
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEMBER_403_DORMANT"));
+
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
+
+        Member persisted = memberRepository.findById(member.getId()).orElseThrow();
+        assertThat(persisted.getStatus()).isEqualTo(MemberStatus.DORMANT);
+    }
+
     // 휴면 회원에게 재활성화 코드를 발송한 뒤, 발급된 코드로 검증하면 ACTIVE로 전환되고 로그인 토큰이 발급되는지 검증
     @Test
     void 휴면_계정_재활성화_코드_발송_및_검증에_성공한다() throws Exception {
@@ -203,6 +235,35 @@ class AuthControllerTest extends AbstractIntegrationTest {
 
         Member reactivated = memberRepository.findById(member.getId()).orElseThrow();
         assertThat(reactivated.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    // 재활성화 검증 요청 시 X-Device-Id 헤더를 전달하면 login()과 동일하게 응답 deviceId가 그대로 유지되는지 검증
+    @Test
+    void 재활성화_검증시_X_Device_Id를_전달하면_응답에_그대로_유지된다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("reactivation-device@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        ReflectionTestUtils.setField(member, "status", MemberStatus.DORMANT);
+        memberRepository.save(member);
+
+        String sendRequestBody = """
+                { "email": "reactivation-device@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/reactivation/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isOk());
+
+        String code = redisTemplate.opsForValue().get("email:reactivation:reactivation-device@example.com");
+        String verifyRequestBody = """
+                { "email": "reactivation-device@example.com", "code": "%s" }
+                """.formatted(code);
+
+        mockMvc.perform(post("/api/auth/reactivation/verify")
+                        .contentType("application/json")
+                        .header("X-Device-Id", "pc_web_browser_uuid")
+                        .content(verifyRequestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deviceId").value("pc_web_browser_uuid"));
     }
 
     // 휴면 상태가 아닌 회원이 재활성화 코드를 요청하면 409와 MEMBER_409_NOT_DORMANT 에러 코드를 반환하는지 검증

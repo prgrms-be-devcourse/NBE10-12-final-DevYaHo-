@@ -1,8 +1,13 @@
 package com.wellbuying.domain.member.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class MemberTest {
 
@@ -133,5 +138,75 @@ class MemberTest {
 
         assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(member.getLastLoginAt()).isNotNull();
+    }
+
+    // validateNotDormant() 호출 시 이미 DORMANT인 회원은 MEMBER_DORMANT 예외가 발생하는지 검증
+    @Test
+    void validateNotDormant호출시_이미_DORMANT면_예외가_발생한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+
+        assertThatThrownBy(member::validateNotDormant)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+    }
+
+    // validateNotDormant() 호출 시 배치 미실행으로 status는 ACTIVE지만 휴면 대상인 회원은 DORMANT로 전환되며 예외가 발생하는지 검증
+    @Test
+    void validateNotDormant호출시_휴면_전환_대상이면_DORMANT로_전환되며_예외가_발생한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
+
+        assertThatThrownBy(member::validateNotDormant)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
+    }
+
+    // validateNotDormant() 호출 시 정말로 활성 상태인 회원은 아무 일도 일어나지 않는지 검증
+    @Test
+    void validateNotDormant호출시_정상_활성_회원은_통과한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.recordLogin();
+
+        member.validateNotDormant();
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    // validateCanReactivate() 호출 시 이미 DORMANT인 회원은 예외 없이 통과하는지 검증
+    @Test
+    void validateCanReactivate호출시_이미_DORMANT면_통과한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+
+        member.validateCanReactivate();
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
+    }
+
+    // validateCanReactivate() 호출 시 배치 미실행으로 status는 ACTIVE지만 휴면 대상인 회원은 DORMANT로 동기화되고 예외 없이 통과하는지 검증
+    @Test
+    void validateCanReactivate호출시_휴면_전환_대상이면_DORMANT로_동기화되고_통과한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
+
+        member.validateCanReactivate();
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
+    }
+
+    // validateCanReactivate() 호출 시 정말로 활성 상태인 회원은 MEMBER_NOT_DORMANT 예외가 발생하는지 검증
+    @Test
+    void validateCanReactivate호출시_정상_활성_회원은_예외가_발생한다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.recordLogin();
+
+        assertThatThrownBy(member::validateCanReactivate)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);
     }
 }

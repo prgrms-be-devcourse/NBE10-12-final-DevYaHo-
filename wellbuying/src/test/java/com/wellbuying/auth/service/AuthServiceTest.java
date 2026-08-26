@@ -189,14 +189,15 @@ class AuthServiceTest {
         Member member = Member.signUp("dormant@example.com", "encoded-password", "홍길동");
         member.markDormant();
         when(memberRepository.findByEmailAndDeletedAtIsNull("dormant@example.com")).thenReturn(Optional.of(member));
-        when(tokenProvider.createAccessToken(any(), eq(Role.BUYER), anyString())).thenReturn("access-token");
-        when(tokenProvider.createRefreshToken(any(), anyString())).thenReturn("refresh-token");
+        when(tokenProvider.createAccessToken(any(), eq(Role.BUYER), eq("device-1"))).thenReturn("access-token");
+        when(tokenProvider.createRefreshToken(any(), eq("device-1"))).thenReturn("refresh-token");
         when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
         when(tokenHasher.hash("refresh-token")).thenReturn("hashed-refresh-token");
 
-        LoginResponse response = authService.reactivate("dormant@example.com", "482913");
+        LoginResponse response = authService.reactivate("dormant@example.com", "482913", "device-1");
 
         assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.deviceId()).isEqualTo("device-1");
         assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         verify(emailVerificationService).verifyReactivationCode("dormant@example.com", "482913");
     }
@@ -207,7 +208,7 @@ class AuthServiceTest {
         doThrow(new BusinessException(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID))
                 .when(emailVerificationService).verifyReactivationCode("dormant@example.com", "000000");
 
-        assertThatThrownBy(() -> authService.reactivate("dormant@example.com", "000000"))
+        assertThatThrownBy(() -> authService.reactivate("dormant@example.com", "000000", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
@@ -220,7 +221,7 @@ class AuthServiceTest {
         Member member = Member.signUp("active@example.com", "encoded-password", "홍길동");
         when(memberRepository.findByEmailAndDeletedAtIsNull("active@example.com")).thenReturn(Optional.of(member));
 
-        assertThatThrownBy(() -> authService.reactivate("active@example.com", "482913"))
+        assertThatThrownBy(() -> authService.reactivate("active@example.com", "482913", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);

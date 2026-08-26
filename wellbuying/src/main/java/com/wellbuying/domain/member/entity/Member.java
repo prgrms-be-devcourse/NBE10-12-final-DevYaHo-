@@ -8,6 +8,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -159,6 +161,24 @@ public class Member {
     public void reactivate() {
         this.status = MemberStatus.ACTIVE;
         recordLogin();
+    }
+
+    // 휴면 상태 검증 - 이미 DORMANT거나 이번 로그인 시점 기준 휴면 대상이면 전환 후 차단 (AuthService/OAuthAccountService 공용)
+    public void validateNotDormant() {
+        if (this.status == MemberStatus.DORMANT || isDormantEligible()) {
+            markDormant();
+            throw new BusinessException(ErrorCode.MEMBER_DORMANT);
+        }
+    }
+
+    // 재활성화 코드 발송 대상 검증 - 이미 DORMANT거나 배치 미실행으로 아직 ACTIVE인 휴면 대상이면 허용(후자는 DORMANT로 동기화), 그 외에는 차단
+    public void validateCanReactivate() {
+        if (this.status != MemberStatus.DORMANT && !isDormantEligible()) {
+            throw new BusinessException(ErrorCode.MEMBER_NOT_DORMANT);
+        }
+        if (this.status != MemberStatus.DORMANT) {
+            markDormant();
+        }
     }
 
     public Long getId() {

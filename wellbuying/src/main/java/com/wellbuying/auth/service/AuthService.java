@@ -56,7 +56,10 @@ public class AuthService {
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
     // 휴면 대상 회원은 토큰 발급 전에 차단 - 배치가 아직 처리하지 못한 대상(status=ACTIVE지만 6개월 경과)도 이 시점에 즉시 markDormant()로 전환
-    @Transactional
+    // MEMBER_DORMANT 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
+    // 주의: BusinessException 전체를 대상으로 하므로, 이 메서드에 다른 BusinessException을 새로 추가할 경우
+    // 그 예외 발생 시에도 트랜잭션이 커밋된다는 점을 반드시 고려할 것
+    @Transactional(noRollbackFor = BusinessException.class)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
@@ -66,22 +69,14 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
-        assertNotDormant(member);
+        member.validateNotDormant();
 
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
     }
 
-    // 로그인/OAuth 로그인 공용 휴면 차단 - 이미 DORMANT거나 이번 로그인 시점 기준 휴면 대상이면 전환 후 차단
-    private void assertNotDormant(Member member) {
-        if (member.getStatus() == MemberStatus.DORMANT || member.isDormantEligible()) {
-            member.markDormant();
-            throw new BusinessException(ErrorCode.MEMBER_DORMANT);
-        }
-    }
-
     // 이메일 인증코드 검증 성공 시 휴면 계정을 즉시 재활성화하고 로그인 토큰까지 함께 발급
     @Transactional
-    public LoginResponse reactivate(String email, String code) {
+    public LoginResponse reactivate(String email, String code, String requestDeviceId) {
         emailVerificationService.verifyReactivationCode(email, code);
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -89,7 +84,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.MEMBER_NOT_DORMANT);
         }
         member.reactivate();
-        return issueTokens(member.getId(), member.getRole(), null);
+        return issueTokens(member.getId(), member.getRole(), requestDeviceId);
     }
 
     // access/refresh 토큰을 발급하고 refresh token 해시를 Redis에 저장 (비밀번호 로그인/소셜 로그인 공용)
