@@ -1,5 +1,7 @@
 package com.wellbuying.domain.product.entity;
 
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -80,7 +82,7 @@ public class Product {
     // 관리자가 승인 - 승인 대기(PENDING) 상태에서만 가능, 승인되면 판매중(APPROVED)으로 전환
     public void approve() {
         if (status != ProductStatus.PENDING) {
-            throw new IllegalStateException("승인 대기 상태의 상품만 승인할 수 있습니다");
+            throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
         }
         this.status = ProductStatus.APPROVED;
     }
@@ -88,7 +90,7 @@ public class Product {
     // 관리자가 거절 - 승인 대기(PENDING) 상태에서만 가능
     public void reject() {
         if (status != ProductStatus.PENDING) {
-            throw new IllegalStateException("승인 대기 상태의 상품만 거절할 수 있습니다");
+            throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
         }
         this.status = ProductStatus.REJECTED;
     }

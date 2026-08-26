@@ -3,6 +3,8 @@ package com.wellbuying.domain.product.entity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 class ProductTest {
@@ -29,7 +31,9 @@ class ProductTest {
         product.approve();
 
         assertThatThrownBy(product::approve)
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRODUCT_ALREADY_PROCESSED);
     }
 
     @Test
@@ -47,7 +51,9 @@ class ProductTest {
         product.reject();
 
         assertThatThrownBy(product::reject)
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRODUCT_ALREADY_PROCESSED);
     }
 
     @Test
