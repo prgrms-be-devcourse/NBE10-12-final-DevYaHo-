@@ -30,7 +30,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // groupbuy-seed.enabled가 true일 때만 기동 - 로컬 개발 편의용, admin-seed와 동일한 컨벤션으로 운영 환경엔 설정하지 않는다.
 // 매 기동마다 seed-producer 소유의 이전 시드 데이터를 지우고 새로 채운다("꺼지면 사라지고 켜지면 다시 생긴다") -
@@ -56,13 +57,15 @@ public class GroupBuySeedRunner implements ApplicationRunner {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final GroupBuyEventOutboxRepository groupBuyEventOutboxRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public GroupBuySeedRunner(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             GroupBuyRepository groupBuyRepository, GroupBuyPriceRepository groupBuyPriceRepository,
             GroupBuyPartRepository groupBuyPartRepository, GroupBuyCounterRepository groupBuyCounterRepository,
             GroupBuyService groupBuyService, GroupBuyParticipationService groupBuyParticipationService,
             ProductRepository productRepository, ProductCategoryRepository productCategoryRepository,
-            GroupBuyEventOutboxRepository groupBuyEventOutboxRepository) {
+            GroupBuyEventOutboxRepository groupBuyEventOutboxRepository,
+            PlatformTransactionManager transactionManager) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.groupBuyRepository = groupBuyRepository;
@@ -74,12 +77,16 @@ public class GroupBuySeedRunner implements ApplicationRunner {
         this.groupBuyEventOutboxRepository = groupBuyEventOutboxRepository;
         this.productRepository = productRepository;
         this.productCategoryRepository = productCategoryRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    // deleteByGroupBuyIdIn 같은 파생 삭제 쿼리는 트랜잭션 밖에서 실행하면 TransactionRequiredException을 던진다 -
-    // ApplicationRunner는 기본적으로 트랜잭션이 없는 컨텍스트에서 호출되므로 run() 전체를 트랜잭션으로 감싼다.
+    // run() 자체를 @Transactional로 감싸면, seedParticipation()이 호출하는 groupBuyParticipationService.participate()가
+    // (같은 트랜잭션에 REQUIRED로 합류한 채) RuntimeException을 던질 때 그 예외를 여기서 잡아도 트랜잭션은 이미
+    // rollback-only로 표시되어, 정상 커밋 시점에 UnexpectedRollbackException이 나면서 앞서 만든 시드 데이터까지
+    // 통째로 롤백된다. deleteByGroupBuyIdIn 같은 파생 삭제 쿼리는 트랜잭션 밖에서 실행하면 TransactionRequiredException을
+    // 던지므로 그 구간만 TransactionTemplate으로 명시적으로 감싸고, seedParticipation은 트랜잭션 밖에서 호출해
+    // 참여 건별로 독립적인 트랜잭션(성공/실패가 서로 영향 없음)을 갖게 한다.
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
         Long producerId = ensureMember(PRODUCER_EMAIL, "시드 생산자", true);
         List<Long> buyerIds = new ArrayList<>();
@@ -87,9 +94,11 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             buyerIds.add(ensureMember(email, "시드 구매자", false));
         }
 
-        clearPreviousSeed(producerId);
-        List<SeedProduct> seedProducts = createSeedProducts(producerId);
-        List<Long> createdIds = createSeedGroupBuys(producerId, seedProducts);
+        List<Long> createdIds = transactionTemplate.execute(status -> {
+            clearPreviousSeed(producerId);
+            List<SeedProduct> seedProducts = createSeedProducts(producerId);
+            return createSeedGroupBuys(producerId, seedProducts);
+        });
         seedParticipation(createdIds, buyerIds);
 
         log.info("GroupBuySeedRunner: seeded {} group buys for producer {}", createdIds.size(), producerId);

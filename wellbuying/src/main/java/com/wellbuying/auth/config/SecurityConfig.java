@@ -116,6 +116,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
+                        // 컨트롤러의 @PreAuthorize가 누락되는 실수를 대비한 이중 방어선 - 관리자 API는 게이트웨이 레벨에서도 걸러낸다
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/groupBuys/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, GROUP_BUY_PUBLIC_GET_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/mine").authenticated()
