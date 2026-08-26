@@ -105,6 +105,22 @@ class ProductControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // 존재하지 않는 categoryId로 상품 등록 시 404와 PRODUCT_404_CATEGORY_NOT_FOUND를 반환하는지 검증
+    @Test
+    void 존재하지_않는_카테고리로_상품_등록시_404를_반환한다() throws Exception {
+        Member seller = saveMember("seller-no-category@example.com", Role.SELLER);
+        String body = """
+                {"categoryId":999999,"productName":"테스트상품","startPrice":10000}
+                """;
+
+        mockMvc.perform(post("/api/products")
+                        .with(authentication(authOf(seller)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRODUCT_404_CATEGORY_NOT_FOUND"));
+    }
+
     // SELLER의 ON_SALE + SOLD_OUT 상품이 GET /api/products/mine에서 상태 무관하게 모두 포함되는지 검증
     @Test
     void SELLER의_SOLD_OUT포함_상품_전체가_내_상품_조회에_반환된다() throws Exception {

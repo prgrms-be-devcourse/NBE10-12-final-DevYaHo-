@@ -8,6 +8,7 @@ import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
@@ -21,10 +22,13 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
+    private final ProductCategoryRepository productCategoryRepository;
 
-    public ProductService(ProductRepository productRepository, MemberRepository memberRepository) {
+    public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
+            ProductCategoryRepository productCategoryRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
+        this.productCategoryRepository = productCategoryRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 페이지 단위로 조회
@@ -40,6 +44,9 @@ public class ProductService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         if (member.getRole() != Role.SELLER) {
             throw new BusinessException(ErrorCode.PRODUCT_FORBIDDEN);
+        }
+        if (!productCategoryRepository.existsById(request.categoryId())) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
         Product product = Product.register(sellerId, request.categoryId(), request.productName(),
                 request.description(), request.startPrice(), request.thumbnailUrl());

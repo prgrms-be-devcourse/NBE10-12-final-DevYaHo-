@@ -8,6 +8,7 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -28,10 +29,13 @@ class ProductServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private ProductCategoryRepository productCategoryRepository;
+
     // getProducts 호출 시 전달받은 condition/pageable을 그대로 리포지토리에 넘기고, 결과를 그대로 반환한다
     @Test
     void getProducts_리포지토리_결과를_그대로_반환한다() {
-        ProductService productService = new ProductService(productRepository, memberRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository);
         ProductSearchCondition condition = new ProductSearchCondition(1L, 1000, 5000, ProductSortType.LATEST);
         PageRequest pageable = PageRequest.of(0, 20);
         ProductSummaryResponse response = new ProductSummaryResponse(1L, "상품", 3000, "url", 0L);
