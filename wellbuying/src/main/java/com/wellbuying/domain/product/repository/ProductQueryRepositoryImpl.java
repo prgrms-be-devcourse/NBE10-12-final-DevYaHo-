@@ -41,7 +41,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .from(product)
                 .leftJoin(productCount).on(productCount.productId.eq(product.id))
                 .where(
-                        product.status.eq(ProductStatus.ON_SALE),
+                        product.status.eq(ProductStatus.APPROVED),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
                         priceLoe(condition.maxPrice())

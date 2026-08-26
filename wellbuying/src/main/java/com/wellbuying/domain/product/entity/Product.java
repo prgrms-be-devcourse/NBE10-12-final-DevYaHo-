@@ -68,23 +68,29 @@ public class Product {
         this.description = description;
         this.startPrice = startPrice;
         this.thumbnailUrl = thumbnailUrl;
-        this.status = ProductStatus.ON_SALE;
+        this.status = ProductStatus.PENDING;
     }
 
-    // 판매자가 입력한 정보로 상품을 생성, 기본적으로 판매 가능(ON_SALE) 상태로 시작
+    // 판매자가 입력한 정보로 상품을 생성, 기본적으로 승인 대기(PENDING) 상태로 시작
     public static Product register(Long sellerId, Long categoryId, String productName,
                                    String description, Integer startPrice, String thumbnailUrl) {
         return new Product(sellerId, categoryId, productName, description, startPrice, thumbnailUrl);
     }
 
-    // 판매 가능 상태를 SOLD_OUT으로 변경해 품절 처리
-    public void markSoldOut() {
-        this.status = ProductStatus.SOLD_OUT;
+    // 관리자가 승인 - 승인 대기(PENDING) 상태에서만 가능, 승인되면 판매중(APPROVED)으로 전환
+    public void approve() {
+        if (status != ProductStatus.PENDING) {
+            throw new IllegalStateException("승인 대기 상태의 상품만 승인할 수 있습니다");
+        }
+        this.status = ProductStatus.APPROVED;
     }
 
-    // 품절 상태를 다시 ON_SALE로 변경
-    public void markAvailable() {
-        this.status = ProductStatus.ON_SALE;
+    // 관리자가 거절 - 승인 대기(PENDING) 상태에서만 가능
+    public void reject() {
+        if (status != ProductStatus.PENDING) {
+            throw new IllegalStateException("승인 대기 상태의 상품만 거절할 수 있습니다");
+        }
+        this.status = ProductStatus.REJECTED;
     }
 
     public Long getId() {
@@ -115,8 +121,12 @@ public class Product {
         return thumbnailUrl;
     }
 
-    public boolean isAvailable() {
-        return status == ProductStatus.ON_SALE;
+    public ProductStatus getStatus() {
+        return status;
+    }
+
+    public boolean isApproved() {
+        return status == ProductStatus.APPROVED;
     }
 
     public LocalDateTime getCreatedAt() {
