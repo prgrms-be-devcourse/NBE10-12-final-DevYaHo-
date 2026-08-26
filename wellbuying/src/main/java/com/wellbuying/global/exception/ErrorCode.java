@@ -38,7 +38,8 @@ public enum ErrorCode {
     GROUP_BUY_PART_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_CANCEL_NOT_ALLOWED", "진행 중인 공동구매만 참여를 취소할 수 있습니다."),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON_409_DUPLICATE", "이미 존재하는 데이터입니다."),
     SELLER_NOT_FOUND(HttpStatus.NOT_FOUND, "SELLER_404_NOT_FOUND", "존재하지 않는 셀러 신청입니다."),
-    SELLER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "SELLER_409_ALREADY_PROCESSED", "이미 처리된 셀러 신청입니다.");
+    SELLER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "SELLER_409_ALREADY_PROCESSED", "이미 처리된 셀러 신청입니다."),
+    PRODUCT_FORBIDDEN(HttpStatus.FORBIDDEN, "PRODUCT_403_SELLER_ONLY", "생산자만 상품을 등록할 수 있습니다.");
 
     private final HttpStatus status;
     private final String code;

@@ -5,6 +5,7 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.entity.QProduct;
@@ -46,6 +47,31 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         priceLoe(condition.maxPrice())
                 )
                 .orderBy(sortOrder(condition.sort()))
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize() + 1L)
+                .fetch();
+
+        boolean hasNext = content.size() > pageable.getPageSize();
+        if (hasNext) {
+            content.remove(content.size() - 1);
+        }
+        return new SliceImpl<>(content, pageable, hasNext);
+    }
+
+    // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
+    @Override
+    public Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable) {
+        List<ProductMineResponse> content = queryFactory
+                .select(Projections.constructor(ProductMineResponse.class,
+                        product.id,
+                        product.productName,
+                        product.startPrice,
+                        product.thumbnailUrl,
+                        product.status,
+                        product.createdAt))
+                .from(product)
+                .where(product.sellerId.eq(sellerId))
+                .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize() + 1L)
                 .fetch();
