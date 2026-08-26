@@ -13,9 +13,11 @@ import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.event.MemberLoginEvent;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.member.service.EmailVerificationService;
 import io.jsonwebtoken.Claims;
 import java.time.Instant;
 import java.util.Comparator;
@@ -36,10 +38,12 @@ public class AuthService {
     private final TokenHasher tokenHasher;
     private final OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             TokenProvider tokenProvider, RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
-            OAuthExchangeCodeRepository oAuthExchangeCodeRepository, ApplicationEventPublisher eventPublisher) {
+            OAuthExchangeCodeRepository oAuthExchangeCodeRepository, ApplicationEventPublisher eventPublisher,
+            EmailVerificationService emailVerificationService) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
@@ -47,10 +51,12 @@ public class AuthService {
         this.tokenHasher = tokenHasher;
         this.oAuthExchangeCodeRepository = oAuthExchangeCodeRepository;
         this.eventPublisher = eventPublisher;
+        this.emailVerificationService = emailVerificationService;
     }
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
-    @Transactional(readOnly = true)
+    // 휴면 대상 회원은 토큰 발급 전에 차단 - 배치가 아직 처리하지 못한 대상(status=ACTIVE지만 6개월 경과)도 이 시점에 즉시 markDormant()로 전환
+    @Transactional
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
@@ -60,8 +66,30 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
+        assertNotDormant(member);
 
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
+    }
+
+    // 로그인/OAuth 로그인 공용 휴면 차단 - 이미 DORMANT거나 이번 로그인 시점 기준 휴면 대상이면 전환 후 차단
+    private void assertNotDormant(Member member) {
+        if (member.getStatus() == MemberStatus.DORMANT || member.isDormantEligible()) {
+            member.markDormant();
+            throw new BusinessException(ErrorCode.MEMBER_DORMANT);
+        }
+    }
+
+    // 이메일 인증코드 검증 성공 시 휴면 계정을 즉시 재활성화하고 로그인 토큰까지 함께 발급
+    @Transactional
+    public LoginResponse reactivate(String email, String code) {
+        emailVerificationService.verifyReactivationCode(email, code);
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getStatus() != MemberStatus.DORMANT) {
+            throw new BusinessException(ErrorCode.MEMBER_NOT_DORMANT);
+        }
+        member.reactivate();
+        return issueTokens(member.getId(), member.getRole(), null);
     }
 
     // access/refresh 토큰을 발급하고 refresh token 해시를 Redis에 저장 (비밀번호 로그인/소셜 로그인 공용)

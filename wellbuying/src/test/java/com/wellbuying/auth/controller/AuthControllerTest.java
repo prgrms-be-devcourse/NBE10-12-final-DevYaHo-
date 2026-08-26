@@ -17,6 +17,7 @@ import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -129,6 +131,95 @@ class AuthControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("AUTH_403_SOCIAL_ONLY"))
                 .andDo(document("auth/login-social-only",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 휴면 상태인 회원이 로그인을 시도하면 403과 MEMBER_403_DORMANT 에러 코드를 반환하는지 검증
+    @Test
+    void 휴면_계정은_로그인에_실패한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("dormant-login@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        ReflectionTestUtils.setField(member, "status", MemberStatus.DORMANT);
+        memberRepository.save(member);
+
+        String requestBody = """
+                {
+                  "email": "dormant-login@example.com",
+                  "password": "Pass1234!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEMBER_403_DORMANT"))
+                .andDo(document("auth/login-dormant",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 휴면 회원에게 재활성화 코드를 발송한 뒤, 발급된 코드로 검증하면 ACTIVE로 전환되고 로그인 토큰이 발급되는지 검증
+    @Test
+    void 휴면_계정_재활성화_코드_발송_및_검증에_성공한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("reactivation-success@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        ReflectionTestUtils.setField(member, "status", MemberStatus.DORMANT);
+        memberRepository.save(member);
+
+        String sendRequestBody = """
+                { "email": "reactivation-success@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/reactivation/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isOk())
+                .andDo(document("auth/reactivation-send-success",
+                        requestFields(fieldWithPath("email").description("휴면 계정 이메일"))));
+
+        String code = redisTemplate.opsForValue().get("email:reactivation:reactivation-success@example.com");
+        String verifyRequestBody = """
+                { "email": "reactivation-success@example.com", "code": "%s" }
+                """.formatted(code);
+
+        mockMvc.perform(post("/api/auth/reactivation/verify")
+                        .contentType("application/json")
+                        .content(verifyRequestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andDo(document("auth/reactivation-verify-success",
+                        requestFields(
+                                fieldWithPath("email").description("휴면 계정 이메일"),
+                                fieldWithPath("code").description("이메일로 발송된 인증 코드")),
+                        responseFields(
+                                fieldWithPath("accessToken").description("Access Token"),
+                                fieldWithPath("refreshToken").description("Refresh Token"),
+                                fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"),
+                                fieldWithPath("deviceId").description("기기 식별자"))));
+
+        Member reactivated = memberRepository.findById(member.getId()).orElseThrow();
+        assertThat(reactivated.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    // 휴면 상태가 아닌 회원이 재활성화 코드를 요청하면 409와 MEMBER_409_NOT_DORMANT 에러 코드를 반환하는지 검증
+    @Test
+    void 휴면이_아닌_회원의_재활성화_코드_요청은_실패한다() throws Exception {
+        signUpMember("not-dormant@example.com");
+
+        String requestBody = """
+                { "email": "not-dormant@example.com" }
+                """;
+
+        mockMvc.perform(post("/api/auth/reactivation/send")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEMBER_409_NOT_DORMANT"))
+                .andDo(document("auth/reactivation-send-not-dormant",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));

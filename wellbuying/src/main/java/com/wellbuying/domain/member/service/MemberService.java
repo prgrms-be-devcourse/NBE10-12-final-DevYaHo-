@@ -87,7 +87,7 @@ public class MemberService {
                 .ifPresent(sellerInfoRepository::delete);
     }
 
-    // 로그인 시점마다 호출 - lastLoginAt 갱신 전에 기존 값을 기준으로 휴면 전환 여부를 먼저 판단
+    // 로그인 시점마다 호출 - lastLoginAt 갱신 (휴면 전환 차단은 AuthService.login()/OAuthAccountService에서 토큰 발급 전에 처리)
     // MemberLoginEventListener가 AuthService의 트랜잭션 커밋 이후 비동기로 호출하므로 부모 트랜잭션과 커넥션을 공유하지 않는다
     @Transactional
     public void updateLoginActivity(Long memberId) {
@@ -95,9 +95,6 @@ public class MemberService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         if (!member.needsLastLoginUpdate()) {
             return;
-        }
-        if (member.isDormantEligible()) {
-            member.markDormant();
         }
         member.recordLogin();
     }

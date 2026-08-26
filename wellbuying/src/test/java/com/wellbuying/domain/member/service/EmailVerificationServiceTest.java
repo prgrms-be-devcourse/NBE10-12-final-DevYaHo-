@@ -11,10 +11,12 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.Duration;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -129,6 +131,71 @@ class EmailVerificationServiceTest {
         emailVerificationService.assertVerified("test@example.com");
 
         verify(redisTemplate, times(1)).delete("email:verified:test@example.com");
+    }
+
+    // 휴면 회원에게 재활성화 코드를 발송하면 email:reactivation:{email} 키로 5분 TTL로 저장되는지 검증
+    @Test
+    void 휴면_회원에게_재활성화_코드를_발송하면_Redis에_저장된다() {
+        Member member = Member.signUp("dormant@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+        when(memberRepository.findByEmailAndDeletedAtIsNull("dormant@example.com")).thenReturn(Optional.of(member));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        emailVerificationService.sendReactivationCode("dormant@example.com");
+
+        verify(valueOperations).set(eq("email:reactivation:dormant@example.com"), anyString(),
+                eq(Duration.ofMinutes(5)));
+        verify(emailCooldownGuard).mark(eq("reactivation"), eq("dormant@example.com"), eq(30L));
+        verify(mailService).sendHtmlEmail(eq("dormant@example.com"), anyString(), anyString());
+    }
+
+    // 존재하지 않는 이메일로 재활성화 코드 요청 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원의_재활성화_코드_요청은_실패한다() {
+        when(memberRepository.findByEmailAndDeletedAtIsNull("none@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailVerificationService.sendReactivationCode("none@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+    }
+
+    // 휴면 상태가 아닌 회원이 재활성화 코드를 요청하면 MEMBER_NOT_DORMANT 예외가 발생하는지 검증
+    @Test
+    void 휴면이_아닌_회원의_재활성화_코드_요청은_실패한다() {
+        Member member = Member.signUp("active@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("active@example.com")).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> emailVerificationService.sendReactivationCode("active@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);
+        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+    }
+
+    // 저장된 코드와 일치하는 코드로 재활성화 코드를 검증하면 코드가 삭제되는지 검증
+    @Test
+    void 올바른_재활성화_코드로_검증하면_코드가_삭제된다() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("email:reactivation:dormant@example.com")).thenReturn("482913");
+
+        emailVerificationService.verifyReactivationCode("dormant@example.com", "482913");
+
+        verify(redisTemplate).delete("email:reactivation:dormant@example.com");
+    }
+
+    // 저장된 코드와 다른 코드로 재활성화 코드를 검증하면 예외가 발생하는지 검증
+    @Test
+    void 재활성화_코드가_일치하지_않으면_검증에_실패한다() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("email:reactivation:dormant@example.com")).thenReturn("482913");
+
+        assertThatThrownBy(() -> emailVerificationService.verifyReactivationCode("dormant@example.com", "000000"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
+        verify(redisTemplate, never()).delete(anyString());
     }
 
     // 플래그가 없는 상태로 가드 호출 시 예외가 발생하는지 검증

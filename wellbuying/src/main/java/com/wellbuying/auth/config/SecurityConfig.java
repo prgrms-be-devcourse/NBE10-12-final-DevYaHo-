@@ -37,6 +37,8 @@ public class SecurityConfig {
             "/api/auth/reissue",
             "/api/auth/seller/signup",
             "/api/auth/oauth/exchange",
+            "/api/auth/reactivation/send",
+            "/api/auth/reactivation/verify",
             "/oauth2/**",
             "/login/oauth2/**"
     };

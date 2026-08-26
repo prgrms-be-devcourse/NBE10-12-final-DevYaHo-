@@ -155,6 +155,12 @@ public class Member {
         this.status = MemberStatus.DORMANT;
     }
 
+    // 이메일 인증코드로 휴면 계정 재활성화 - status를 ACTIVE로 되돌리고 방금 로그인한 것으로 lastLoginAt 갱신
+    public void reactivate() {
+        this.status = MemberStatus.ACTIVE;
+        recordLogin();
+    }
+
     public Long getId() {
         return id;
     }

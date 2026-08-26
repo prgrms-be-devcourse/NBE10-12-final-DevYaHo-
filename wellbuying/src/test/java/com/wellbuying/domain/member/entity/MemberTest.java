@@ -122,4 +122,16 @@ class MemberTest {
 
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
     }
+
+    // reactivate() 호출 시 status가 ACTIVE로 바뀌고 lastLoginAt이 갱신되는지 검증
+    @Test
+    void reactivate호출시_상태가_ACTIVE로_바뀌고_lastLoginAt이_갱신된다() {
+        Member member = Member.signUp("test@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+
+        member.reactivate();
+
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(member.getLastLoginAt()).isNotNull();
+    }
 }

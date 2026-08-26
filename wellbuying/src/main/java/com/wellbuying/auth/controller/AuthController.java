@@ -4,10 +4,13 @@ import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
 import com.wellbuying.auth.dto.OAuthExchangeRequest;
+import com.wellbuying.auth.dto.ReactivationRequest;
 import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
+import com.wellbuying.auth.dto.VerifyReactivationRequest;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.auth.service.AuthService;
+import com.wellbuying.domain.member.service.EmailVerificationService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -22,16 +25,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final EmailVerificationService emailVerificationService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, EmailVerificationService emailVerificationService) {
         this.authService = authService;
+        this.emailVerificationService = emailVerificationService;
     }
 
-    // 로그인 API - 이메일/비밀번호 검증 후 access/refresh 토큰 발급 (X-Device-Id 없으면 서버가 새로 발급)
+    // 로그인 API - 이메일/비밀번호 검증 후 access/refresh 토큰 발급 (X-Device-Id 없으면 서버가 새로 발급, 휴면 계정이면 403)
     @PostMapping("/api/auth/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
         LoginResponse response = authService.login(request, deviceId);
+        return ResponseEntity.ok(response);
+    }
+
+    // 휴면 계정 재활성화 코드 발송 API - 휴면 상태인 회원만 요청 가능
+    @PostMapping("/api/auth/reactivation/send")
+    public ResponseEntity<Void> sendReactivationCode(@Valid @RequestBody ReactivationRequest request) {
+        emailVerificationService.sendReactivationCode(request.email());
+        return ResponseEntity.ok().build();
+    }
+
+    // 휴면 계정 재활성화 코드 검증 API - 성공 시 즉시 ACTIVE로 전환하고 로그인 토큰까지 발급
+    @PostMapping("/api/auth/reactivation/verify")
+    public ResponseEntity<LoginResponse> verifyReactivation(@Valid @RequestBody VerifyReactivationRequest request) {
+        LoginResponse response = authService.reactivate(request.email(), request.code());
         return ResponseEntity.ok(response);
     }
 

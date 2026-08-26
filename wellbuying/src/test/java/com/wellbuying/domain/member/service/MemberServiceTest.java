@@ -35,7 +35,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
@@ -232,19 +231,6 @@ class MemberServiceTest {
         memberService.updateLoginActivity(1L);
 
         assertThat(member.getLastLoginAt()).isEqualTo(firstLoginAt);
-    }
-
-    // 휴면 전환 대상(마지막 로그인 6개월 경과) 회원이 재로그인하면 DORMANT를 거쳐 lastLoginAt이 갱신되는지 검증
-    @Test
-    void 휴면_전환_대상_회원이_재로그인하면_DORMANT로_전환된_후_lastLoginAt이_갱신된다() {
-        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
-        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
-        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
-
-        memberService.updateLoginActivity(1L);
-
-        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
-        assertThat(member.getLastLoginAt()).isAfter(LocalDateTime.now().minusMinutes(1));
     }
 
     // 회원 목록 조회는 QueryDSL 리포지토리의 search 결과를 그대로 위임/반환하는지 검증

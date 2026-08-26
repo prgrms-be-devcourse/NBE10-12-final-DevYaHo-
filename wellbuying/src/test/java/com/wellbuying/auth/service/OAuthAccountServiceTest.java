@@ -95,6 +95,40 @@ class OAuthAccountServiceTest {
         verify(socialAccountRepository).save(any(SocialAccount.class));
     }
 
+    // (provider, providerId)로 매칭된 회원이 이미 DORMANT면 findOrCreateMember가 MEMBER_DORMANT 예외를 던지는지 검증
+    @Test
+    void 소셜계정_매칭_회원이_DORMANT면_로그인이_차단된다() {
+        SocialAccount socialAccount = SocialAccount.create(1L, "google", "google-uid-1");
+        when(socialAccountRepository.findByProviderAndProviderId("google", "google-uid-1"))
+                .thenReturn(Optional.of(socialAccount));
+        Member member = Member.signUp("dormant@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-1",
+                "dormant@example.com", "홍길동", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+    }
+
+    // 동일 이메일로 자동 연동되는 기존 회원이 이미 DORMANT면 findOrCreateMember가 MEMBER_DORMANT 예외를 던지는지 검증
+    @Test
+    void 이메일_매칭_회원이_DORMANT면_로그인이_차단된다() {
+        when(socialAccountRepository.findByProviderAndProviderId("google", "google-uid-2"))
+                .thenReturn(Optional.empty());
+        Member member = Member.signUp("dormant2@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+        when(memberRepository.findByEmailAndDeletedAtIsNull("dormant2@example.com")).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-2",
+                "dormant2@example.com", "홍길동", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+        verify(socialAccountRepository, never()).save(any());
+    }
+
     // 탈퇴한 회원의 이메일(유니크 제약으로 재사용 불가)이면 신규 생성 시 EMAIL_ALREADY_EXISTS 예외가 발생하는지 검증
     @Test
     void 탈퇴한_회원의_이메일이면_신규_생성시_예외가_발생한다() {
