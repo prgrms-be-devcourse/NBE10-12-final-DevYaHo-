@@ -8,10 +8,10 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.service.ProductService;
 import jakarta.validation.Valid;
+import java.net.URI;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,9 +51,7 @@ public class ProductController {
             @Valid @RequestBody ProductCreateRequest request
     ) {
         Long productId = productService.createProduct(authenticatedMember.memberId(), request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .header("Location", "/api/products/" + productId)
-                .build();
+        return ResponseEntity.created(URI.create("/api/products/" + productId)).build();
     }
 
     // 로그인한 판매자 본인이 등록한 상품 전체 조회
