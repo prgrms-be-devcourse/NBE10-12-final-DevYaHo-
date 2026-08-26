@@ -25,7 +25,7 @@ public class ProductService {
     private final ProductCategoryRepository productCategoryRepository;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
-            ProductCategoryRepository productCategoryRepository) {
+                          ProductCategoryRepository productCategoryRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
@@ -40,6 +40,11 @@ public class ProductService {
     // 생산자(SELLER)만 상품을 등록할 수 있음
     @Transactional
     public Long createProduct(Long sellerId, ProductCreateRequest request) {
+        // 판매자 판단을 @PreAuthorize(JWT 기반)가 아닌 DB 재조회로 하는 이유:
+        // 판매자 승인(SellerInfoService.approve()) 직후 발급된 새 토큰을 아직 안 받은 상태로
+        // 바로 상품을 등록하려는 경우, JWT 속 role은 여전히 예전 값(BUYER)일 수 있음.
+        // MemberRepository.findByIdAndDeletedAtIsNull이 "토큰 재발급 시 최신 role 확인용"으로
+        // 이미 쓰이고 있는 것과 같은 이유로, 여기서도 DB 기준 최신 role을 확인함.
         Member member = memberRepository.findByIdAndDeletedAtIsNull(sellerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         if (member.getRole() != Role.SELLER) {
