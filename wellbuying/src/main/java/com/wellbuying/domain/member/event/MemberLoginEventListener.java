@@ -1,6 +1,8 @@
 package com.wellbuying.domain.member.event;
 
 import com.wellbuying.domain.member.service.MemberService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -12,15 +14,22 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class MemberLoginEventListener {
 
+    private static final Logger log = LoggerFactory.getLogger(MemberLoginEventListener.class);
+
     private final MemberService memberService;
 
     public MemberLoginEventListener(MemberService memberService) {
         this.memberService = memberService;
     }
 
+    // @Async 스레드에서 실행되므로 예외가 호출자로 전파되지 않음 - 실패가 조용히 묻히지 않도록 로깅 필요
     @Async("memberEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handleLoginEvent(MemberLoginEvent event) {
-        memberService.updateLoginActivity(event.memberId());
+        try {
+            memberService.updateLoginActivity(event.memberId());
+        } catch (Exception e) {
+            log.error("로그인 활동 갱신 실패: memberId={}", event.memberId(), e);
+        }
     }
 }

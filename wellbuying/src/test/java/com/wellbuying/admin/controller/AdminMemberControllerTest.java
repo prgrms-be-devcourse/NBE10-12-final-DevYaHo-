@@ -121,6 +121,18 @@ class AdminMemberControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[2].email").value("b-sort@example.com"));
     }
 
+    // 화이트리스트에 없는 sort 필드를 넘기면 에러 없이 기본 정렬(createdAt desc)로 폴백되는지 검증
+    @Test
+    void 허용되지_않은_sort_필드는_무시되고_기본_정렬로_조회된다() throws Exception {
+        Member admin = saveMember("admin-invalid-sort@example.com", Role.ADMIN);
+        saveMember("buyer-invalid-sort@example.com", Role.BUYER);
+
+        mockMvc.perform(get("/api/admin/members").param("sort", "password,asc")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(2));
+    }
+
     // ADMIN이 아닌 회원이 목록 조회 API를 호출하면 403을 반환하는지 검증
     @Test
     void 관리자가_아니면_회원_목록_조회에_실패한다() throws Exception {
