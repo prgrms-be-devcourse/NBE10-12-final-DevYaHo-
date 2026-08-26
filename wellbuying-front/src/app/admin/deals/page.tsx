@@ -43,15 +43,23 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
   const [actioningId, setActioningId] = useState<number | null>(null);
 
   useEffect(() => {
+    let ignore = false;
+
     listSuspensionRequests({ status, page })
       .then((response) => {
+        if (ignore) return;
         setItems(response.content);
         setTotalPages(response.page.totalPages);
       })
       .catch((e) => {
+        if (ignore) return;
         setItems([]);
         setError(e instanceof ApiError ? e.message : "판매정지 요청 목록을 불러오지 못했어요.");
       });
+
+    return () => {
+      ignore = true;
+    };
   }, [status, page]);
 
   async function handleApprove(id: number) {
@@ -166,12 +174,21 @@ function GroupBuyListSection() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let ignore = false;
+
     listAdminGroupBuys({ size: 50 })
-      .then((response) => setItems(response.content))
+      .then((response) => {
+        if (!ignore) setItems(response.content);
+      })
       .catch((e) => {
+        if (ignore) return;
         setItems([]);
         setError(e instanceof ApiError ? e.message : "공동구매 목록을 불러오지 못했어요.");
       });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   if (items === null) {
