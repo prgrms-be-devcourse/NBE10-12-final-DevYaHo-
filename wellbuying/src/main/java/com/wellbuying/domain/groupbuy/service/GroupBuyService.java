@@ -172,6 +172,11 @@ public class GroupBuyService {
         if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
             throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
         }
+        // suspend()는 status(GroupBuyStatus)와 별개 축이라 이미 판매정지된 공동구매도 status는 ONGOING으로 남는다 -
+        // 위의 ONGOING 체크만으로는 걸러지지 않으므로 별도로 검증한다.
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
         if (groupBuySuspensionRequestRepository.existsByGroupBuyIdAndStatus(groupBuyId,
                 GroupBuySuspensionStatus.PENDING)) {
             throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENSION_ALREADY_REQUESTED);
