@@ -51,11 +51,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .limit(pageable.getPageSize() + 1L)
                 .fetch();
 
-        boolean hasNext = content.size() > pageable.getPageSize();
-        if (hasNext) {
-            content.remove(content.size() - 1);
-        }
-        return new SliceImpl<>(content, pageable, hasNext);
+        return toSlice(pageable, content);
     }
 
     // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
@@ -76,11 +72,15 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .limit(pageable.getPageSize() + 1L)
                 .fetch();
 
-        boolean hasNext = content.size() > pageable.getPageSize();
+        return toSlice(pageable, content);
+    }
+
+    private <T> Slice<T> toSlice(Pageable pageable, List<T> results) {
+        boolean hasNext = results.size() > pageable.getPageSize();
         if (hasNext) {
-            content.remove(content.size() - 1);
+            results.remove(results.size() - 1);
         }
-        return new SliceImpl<>(content, pageable, hasNext);
+        return new SliceImpl<>(results, pageable, hasNext);
     }
 
     // 카테고리 필터 조건 생성, categoryId가 없으면 조건에서 제외
