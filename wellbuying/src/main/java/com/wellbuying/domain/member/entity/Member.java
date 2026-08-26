@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
@@ -163,11 +164,14 @@ public class Member {
         recordLogin();
     }
 
-    // 휴면 상태 검증 - 이미 DORMANT거나 이번 로그인 시점 기준 휴면 대상이면 전환 후 차단 (AuthService/OAuthAccountService 공용)
+    // 휴면 상태 검증 - 이미 DORMANT면 즉시 차단, 이번 로그인 시점 기준 휴면 대상이면 전환 후 차단 (AuthService/OAuthAccountService 공용)
     public void validateNotDormant() {
-        if (this.status == MemberStatus.DORMANT || isDormantEligible()) {
+        if (this.status == MemberStatus.DORMANT) {
+            throw new DormantMemberException();
+        }
+        if (isDormantEligible()) {
             markDormant();
-            throw new BusinessException(ErrorCode.MEMBER_DORMANT);
+            throw new DormantMemberException();
         }
     }
 

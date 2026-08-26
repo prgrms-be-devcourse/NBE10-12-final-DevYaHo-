@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -147,7 +148,7 @@ class MemberTest {
         member.markDormant();
 
         assertThatThrownBy(member::validateNotDormant)
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
     }
@@ -159,7 +160,7 @@ class MemberTest {
         ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
 
         assertThatThrownBy(member::validateNotDormant)
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);

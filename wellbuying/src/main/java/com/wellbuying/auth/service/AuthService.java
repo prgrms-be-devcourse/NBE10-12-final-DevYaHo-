@@ -11,6 +11,7 @@ import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
@@ -56,10 +57,9 @@ public class AuthService {
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
     // 휴면 대상 회원은 토큰 발급 전에 차단 - 배치가 아직 처리하지 못한 대상(status=ACTIVE지만 6개월 경과)도 이 시점에 즉시 markDormant()로 전환
-    // MEMBER_DORMANT 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
-    // 주의: BusinessException 전체를 대상으로 하므로, 이 메서드에 다른 BusinessException을 새로 추가할 경우
-    // 그 예외 발생 시에도 트랜잭션이 커밋된다는 점을 반드시 고려할 것
-    @Transactional(noRollbackFor = BusinessException.class)
+    // DormantMemberException 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
+    // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
+    @Transactional(noRollbackFor = DormantMemberException.class)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));

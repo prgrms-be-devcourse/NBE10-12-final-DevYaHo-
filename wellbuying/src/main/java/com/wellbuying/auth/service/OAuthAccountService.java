@@ -2,6 +2,7 @@ package com.wellbuying.auth.service;
 
 import com.wellbuying.auth.oauth.SocialLinkTicketRepository;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.SocialAccount;
@@ -31,10 +32,9 @@ public class OAuthAccountService {
 
     // (provider, providerId) 매칭 회원이 있으면 로그인, 동일 이메일의 기존 회원이 있으면 자동 연동, 둘 다 없으면 신규 생성
     // 휴면 대상 회원은 SocialAccount 연동(save) 등 부수 효과 이전에 차단 - 신규 생성 회원은 항상 ACTIVE라 체크 대상이 아님
-    // MEMBER_DORMANT 발생 시에도 member.markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
-    // 주의: BusinessException 전체를 대상으로 하므로, 이 메서드에 다른 BusinessException을 새로 추가할 경우
-    // 그 예외 발생 시에도 트랜잭션이 커밋된다는 점을 반드시 고려할 것
-    @Transactional(noRollbackFor = BusinessException.class)
+    // DormantMemberException 발생 시에도 member.markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
+    // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
+    @Transactional(noRollbackFor = DormantMemberException.class)
     public Member findOrCreateMember(String provider, String providerId, String email, String name,
             String profileImage) {
         return socialAccountRepository.findByProviderAndProviderId(provider, providerId)

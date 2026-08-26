@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.auth.oauth.SocialLinkTicketRepository;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.SocialAccount;
@@ -107,7 +108,7 @@ class OAuthAccountServiceTest {
 
         assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-1",
                 "dormant@example.com", "홍길동", null))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
     }
@@ -123,7 +124,7 @@ class OAuthAccountServiceTest {
 
         assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-2",
                 "dormant2@example.com", "홍길동", null))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
         verify(socialAccountRepository, never()).save(any());

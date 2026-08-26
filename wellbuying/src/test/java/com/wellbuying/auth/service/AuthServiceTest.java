@@ -21,6 +21,7 @@ import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
@@ -162,7 +163,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("Pass1234!", "encoded-password")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("dormant@example.com", "Pass1234!"), null))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
         verify(tokenProvider, never()).createAccessToken(anyLong(), any(), anyString());
@@ -177,7 +178,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("Pass1234!", "encoded-password")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("eligible@example.com", "Pass1234!"), null))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
