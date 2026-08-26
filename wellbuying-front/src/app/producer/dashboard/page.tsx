@@ -2,25 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { LineChart, Plus, Radio, Users } from "lucide-react";
+import { Plus, Radio } from "lucide-react";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCreateModal } from "@/components/producer/GroupBuyCreateModal";
 import { BarChart, type BarChartPoint } from "@/components/ui/BarChart";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { listMyGroupBuys, getGroupBuy, getGroupBuyStatus } from "@/lib/api/groupBuy";
+import { listMyGroupBuys } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
-import type { GroupBuyDetailResponse, GroupBuyStatusResponse } from "@/lib/api/types";
-import { compactCount, compactWon, won } from "@/lib/format";
+import type { GroupBuySummaryResponse } from "@/lib/api/types";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
-import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
-
-type DealRow = { detail: GroupBuyDetailResponse; status: GroupBuyStatusResponse };
 
 const CHART_DAYS = 30;
 
-function buildMonthlyChart(rows: DealRow[]): BarChartPoint[] {
+// 참여자 수(participantCount)와 가격 구간(priceTiers)은 목록 응답에 없고, 항목마다 상세/상태 API를
+// 따로 호출해야 얻을 수 있었다(N+1). 백엔드에 대시보드용 요약 API가 추가되기 전까지는 목록 응답만으로
+// 보여줄 수 있는 정보로 대시보드를 단순화한다 - 전체 참여자 수·예상 매출 카드는 뺐다.
+function buildMonthlyChart(deals: GroupBuySummaryResponse[]): BarChartPoint[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const points: BarChartPoint[] = [];
@@ -31,11 +30,11 @@ function buildMonthlyChart(rows: DealRow[]): BarChartPoint[] {
     const dayEnd = new Date(day);
     dayEnd.setDate(dayEnd.getDate() + 1);
 
-    const value = rows.reduce((sum, row) => {
-      const start = new Date(row.detail.startAt);
-      const end = new Date(row.detail.endAt);
+    const value = deals.reduce((sum, deal) => {
+      const start = new Date(deal.startAt);
+      const end = new Date(deal.endAt);
       const activeThatDay = start < dayEnd && end >= day;
-      return activeThatDay ? sum + row.status.currentQuantity : sum;
+      return activeThatDay ? sum + deal.currentQuantity : sum;
     }, 0);
 
     points.push({ label: `${day.getMonth() + 1}/${day.getDate()}`, value });
@@ -45,7 +44,7 @@ function buildMonthlyChart(rows: DealRow[]): BarChartPoint[] {
 }
 
 export default function ProducerDashboardPage() {
-  const [rows, setRows] = useState<DealRow[]>([]);
+  const [deals, setDeals] = useState<GroupBuySummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -54,16 +53,8 @@ export default function ProducerDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      // TODO: 항목마다 getGroupBuy/getGroupBuyStatus를 개별 호출하는 N+1 구조라, 백엔드에 대시보드용
-      // 벌크 조회 API가 추가되기 전까지는 동시 요청 폭주를 막기 위해 size를 보수적으로 제한한다.
-      const page = await listMyGroupBuys({ size: 20 });
-      const loaded = await Promise.all(
-        page.content.map(async (item) => {
-          const [detail, status] = await Promise.all([getGroupBuy(item.id), getGroupBuyStatus(item.id)]);
-          return { detail, status };
-        }),
-      );
-      setRows(loaded);
+      const page = await listMyGroupBuys({ size: 100 });
+      setDeals(page.content);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "현황을 불러오지 못했어요.");
     } finally {
@@ -78,13 +69,8 @@ export default function ProducerDashboardPage() {
     load();
   }, [reload]);
 
-  const recruitingCount = rows.filter((row) => row.status.status === "ONGOING").length;
-  const totalParticipants = rows.reduce((sum, row) => sum + row.status.participantCount, 0);
-  const estimatedSales = rows.reduce((sum, row) => {
-    const price = resolveCurrentUnitPrice(row.detail.priceTiers, row.status.currentQuantity) ?? 0;
-    return sum + price * row.status.currentQuantity;
-  }, 0);
-  const chartData = buildMonthlyChart(rows);
+  const recruitingCount = deals.filter((deal) => deal.status === "ONGOING").length;
+  const chartData = buildMonthlyChart(deals);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
@@ -104,10 +90,8 @@ export default function ProducerDashboardPage() {
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="max-w-xs">
             <MetricCard icon={Radio} title="운영 중" value={`${recruitingCount}건`} />
-            <MetricCard icon={Users} title="전체 참여" value={compactCount(totalParticipants, "명")} />
-            <MetricCard icon={LineChart} title="예상 매출" value={compactWon(estimatedSales)} />
           </div>
 
           <div className="rounded-2xl border border-wb-line bg-wb-surface p-6">
@@ -123,24 +107,23 @@ export default function ProducerDashboardPage() {
 
           <div className="rounded-2xl border border-wb-line bg-wb-surface p-6">
             <h2 className="text-lg font-bold">내 공동구매 현황</h2>
-            {rows.length === 0 ? (
+            {deals.length === 0 ? (
               <p className="mt-4 text-sm text-wb-secondary">아직 개설한 공동구매가 없어요.</p>
             ) : (
               <div className="mt-4 divide-y divide-wb-line">
-                {rows.slice(0, 3).map(({ detail, status }) => {
-                  const catalog = resolveCatalogEntry(detail.productName);
-                  const price = resolveCurrentUnitPrice(detail.priceTiers, status.currentQuantity);
+                {deals.slice(0, 3).map((deal) => {
+                  const catalog = resolveCatalogEntry(deal.productName);
                   return (
                     <Link
-                      key={detail.id}
-                      href={`/producer/deals/${detail.id}`}
+                      key={deal.id}
+                      href={`/producer/deals/${deal.id}`}
                       className="flex items-center gap-4 py-3.5 first:pt-0 last:pb-0 hover:opacity-80"
                     >
                       <GroupBuyArtwork entry={catalog} className="h-16 w-20 shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <p className="line-clamp-1 text-sm font-bold">{detail.title}</p>
+                        <p className="line-clamp-1 text-sm font-bold">{deal.title}</p>
                         <p className="text-xs text-wb-secondary">
-                          {status.currentQuantity.toLocaleString("ko-KR")}개 · {price !== null ? won(price) : "-"}
+                          {deal.currentQuantity.toLocaleString("ko-KR")}개 참여
                         </p>
                       </div>
                     </Link>
