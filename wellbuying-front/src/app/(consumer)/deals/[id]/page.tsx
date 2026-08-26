@@ -27,6 +27,15 @@ import { formatDateTime, formatRemaining, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
 
+// 공동구매(groupBuyId) 자체가 없을 때만 404 페이지로 보내야 한다. 상태/내 참여/상품 조회의 404는
+// 별개 자원의 문제이므로 여기서 일반 에러로 바꿔, 존재하는 공동구매를 "찾을 수 없음"으로 잘못 표시하지 않는다.
+function demote404(e: unknown): never {
+  if (e instanceof ApiError && e.status === 404) {
+    throw new ApiError(500, { code: e.code, message: e.message });
+  }
+  throw e;
+}
+
 export default function DealDetailPage() {
   const params = useParams<{ id: string }>();
   const groupBuyId = Number(params.id);
@@ -49,10 +58,10 @@ export default function DealDetailPage() {
   const reload = useCallback(async () => {
     const [detailRes, statusRes, myPartRes] = await Promise.all([
       getGroupBuy(groupBuyId),
-      getGroupBuyStatus(groupBuyId),
-      getMyGroupBuyParticipation(groupBuyId),
+      getGroupBuyStatus(groupBuyId).catch(demote404),
+      getMyGroupBuyParticipation(groupBuyId).catch(demote404),
     ]);
-    const productRes = await getProduct(detailRes.productId);
+    const productRes = await getProduct(detailRes.productId).catch(demote404);
     setDetail(detailRes);
     setStatus(statusRes);
     setMyPart(myPartRes);

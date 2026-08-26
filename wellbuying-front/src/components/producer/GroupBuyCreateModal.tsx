@@ -96,6 +96,10 @@ export function GroupBuyCreateModal({
       setError("제목과 시작/마감 일시를 입력해주세요.");
       return;
     }
+    if (tiers[0].thresholdQuantity <= 0 || tiers[0].unitPrice <= 0) {
+      setError("기준 수량과 판매 단가는 0보다 커야 해요.");
+      return;
+    }
     for (let i = 0; i < tiers.length - 1; i += 1) {
       if (tiers[i].thresholdQuantity >= tiers[i + 1].thresholdQuantity) {
         setError("다음 구간의 기준 수량은 이전 구간보다 커야 해요.");
