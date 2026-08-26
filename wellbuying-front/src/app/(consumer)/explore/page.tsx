@@ -9,13 +9,11 @@ import { Button } from "@/components/ui/Button";
 import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
-type Sort = "popular" | "new" | "priceLow" | "priceHigh" | "closing";
+type Sort = "popular" | "new" | "closing";
 
 const SORT_LABEL: Record<Sort, string> = {
   popular: "인기순",
   new: "신상품순",
-  priceLow: "낮은 가격순",
-  priceHigh: "높은 가격순",
   closing: "마감 임박순",
 };
 
@@ -61,10 +59,6 @@ export default function ExplorePage() {
 
     return [...result].sort((a: GroupBuyCardView, b: GroupBuyCardView) => {
       switch (sort) {
-        case "priceLow":
-          return (a.price ?? 0) - (b.price ?? 0);
-        case "priceHigh":
-          return (b.price ?? 0) - (a.price ?? 0);
         case "closing":
           return a.daysLeft - b.daysLeft;
         case "new":
@@ -138,7 +132,7 @@ export default function ExplorePage() {
         <>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {visible.map((item) => (
-              <GroupBuyCard key={item.id} item={item} showProgress />
+              <GroupBuyCard key={item.id} item={item} />
             ))}
           </div>
           {filtered.length > visible.length && (

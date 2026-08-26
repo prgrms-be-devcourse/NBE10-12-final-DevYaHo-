@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { getGroupBuyPriceTiers, listGroupBuys } from "@/lib/api/groupBuy";
+import { listGroupBuys } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
-import type { GroupBuyPriceTier, GroupBuyStatus, GroupBuySummaryResponse } from "@/lib/api/types";
+import type { GroupBuyStatus, GroupBuySummaryResponse } from "@/lib/api/types";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
-import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
 import type { ColorToken } from "@/lib/mock/types";
 
 export type GroupBuyCardView = {
@@ -16,8 +15,6 @@ export type GroupBuyCardView = {
   endAt: string;
   currentQuantity: number;
   maxQuantity: number;
-  price: number | null;
-  priceTiers: GroupBuyPriceTier[];
   daysLeft: number;
   producerName: string;
   category: string;
@@ -32,18 +29,10 @@ function toDaysLeft(endAt: string): number {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
-// 카드 목록에서 가격은 캐탈로그에 하드코딩하지 않고 항상 실제 /price API 기준으로 보여준다.
-// 페이지당 최대 수십 개 규모라 항목별 병렬 호출(N+1)이어도 로컬/소규모 운영에서는 무리 없다.
-async function toCardView(summary: GroupBuySummaryResponse): Promise<GroupBuyCardView> {
+// 가격/가격 구간은 목록 응답에 없어서 항목마다 /price를 따로 불러야 했다(N+1) - 목록 카드에는 가격을
+// 표시하지 않고, 실제 가격은 상세 페이지 진입 시 그 화면에서만 조회한다.
+function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
   const catalog = resolveCatalogEntry(summary.productName);
-  let price: number | null = null;
-  let priceTiers: GroupBuyPriceTier[] = [];
-  try {
-    priceTiers = await getGroupBuyPriceTiers(summary.id);
-    price = resolveCurrentUnitPrice(priceTiers, summary.currentQuantity);
-  } catch {
-    price = null;
-  }
   return {
     id: summary.id,
     productId: summary.productId,
@@ -54,8 +43,6 @@ async function toCardView(summary: GroupBuySummaryResponse): Promise<GroupBuyCar
     endAt: summary.endAt,
     currentQuantity: summary.currentQuantity,
     maxQuantity: summary.maxQuantity,
-    price,
-    priceTiers,
     daysLeft: toDaysLeft(summary.endAt),
     category: summary.productCategory,
     ...catalog,
@@ -75,7 +62,7 @@ export function useGroupBuyList(status: GroupBuyStatus) {
       setError(null);
       try {
         const page = await listGroupBuys({ status, size: 50 });
-        const views = await Promise.all(page.content.map(toCardView));
+        const views = page.content.map(toCardView);
         if (!ignore) setItems(views);
       } catch (e) {
         if (!ignore) setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");

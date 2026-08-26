@@ -20,10 +20,8 @@ import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
-import { won } from "@/lib/format";
 import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
-import { resolveNextTier } from "@/lib/groupBuyPricing";
 
 const CAROUSEL_INTERVAL_MS = 4500;
 const PROMO_COUNT = 3;
@@ -33,12 +31,6 @@ const CLOSING_SOON_COUNT = 8;
 const UPCOMING_COUNT = 4;
 const NEW_ARRIVAL_COUNT = 4;
 
-function featuredPriority(item: GroupBuyCardView) {
-  const next = resolveNextTier(item.priceTiers, item.currentQuantity);
-  if (!next) return null;
-  return (next.thresholdQuantity - item.currentQuantity) / next.thresholdQuantity;
-}
-
 export default function HomePage() {
   const { items: ongoing, loading: ongoingLoading } = useGroupBuyList("ONGOING");
   const { items: upcomingAll } = useGroupBuyList("READY");
@@ -47,14 +39,7 @@ export default function HomePage() {
 
   const filtered = category === "전체" ? ongoing : ongoing.filter((item) => item.category === category);
 
-  const promoDeals = useMemo(() => {
-    const withPriority = filtered
-      .map((item) => ({ item, priority: featuredPriority(item) }))
-      .filter((entry) => entry.priority !== null)
-      .sort((a, b) => (a.priority as number) - (b.priority as number))
-      .map((entry) => entry.item);
-    return (withPriority.length > 0 ? withPriority : filtered).slice(0, PROMO_COUNT);
-  }, [filtered]);
+  const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
 
   const popular = useMemo(
     () => [...filtered].sort((a, b) => b.currentQuantity - a.currentQuantity).slice(0, POPULAR_COUNT),
@@ -112,7 +97,7 @@ export default function HomePage() {
               <div className="space-y-3 lg:col-span-2">
                 <div className="flex items-center gap-2 text-wb-green">
                   <ArrowDownCircle className="h-5 w-5" />
-                  <h2 className="text-lg font-bold">다음 가격 인하가 가장 가까워요</h2>
+                  <h2 className="text-lg font-bold">지금 주목할 공동구매</h2>
                 </div>
                 <PromoCarousel items={promoDeals} slide={slide} onSelectSlide={setSlide} />
               </div>
@@ -249,7 +234,6 @@ function PromoCarousel({
   onSelectSlide: (index: number) => void;
 }) {
   const item = items[slide];
-  const next = resolveNextTier(item.priceTiers, item.currentQuantity);
 
   function goTo(index: number) {
     onSelectSlide((index + items.length) % items.length);
@@ -266,20 +250,11 @@ function PromoCarousel({
           <div className="flex min-w-0 flex-col overflow-hidden">
             <div className="flex h-6 flex-wrap gap-2 overflow-hidden">
               <Tag highlighted>마감 D-{item.daysLeft}</Tag>
-              {next ? (
-                <Tag>가격 인하까지 {(next.thresholdQuantity - item.currentQuantity).toLocaleString("ko-KR")}개</Tag>
-              ) : (
-                <Tag>지금 최저가로 진행 중</Tag>
-              )}
             </div>
             <h3 className="mt-4 line-clamp-2 h-16 text-2xl leading-8">{item.title}</h3>
             <p className="mt-1.5 truncate text-sm font-medium text-wb-secondary">{item.producerName}</p>
             <p className="mt-2 line-clamp-2 h-10 text-sm text-wb-secondary">{item.summary}</p>
             <div className="mt-auto space-y-3 pt-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold">{item.price !== null ? won(item.price) : "-"}</span>
-                <span className="text-xs font-semibold text-wb-secondary">현재 가격</span>
-              </div>
               <ProgressBar value={item.maxQuantity === 0 ? 0 : item.currentQuantity / item.maxQuantity} />
               <div className="flex justify-between text-xs">
                 <span className="font-bold text-wb-green">{item.currentQuantity.toLocaleString("ko-KR")}개 참여</span>
@@ -352,8 +327,7 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
         <p className="mt-0.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-bold">{item.price !== null ? won(item.price) : "-"}</p>
-        <p className="text-[11px] font-bold text-wb-green">{item.currentQuantity.toLocaleString("ko-KR")}개</p>
+        <p className="text-sm font-bold text-wb-green">{item.currentQuantity.toLocaleString("ko-KR")}개</p>
       </div>
     </Link>
   );

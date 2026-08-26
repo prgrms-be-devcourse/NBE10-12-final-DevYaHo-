@@ -44,6 +44,7 @@ export default function DealDetailPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation">("story");
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
 
   const reload = useCallback(async () => {
     const detailRes = await getGroupBuy(groupBuyId);
@@ -65,6 +66,7 @@ export default function DealDetailPage() {
     async function load() {
       setLoading(true);
       setLoadError(null);
+      setThumbnailFailed(false);
       try {
         await reload();
       } catch (e) {
@@ -158,12 +160,13 @@ export default function DealDetailPage() {
             <h1 className="text-2xl">{detail.title}</h1>
           </div>
 
-          {product.thumbnailUrl ? (
+          {product.thumbnailUrl && !thumbnailFailed ? (
             // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
             <img
               src={product.thumbnailUrl}
               alt={detail.title}
               className="aspect-[4/3] w-full rounded-2xl object-cover"
+              onError={() => setThumbnailFailed(true)}
             />
           ) : (
             <GroupBuyArtwork entry={catalog} className="aspect-[4/3] w-full" />
@@ -323,7 +326,10 @@ export default function DealDetailPage() {
                     type="number"
                     min={1}
                     value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setQuantity(Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1);
+                    }}
                   />
                   <Button className="w-full" disabled={!canParticipate} loading={submitting} onClick={handleParticipate}>
                     {status.status !== "ONGOING" ? "참여할 수 없어요" : "참여하기"}

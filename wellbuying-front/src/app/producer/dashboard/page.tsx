@@ -9,10 +9,9 @@ import { BarChart, type BarChartPoint } from "@/components/ui/BarChart";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { listGroupBuys, getGroupBuy, getGroupBuyStatus } from "@/lib/api/groupBuy";
+import { listMyGroupBuys, getGroupBuy, getGroupBuyStatus } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
 import type { GroupBuyDetailResponse, GroupBuyStatusResponse } from "@/lib/api/types";
-import { useAuth } from "@/lib/auth/AuthProvider";
 import { compactCount, compactWon, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
@@ -46,7 +45,6 @@ function buildMonthlyChart(rows: DealRow[]): BarChartPoint[] {
 }
 
 export default function ProducerDashboardPage() {
-  const { member } = useAuth();
   const [rows, setRows] = useState<DealRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +54,9 @@ export default function ProducerDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const page = await listGroupBuys({ size: 100 });
-      const own = page.content.filter((item) => item.producerId === member?.memberId);
+      const page = await listMyGroupBuys({ size: 100 });
       const loaded = await Promise.all(
-        own.map(async (item) => {
+        page.content.map(async (item) => {
           const [detail, status] = await Promise.all([getGroupBuy(item.id), getGroupBuyStatus(item.id)]);
           return { detail, status };
         }),
@@ -70,7 +67,7 @@ export default function ProducerDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [member?.memberId]);
+  }, []);
 
   useEffect(() => {
     async function load() {
