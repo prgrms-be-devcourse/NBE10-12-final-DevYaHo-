@@ -47,7 +47,22 @@ services:
     volumes:
       - wellbuying-kafka-data:/var/lib/kafka/data
 
+  opensearch:
+    build:
+      context: ./docker/opensearch
+    container_name: wellbuying-opensearch
+    mem_limit: 1800m
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=-Xms900m -Xmx900m
+    ports:
+      - "9200:9200"
+    volumes:
+      - wellbuying-opensearch-data:/usr/share/opensearch/data
+
 volumes:
   wellbuying-postgres-data:
   wellbuying-redis-data:
   wellbuying-kafka-data:
+  wellbuying-opensearch-data:
