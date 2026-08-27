@@ -95,18 +95,28 @@ public class SellerInfo {
         return new SellerInfo(memberId, bankCode, bankName, accountNumber, accountHolder, companyName);
     }
 
-    // 셀러 승인 - status를 ACTIVE로 전환하고 승인 시각을 기록 ("PENDING이어야만 승인 가능"이라는 검증은 서비스 레이어 책임)
+    // 셀러 승인 - status를 APPROVED로 전환하고 승인 시각을 기록 ("PENDING이어야만 승인 가능"이라는 검증은 서비스 레이어 책임)
     public void approve() {
-        this.status = SellerStatus.ACTIVE;
+        this.status = SellerStatus.APPROVED;
         this.approvedAt = LocalDateTime.now();
     }
 
-    // 셀러 거절 - status를 TERMINATED로 전환 (approvedAt은 기록하지 않음)
+    // 셀러 거절 - status를 REJECTED로 전환 (approvedAt은 기록하지 않음)
     public void reject() {
-        this.status = SellerStatus.TERMINATED;
+        this.status = SellerStatus.REJECTED;
     }
 
-    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("TERMINATED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
+    // 셀러 정지 - status를 SUSPENDED로 전환 ("APPROVED여야만 정지 가능"이라는 검증은 서비스 레이어 책임)
+    public void suspend() {
+        this.status = SellerStatus.SUSPENDED;
+    }
+
+    // 셀러 정지 복귀 - status를 다시 APPROVED로 전환 ("SUSPENDED여야만 복귀 가능"이라는 검증은 서비스 레이어 책임)
+    public void reactivate() {
+        this.status = SellerStatus.APPROVED;
+    }
+
+    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("REJECTED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
     public void reapply(String bankCode, String bankName, String accountNumber, String accountHolder,
             String companyName) {
         this.bankCode = bankCode;

@@ -18,6 +18,6 @@ public record ProductDetailResponse(
                 product.getDescription(),
                 product.getStartPrice(),
                 product.getThumbnailUrl(),
-                product.isAvailable());
+                product.isApproved());
     }
 }

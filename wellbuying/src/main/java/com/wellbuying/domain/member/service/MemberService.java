@@ -74,7 +74,7 @@ public class MemberService {
     }
 
     // 탈퇴하지 않은 회원을 soft delete하며 개인정보를 익명화, 연동된 소셜 계정을 전부 해제하고
-    // PENDING/TERMINATED 셀러 신청 이력을 즉시 삭제 (ACTIVE 셀러의 금융 정보는 Phase 12까지 보존)
+    // PENDING/REJECTED 셀러 신청 이력을 즉시 삭제 (APPROVED 셀러의 금융 정보는 Phase 12까지 보존)
     @Transactional
     public void withdraw(Long memberId) {
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
@@ -83,7 +83,7 @@ public class MemberService {
         socialAccountRepository.deleteAllByMemberId(memberId);
         sellerInfoRepository.findByMemberId(memberId)
                 .filter(sellerInfo -> sellerInfo.getStatus() == SellerStatus.PENDING
-                        || sellerInfo.getStatus() == SellerStatus.TERMINATED)
+                        || sellerInfo.getStatus() == SellerStatus.REJECTED)
                 .ifPresent(sellerInfoRepository::delete);
     }
 

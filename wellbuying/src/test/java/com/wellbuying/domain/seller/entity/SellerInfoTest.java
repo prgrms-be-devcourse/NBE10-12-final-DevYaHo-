@@ -14,24 +14,47 @@ class SellerInfoTest {
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.PENDING);
     }
 
-    // approve() 호출 시 status가 ACTIVE로 바뀌고 approvedAt이 세팅되는지 검증
+    // approve() 호출 시 status가 APPROVED로 바뀌고 approvedAt이 세팅되는지 검증
     @Test
-    void approve호출시_status가_ACTIVE로_바뀌고_approvedAt이_세팅된다() {
+    void approve호출시_status가_APPROVED로_바뀌고_approvedAt이_세팅된다() {
         SellerInfo sellerInfo = SellerInfo.apply(1L, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
 
         sellerInfo.approve();
 
-        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.ACTIVE);
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
     }
 
-    // reject() 호출 시 status가 TERMINATED로 바뀌는지 검증
+    // reject() 호출 시 status가 REJECTED로 바뀌는지 검증
     @Test
-    void reject호출시_status가_TERMINATED로_바뀐다() {
+    void reject호출시_status가_REJECTED로_바뀐다() {
         SellerInfo sellerInfo = SellerInfo.apply(1L, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
 
         sellerInfo.reject();
 
-        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.TERMINATED);
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.REJECTED);
+    }
+
+    // suspend() 호출 시 status가 SUSPENDED로 바뀌는지 검증
+    @Test
+    void suspend호출시_status가_SUSPENDED로_바뀐다() {
+        SellerInfo sellerInfo = SellerInfo.apply(1L, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+        sellerInfo.approve();
+
+        sellerInfo.suspend();
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.SUSPENDED);
+    }
+
+    // reactivate() 호출 시 status가 다시 APPROVED로 바뀌는지 검증
+    @Test
+    void reactivate호출시_status가_다시_APPROVED로_바뀐다() {
+        SellerInfo sellerInfo = SellerInfo.apply(1L, "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+        sellerInfo.approve();
+        sellerInfo.suspend();
+
+        sellerInfo.reactivate();
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
     }
 
     // reapply() 호출 시 status가 PENDING으로 되돌아가고 신청 정보가 새 값으로 갱신되는지 검증
