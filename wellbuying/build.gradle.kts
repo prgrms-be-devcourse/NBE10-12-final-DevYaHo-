@@ -1,3 +1,5 @@
+import org.springframework.boot.gradle.tasks.run.BootRun
+
 plugins {
     java
     id("org.springframework.boot") version "4.0.7"
@@ -54,6 +56,23 @@ dependencies {
     annotationProcessor("io.github.openfeign.querydsl:querydsl-apt:$querydslVersion:jpa")
     annotationProcessor("jakarta.persistence:jakarta.persistence-api")
     annotationProcessor("jakarta.annotation:jakarta.annotation-api")
+}
+
+// .env.local은 커밋되지 않는 로컬 전용 파일이라 존재하지 않을 수도 있다 (CI/다른 개발자 환경 등) -
+// bootRun에서만 로드한다: 테스트는 여기 담긴 실제 메일/OAuth 시크릿이 필요 없고, 개발자마다 다른
+// 값이 들어있어 테스트 결과가 사람마다 달라지면 안 되기 때문이다
+tasks.named<BootRun>("bootRun") {
+    val envLocalFile = project.file(".env.local")
+    if (envLocalFile.exists()) {
+        val envVars = envLocalFile.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }
+            .associate { line ->
+                val (key, value) = line.split("=", limit = 2)
+                key.trim() to value.trim()
+            }
+        environment(envVars)
+    }
 }
 
 tasks.withType<Test> {

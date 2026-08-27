@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.service.ProductService;
 import java.util.List;
@@ -50,5 +51,17 @@ class ProductControllerTest {
 
         mockMvc.perform(get("/api/products").param("category", "1").param("minPrice", "1000"))
                 .andExpect(status().isOk());
+    }
+
+    // 상품 단건 조회 시 200과 함께 상세 필드가 반환된다
+    @Test
+    void getProduct_존재하는_상품이면_상세정보를_반환한다() throws Exception {
+        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true);
+        when(productService.getDetail(1L)).thenReturn(response);
+
+        mockMvc.perform(get("/api/products/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.productName").value("상품"))
+                .andExpect(jsonPath("$.description").value("설명"));
     }
 }

@@ -4,6 +4,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
@@ -35,6 +36,25 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Slice<ProductSummaryResponse> getProducts(ProductSearchCondition condition, Pageable pageable) {
         return productRepository.search(condition, pageable);
+    }
+
+    // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
+    @Transactional(readOnly = true)
+    public ProductDetailResponse getDetail(Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        return ProductDetailResponse.of(product);
+    }
+
+    // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
+    @Transactional(readOnly = true)
+    public Product getOwnedOrThrow(Long sellerId, Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        if (!product.getSellerId().equals(sellerId)) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return product;
     }
 
     // 생산자(SELLER)만 상품을 등록할 수 있음

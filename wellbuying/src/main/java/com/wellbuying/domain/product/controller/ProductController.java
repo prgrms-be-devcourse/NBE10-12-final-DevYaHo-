@@ -3,6 +3,7 @@ package com.wellbuying.domain.product.controller;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
@@ -15,6 +16,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +44,12 @@ public class ProductController {
     ) {
         ProductSearchCondition condition = new ProductSearchCondition(category, minPrice, maxPrice, sort);
         return productService.getProducts(condition, pageable);
+    }
+
+    // 상품 상세 - 설명/썸네일 등 목록에 없는 정보까지 포함해 단건 조회
+    @GetMapping("/{id}")
+    public ProductDetailResponse getProduct(@PathVariable Long id) {
+        return productService.getDetail(id);
     }
 
     // 생산자(SELLER)만 상품 등록 가능

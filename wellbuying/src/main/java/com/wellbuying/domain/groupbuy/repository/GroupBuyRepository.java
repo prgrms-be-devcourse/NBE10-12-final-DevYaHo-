@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.repository;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.domain.Limit;
@@ -16,6 +16,15 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
 
     // 목록/검색 - 상태별 필터링
     Page<GroupBuy> findByStatus(GroupBuyStatus status, Pageable pageable);
+
+    // 생산자별 조회 - GroupBuySeedRunner가 이전에 시딩한 자기 소유 데이터를 정리할 때 사용
+    List<GroupBuy> findByProducerId(Long producerId);
+
+    // 생산자별 목록 조회(페이징) - "내 공동구매" 화면용
+    Page<GroupBuy> findByProducerId(Long producerId, Pageable pageable);
+
+    // 생산자별 + 상태 필터 목록 조회(페이징)
+    Page<GroupBuy> findByProducerIdAndStatus(Long producerId, GroupBuyStatus status, Pageable pageable);
 
     // 시작 시각이 지난 READY 공동구매 조회 - GroupBuyLifecycleScheduler가 ONGOING으로 전환할 대상
     // limit으로 한 번의 스케줄러 실행에서 처리할 최대 건수를 제한해 대량 적체 시에도 메모리 사용량을 예측 가능하게 유지한다

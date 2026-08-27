@@ -2,15 +2,14 @@ package com.wellbuying.domain.groupbuy.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartMeResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
-import com.wellbuying.domain.groupbuy.event.AfterCommitExecutor;
 import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
@@ -50,6 +49,9 @@ public class GroupBuyParticipationService {
         if (groupBuy.getStatus() != GroupBuyStatus.ONGOING || now.isBefore(groupBuy.getStartAt())
                 || !now.isBefore(groupBuy.getEndAt())) {
             throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
+        }
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
         }
 
         int quantity = request.quantity();
@@ -92,7 +94,7 @@ public class GroupBuyParticipationService {
                 // 방금 저장한 part는 위 clear로 인해 confirmedParts 안의 엔티티와 별개의(detached) 객체이므로,
                 // 응답에 최종가가 정확히 반영되도록 직접 채워준다 (detached라 이 mutation은 DB에 반영되지 않는다)
                 part.applyFinalPrice(finalPrice);
-                AfterCommitExecutor.run(() -> groupBuyEventPublisher.publishCompleted(updatedGroupBuy, confirmedParts));
+                groupBuyEventPublisher.publishCompleted(updatedGroupBuy, confirmedParts);
             }
 
             return GroupBuyPartResponse.of(part);

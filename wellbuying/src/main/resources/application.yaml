@@ -23,6 +23,12 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  task:
+    scheduling:
+      pool:
+        # 기본값(1)이면 모든 @Scheduled 메서드가 스레드 하나를 공유해서, 공동구매 마감 처리처럼
+        # 오래 걸리는 배치 하나가 3초마다 도는 아웃박스 릴레이 등 다른 스케줄러까지 함께 지연시킨다
+        size: 5
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
@@ -78,3 +84,6 @@ admin-seed:
   enabled: ${ADMIN_SEED_ENABLED:false}
   email: ${ADMIN_SEED_EMAIL:admin@wellbuying.local}
   password: ${ADMIN_SEED_PASSWORD:CHANGE_ME_local_dev_admin_password}
+
+groupbuy-seed:
+  enabled: ${GROUPBUY_SEED_ENABLED:false}

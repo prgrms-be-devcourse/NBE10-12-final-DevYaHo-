@@ -2,7 +2,7 @@ package com.wellbuying.domain.groupbuy.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import java.util.Comparator;
 import java.util.List;
 

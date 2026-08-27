@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.dto;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import java.time.LocalDateTime;
 
 // appliedPrice는 공동구매가 성사되기 전까지 null - 확정 전 예상가는 프론트에서 가격구간(GET /price)과

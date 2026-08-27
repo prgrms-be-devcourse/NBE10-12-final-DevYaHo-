@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyDetailResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
@@ -10,6 +10,7 @@ import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPriceResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyStatusResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuySummaryResponse;
+import com.wellbuying.domain.groupbuy.dto.GroupBuySuspensionRequestCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyUpdateRequest;
 import com.wellbuying.domain.groupbuy.service.GroupBuyParticipationService;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
@@ -70,6 +71,22 @@ public class GroupBuyController {
             @RequestParam(required = false) GroupBuyStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(groupBuyService.list(status, pageable));
+    }
+
+    // 내 공동구매 목록 조회 (생산자 본인)
+    @GetMapping("/mine")
+    public ResponseEntity<Page<GroupBuySummaryResponse>> listMine(@AuthenticationPrincipal AuthenticatedMember member,
+            @RequestParam(required = false) GroupBuyStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(groupBuyService.listMine(member.memberId(), status, pageable));
+    }
+
+    // 판매정지 요청 (생산자 본인, ONGOING 상태만)
+    @PostMapping("/{id}/suspension-requests")
+    public ResponseEntity<Void> requestSuspension(@AuthenticationPrincipal AuthenticatedMember member,
+            @PathVariable Long id, @RequestBody GroupBuySuspensionRequestCreateRequest request) {
+        groupBuyService.requestSuspension(member.memberId(), id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     // 정보 수정

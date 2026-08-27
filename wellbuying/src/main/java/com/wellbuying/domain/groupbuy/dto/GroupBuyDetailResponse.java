@@ -1,8 +1,9 @@
 package com.wellbuying.domain.groupbuy.dto;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPrice;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.product.entity.Product;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -10,6 +11,8 @@ import java.util.List;
 public record GroupBuyDetailResponse(
         Long id,
         Long productId,
+        String productName,
+        String productCategory,
         Long producerId,
         String title,
         GroupBuyStatus status,
@@ -18,13 +21,18 @@ public record GroupBuyDetailResponse(
         int minQuantity,
         int maxQuantity,
         List<GroupBuyPriceResponse> priceTiers,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean suspended
 ) {
 
-    public static GroupBuyDetailResponse of(GroupBuy groupBuy, List<GroupBuyPrice> priceTiers) {
+    // product가 null이면(이론상 항상 존재하지만, 이 응답이 추가되기 전에 만들어진 레거시 행 대비) 빈 값으로 안전하게 처리
+    public static GroupBuyDetailResponse of(GroupBuy groupBuy, List<GroupBuyPrice> priceTiers, Product product,
+            String categoryName) {
         return new GroupBuyDetailResponse(
                 groupBuy.getId(),
                 groupBuy.getProductId(),
+                product != null ? product.getProductName() : "",
+                categoryName,
                 groupBuy.getProducerId(),
                 groupBuy.getTitle(),
                 groupBuy.getStatus(),
@@ -33,6 +41,7 @@ public record GroupBuyDetailResponse(
                 groupBuy.getMinQuantity(),
                 groupBuy.getMaxQuantity(),
                 priceTiers.stream().map(GroupBuyPriceResponse::of).toList(),
-                groupBuy.getCreatedAt());
+                groupBuy.getCreatedAt(),
+                groupBuy.isSuspended());
     }
 }
