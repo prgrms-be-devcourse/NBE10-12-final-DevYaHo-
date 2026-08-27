@@ -86,6 +86,47 @@ class MemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("role").description("권한 (BUYER)"))));
     }
 
+    // 전화번호 형식이 올바르지 않으면 400과 COMMON_400_INVALID_INPUT 에러 코드를 반환하는지 검증
+    @Test
+    void 전화번호_형식이_올바르지_않으면_회원가입이_실패한다() throws Exception {
+        redisTemplate.opsForValue().set(EMAIL_VERIFIED_KEY_PREFIX + "invalid-phone@example.com", "1",
+                Duration.ofMinutes(30));
+        String requestBody = """
+                {
+                  "email": "invalid-phone@example.com",
+                  "password": "Pass1234!",
+                  "name": "홍길동",
+                  "phoneNumber": "not-a-phone-number"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"));
+    }
+
+    // phoneNumber가 빈 문자열이면(선택 입력을 비워서 제출) null과 동일하게 통과하는지 검증
+    @Test
+    void 전화번호가_빈_문자열이면_회원가입에_성공한다() throws Exception {
+        redisTemplate.opsForValue().set(EMAIL_VERIFIED_KEY_PREFIX + "empty-phone@example.com", "1",
+                Duration.ofMinutes(30));
+        String requestBody = """
+                {
+                  "email": "empty-phone@example.com",
+                  "password": "Pass1234!",
+                  "name": "홍길동",
+                  "phoneNumber": ""
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+    }
+
     // 이미 가입된 이메일로 회원가입 시 409와 MEMBER_409_EMAIL_DUPLICATE 에러 코드를 반환하는지 검증
     @Test
     void 이메일이_중복되면_회원가입에_실패한다() throws Exception {
@@ -197,6 +238,7 @@ class MemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("email").description("이메일"),
                                 fieldWithPath("name").description("이름"),
                                 fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional(),
+                                fieldWithPath("phoneNumber").description("전화번호").optional(),
                                 fieldWithPath("role").description("권한"))));
     }
 
@@ -244,6 +286,7 @@ class MemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("email").description("이메일"),
                                 fieldWithPath("name").description("이름"),
                                 fieldWithPath("profileImageUrl").description("프로필 이미지 URL").optional(),
+                                fieldWithPath("phoneNumber").description("전화번호").optional(),
                                 fieldWithPath("role").description("권한"))));
     }
 

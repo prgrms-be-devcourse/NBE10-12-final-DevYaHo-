@@ -2,6 +2,7 @@ package com.wellbuying.domain.member.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -9,6 +10,7 @@ import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EmailVerificationService {
@@ -16,6 +18,8 @@ public class EmailVerificationService {
     private static final String CODE_KEY_PREFIX = "email:verification:";
     private static final String VERIFIED_KEY_PREFIX = "email:verified:";
     private static final String COOLDOWN_PURPOSE = "verification";
+    private static final String REACTIVATION_CODE_KEY_PREFIX = "email:reactivation:";
+    private static final String REACTIVATION_COOLDOWN_PURPOSE = "reactivation";
     private static final long CODE_TTL_MINUTES = 5L;
     private static final long COOLDOWN_SECONDS = 30L;
     private static final long VERIFIED_TTL_MINUTES = 30L;
@@ -63,6 +67,33 @@ public class EmailVerificationService {
         if (!Boolean.TRUE.equals(deleted)) {
             throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
+    }
+
+    // 휴면 회원만 재활성화 코드를 받을 수 있음 - 존재하지 않으면 거부, 배치 미실행으로 아직 ACTIVE인 휴면 대상은 이 시점에 DORMANT로 동기화하여 허용
+    // 쿨다운 체크(예외 가능)를 validateCanReactivate()(마지막에만 예외, 그 전에 markDormant() 가능) 앞에 두어
+    // AuthService.login()과 같은 롤백 문제가 재발하지 않도록 함 - 이 메서드는 noRollbackFor 없이도 안전
+    @Transactional
+    public void sendReactivationCode(String email) {
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        emailCooldownGuard.check(REACTIVATION_COOLDOWN_PURPOSE, email);
+        member.validateCanReactivate();
+
+        String code = generateCode();
+        redisTemplate.opsForValue()
+                .set(REACTIVATION_CODE_KEY_PREFIX + email, code, Duration.ofMinutes(CODE_TTL_MINUTES));
+        emailCooldownGuard.mark(REACTIVATION_COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
+        mailService.sendHtmlEmail(email, "[Wellbuying] 휴면 계정 재활성화 인증 코드", buildVerificationContent(code));
+    }
+
+    // 재활성화 코드 검증 - 가입 흐름과 달리 검증과 재활성화가 한 호출(AuthService.reactivate())에서 처리되므로 별도 verified 플래그 없이 코드만 소비
+    public void verifyReactivationCode(String email, String code) {
+        String codeKey = REACTIVATION_CODE_KEY_PREFIX + email;
+        String stored = redisTemplate.opsForValue().get(codeKey);
+        if (stored == null || !stored.equals(code)) {
+            throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
+        }
+        redisTemplate.delete(codeKey);
     }
 
     private String generateCode() {

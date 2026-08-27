@@ -44,8 +44,8 @@ class ProductQueryRepositoryTest {
     @BeforeEach
     void setUp() {
         entityManager.createNativeQuery(
-                        "INSERT INTO members (id, email, name, role, created_at, updated_at) VALUES "
-                                + "(:id, 'seller-test@wellbuying.com', '테스트판매자', 'BUYER', now(), now())")
+                        "INSERT INTO members (id, email, name, role, status, created_at, updated_at) VALUES "
+                                + "(:id, 'seller-test@wellbuying.com', '테스트판매자', 'BUYER', 'ACTIVE', now(), now())")
                 .setParameter("id", TEST_SELLER_ID)
                 .executeUpdate();
 

@@ -11,15 +11,20 @@ import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.entity.Role;
+import com.wellbuying.domain.member.event.MemberLoginEvent;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.member.service.EmailVerificationService;
 import io.jsonwebtoken.Claims;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,20 +38,28 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
     private final OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
+    private final ApplicationEventPublisher eventPublisher;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             TokenProvider tokenProvider, RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
-            OAuthExchangeCodeRepository oAuthExchangeCodeRepository) {
+            OAuthExchangeCodeRepository oAuthExchangeCodeRepository, ApplicationEventPublisher eventPublisher,
+            EmailVerificationService emailVerificationService) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenHasher = tokenHasher;
         this.oAuthExchangeCodeRepository = oAuthExchangeCodeRepository;
+        this.eventPublisher = eventPublisher;
+        this.emailVerificationService = emailVerificationService;
     }
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
-    @Transactional(readOnly = true)
+    // 휴면 대상 회원은 토큰 발급 전에 차단 - 배치가 아직 처리하지 못한 대상(status=ACTIVE지만 6개월 경과)도 이 시점에 즉시 markDormant()로 전환
+    // DormantMemberException 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
+    // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
+    @Transactional(noRollbackFor = DormantMemberException.class)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
@@ -56,7 +69,21 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
+        member.validateNotDormant();
 
+        return issueTokens(member.getId(), member.getRole(), requestDeviceId);
+    }
+
+    // 이메일 인증코드 검증 성공 시 휴면 계정을 즉시 재활성화하고 로그인 토큰까지 함께 발급
+    @Transactional
+    public LoginResponse reactivate(String email, String code, String requestDeviceId) {
+        emailVerificationService.verifyReactivationCode(email, code);
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getStatus() != MemberStatus.DORMANT) {
+            throw new BusinessException(ErrorCode.MEMBER_NOT_DORMANT);
+        }
+        member.reactivate();
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
     }
 
@@ -68,6 +95,7 @@ public class AuthService {
 
         long now = Instant.now().getEpochSecond();
         refreshTokenRepository.save(memberId, deviceId, RefreshTokenValue.issued(tokenHasher.hash(refreshToken), now));
+        eventPublisher.publishEvent(new MemberLoginEvent(memberId));
 
         return new LoginResponse(accessToken, refreshToken, tokenProvider.getAccessTokenExpirationSeconds(),
                 deviceId);
@@ -96,6 +124,7 @@ public class AuthService {
 
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        eventPublisher.publishEvent(new MemberLoginEvent(memberId));
 
         String oldTokenHash = tokenHasher.hash(request.refreshToken());
         String newAccessToken = tokenProvider.createAccessToken(memberId, member.getRole(), deviceId);

@@ -2,6 +2,7 @@ package com.wellbuying.auth.service;
 
 import com.wellbuying.auth.oauth.SocialLinkTicketRepository;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.SocialAccount;
@@ -30,12 +31,19 @@ public class OAuthAccountService {
     }
 
     // (provider, providerId) 매칭 회원이 있으면 로그인, 동일 이메일의 기존 회원이 있으면 자동 연동, 둘 다 없으면 신규 생성
-    @Transactional
+    // 휴면 대상 회원은 SocialAccount 연동(save) 등 부수 효과 이전에 차단 - 신규 생성 회원은 항상 ACTIVE라 체크 대상이 아님
+    // DormantMemberException 발생 시에도 member.markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
+    // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
+    @Transactional(noRollbackFor = DormantMemberException.class)
     public Member findOrCreateMember(String provider, String providerId, String email, String name,
             String profileImage) {
         return socialAccountRepository.findByProviderAndProviderId(provider, providerId)
-                .map(socialAccount -> memberRepository.findByIdAndDeletedAtIsNull(socialAccount.getMemberId())
-                        .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND)))
+                .map(socialAccount -> {
+                    Member member = memberRepository.findByIdAndDeletedAtIsNull(socialAccount.getMemberId())
+                            .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+                    member.validateNotDormant();
+                    return member;
+                })
                 .orElseGet(() -> linkOrCreateMember(provider, providerId, email, name, profileImage));
     }
 
@@ -43,6 +51,7 @@ public class OAuthAccountService {
             String profileImage) {
         return memberRepository.findByEmailAndDeletedAtIsNull(email)
                 .map(member -> {
+                    member.validateNotDormant();
                     socialAccountRepository.save(SocialAccount.create(member.getId(), provider, providerId));
                     return member;
                 })
@@ -55,7 +64,7 @@ public class OAuthAccountService {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         Member member = Member.socialOnly(email, name);
-        member.updateProfile(name, profileImage);
+        member.updateProfile(name, profileImage, null);
         Member savedMember = memberRepository.save(member);
         socialAccountRepository.save(SocialAccount.create(savedMember.getId(), provider, providerId));
         return savedMember;
