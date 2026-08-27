@@ -80,61 +80,36 @@ public class SellerInfoService {
         return SellerInfoResponse.from(sellerInfo);
     }
 
-    // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 APPROVED로 전환하고 MEMBERS.role을 SELLER로 변경
+    // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED(SellerInfo.approve()가 검증), 통과하면 SELLER_INFO를 APPROVED로 전환하고 MEMBERS.role을 SELLER로 변경
     @Transactional
     public void approve(Long sellerId) {
-        SellerInfo sellerInfo = findPendingSellerInfo(sellerId);
+        SellerInfo sellerInfo = findSellerInfo(sellerId);
         sellerInfo.approve();
         Member member = memberRepository.findByIdAndDeletedAtIsNull(sellerInfo.getMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         member.activateAsSeller();
     }
 
-    // 셀러 거절 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED, 통과하면 SELLER_INFO를 REJECTED로 전환 (role은 변경하지 않음)
+    // 셀러 거절 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED(SellerInfo.reject()가 검증), 통과하면 SELLER_INFO를 REJECTED로 전환 (role은 변경하지 않음)
     @Transactional
     public void reject(Long sellerId) {
-        SellerInfo sellerInfo = findPendingSellerInfo(sellerId);
-        sellerInfo.reject();
+        findSellerInfo(sellerId).reject();
     }
 
-    // 셀러 정지 - APPROVED 상태가 아니면 SELLER_NOT_APPROVED, 통과하면 SELLER_INFO를 SUSPENDED로 전환 (role은 변경하지 않음)
+    // 셀러 정지 - APPROVED 상태가 아니면 SELLER_NOT_APPROVED(SellerInfo.suspend()가 검증), 통과하면 SELLER_INFO를 SUSPENDED로 전환 (role은 변경하지 않음)
     @Transactional
     public void suspend(Long sellerId) {
-        SellerInfo sellerInfo = findApprovedSellerInfo(sellerId);
-        sellerInfo.suspend();
+        findSellerInfo(sellerId).suspend();
     }
 
-    // 셀러 정지 복귀 - SUSPENDED 상태가 아니면 SELLER_NOT_SUSPENDED, 통과하면 SELLER_INFO를 다시 APPROVED로 전환
+    // 셀러 정지 복귀 - SUSPENDED 상태가 아니면 SELLER_NOT_SUSPENDED(SellerInfo.reactivate()가 검증), 통과하면 SELLER_INFO를 다시 APPROVED로 전환
     @Transactional
     public void reactivate(Long sellerId) {
-        SellerInfo sellerInfo = findSuspendedSellerInfo(sellerId);
-        sellerInfo.reactivate();
+        findSellerInfo(sellerId).reactivate();
     }
 
-    private SellerInfo findPendingSellerInfo(Long sellerId) {
-        SellerInfo sellerInfo = sellerInfoRepository.findById(sellerId)
+    private SellerInfo findSellerInfo(Long sellerId) {
+        return sellerInfoRepository.findById(sellerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_FOUND));
-        if (sellerInfo.getStatus() != SellerStatus.PENDING) {
-            throw new BusinessException(ErrorCode.SELLER_ALREADY_PROCESSED);
-        }
-        return sellerInfo;
-    }
-
-    private SellerInfo findApprovedSellerInfo(Long sellerId) {
-        SellerInfo sellerInfo = sellerInfoRepository.findById(sellerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_FOUND));
-        if (sellerInfo.getStatus() != SellerStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.SELLER_NOT_APPROVED);
-        }
-        return sellerInfo;
-    }
-
-    private SellerInfo findSuspendedSellerInfo(Long sellerId) {
-        SellerInfo sellerInfo = sellerInfoRepository.findById(sellerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_FOUND));
-        if (sellerInfo.getStatus() != SellerStatus.SUSPENDED) {
-            throw new BusinessException(ErrorCode.SELLER_NOT_SUSPENDED);
-        }
-        return sellerInfo;
     }
 }

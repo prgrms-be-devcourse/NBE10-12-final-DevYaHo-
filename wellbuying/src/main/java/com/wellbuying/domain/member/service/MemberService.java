@@ -13,7 +13,6 @@ import com.wellbuying.domain.member.dto.UpdateMemberRequest;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.repository.SocialAccountRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
-import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -82,8 +81,7 @@ public class MemberService {
         member.withdraw();
         socialAccountRepository.deleteAllByMemberId(memberId);
         sellerInfoRepository.findByMemberId(memberId)
-                .filter(sellerInfo -> sellerInfo.getStatus() == SellerStatus.PENDING
-                        || sellerInfo.getStatus() == SellerStatus.REJECTED)
+                .filter(SellerInfo::isDeletableOnWithdraw)
                 .ifPresent(sellerInfoRepository::delete);
     }
 
