@@ -23,12 +23,14 @@ public class GroupBuyEventPublisher {
         this.objectMapper = objectMapper;
     }
 
-    // 공동구매 성사 - 확정된 참여자 각각에 대해 이벤트를 개별 기록 (결제 도메인이 참여자 단위로 후속 처리를 하도록)
+    // 공동구매 성사 - 확정된 참여자 각각에 대해 이벤트를 개별 기록 (결제 도메인이 참여자 단위로 후속 처리를 하도록).
+    // 참여자 수만큼 save()를 개별 호출하면 그만큼 개별 INSERT 왕복이 발생하므로 saveAll()로 한 번에 묶는다
     public void publishCompleted(GroupBuy groupBuy, List<GroupBuyPart> confirmedParts) {
-        for (GroupBuyPart part : confirmedParts) {
-            record(groupBuy.getId(), GroupBuyEventType.GROUP_BUY_COMPLETED.code(),
-                    GroupBuyCompletedEvent.of(groupBuy, part));
-        }
+        List<GroupBuyEventOutbox> events = confirmedParts.stream()
+                .map(part -> toOutbox(groupBuy.getId(), GroupBuyEventType.GROUP_BUY_COMPLETED.code(),
+                        GroupBuyCompletedEvent.of(groupBuy, part)))
+                .toList();
+        outboxRepository.saveAll(events);
     }
 
     public void publishFailed(GroupBuy groupBuy) {
@@ -39,9 +41,13 @@ public class GroupBuyEventPublisher {
         record(groupBuy.getId(), GroupBuyEventType.GROUP_BUY_CANCELED.code(), GroupBuyCanceledEvent.of(groupBuy));
     }
 
-    // 같은 공동구매의 이벤트가 같은 파티션으로 모이도록 groupBuyId를 나중에 릴레이가 Kafka 메시지 키로 그대로 사용한다
     private void record(Long groupBuyId, String eventType, Object event) {
+        outboxRepository.save(toOutbox(groupBuyId, eventType, event));
+    }
+
+    // 같은 공동구매의 이벤트가 같은 파티션으로 모이도록 groupBuyId를 나중에 릴레이가 Kafka 메시지 키로 그대로 사용한다
+    private GroupBuyEventOutbox toOutbox(Long groupBuyId, String eventType, Object event) {
         String payload = objectMapper.writeValueAsString(event);
-        outboxRepository.save(GroupBuyEventOutbox.of(groupBuyId, eventType, payload));
+        return GroupBuyEventOutbox.of(groupBuyId, eventType, payload);
     }
 }

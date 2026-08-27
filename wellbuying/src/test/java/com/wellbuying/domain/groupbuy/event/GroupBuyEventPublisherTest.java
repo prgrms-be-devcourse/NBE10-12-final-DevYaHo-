@@ -35,9 +35,10 @@ class GroupBuyEventPublisherTest {
         assertThat(saved.getPublishedAt()).isNull();
     }
 
-    // 확정 참여자가 N명이면 참여자 단위로 이벤트를 N건 개별 기록하는지 검증 (결제 도메인이 참여자별로 후속 처리를 하도록)
+    // 확정 참여자가 N명이면 참여자 단위로 이벤트를 N건 기록하되, save()를 N번 개별 호출하는 대신
+    // saveAll()로 한 번에 묶어 저장하는지 검증 (참여자 수만큼 개별 INSERT 왕복이 나가지 않도록)
     @Test
-    void publishCompleted은_확정_참여자_수만큼_아웃박스_행을_개별_저장한다() {
+    void publishCompleted은_확정_참여자_수만큼_이벤트를_saveAll로_한_번에_저장한다() {
         GroupBuyEventOutboxRepository outboxRepository = org.mockito.Mockito.mock(GroupBuyEventOutboxRepository.class);
         GroupBuyEventPublisher publisher = new GroupBuyEventPublisher(outboxRepository, new ObjectMapper());
         GroupBuy groupBuy = groupBuyWithId(1L);
@@ -48,7 +49,10 @@ class GroupBuyEventPublisherTest {
 
         publisher.publishCompleted(groupBuy, java.util.List.of(part1, part2));
 
-        verify(outboxRepository, times(2)).save(any());
+        ArgumentCaptor<java.util.List<GroupBuyEventOutbox>> captor = ArgumentCaptor.forClass(java.util.List.class);
+        verify(outboxRepository, times(1)).saveAll(captor.capture());
+        verify(outboxRepository, org.mockito.Mockito.never()).save(any());
+        assertThat(captor.getValue()).hasSize(2);
     }
 
     private GroupBuy groupBuyWithId(Long id) {

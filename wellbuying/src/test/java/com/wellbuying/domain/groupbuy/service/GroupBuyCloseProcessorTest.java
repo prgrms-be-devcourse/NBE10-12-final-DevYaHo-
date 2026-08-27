@@ -52,14 +52,17 @@ class GroupBuyCloseProcessorTest {
     }
 
     // 최소 수량 달성 시 SUCCESS로 확정하고, 확정 참여자 전원에게 최종 단가를 벌크 UPDATE로 반영하고,
-    // Redis 카운터를 지우고, 성사 이벤트를 (호출자가 넘겨준 확정 참여자 목록 그대로) 기록하는지 검증
+    // (배치 조회가 아니라) 이 건의 확정 참여자만 다시 조회해 이벤트 페이로드로 쓰고, Redis 카운터를 지우고,
+    // 성사 이벤트를 기록하는지 검증
     @Test
     void closeSucceeded는_상태_확정과_최종가_반영과_이벤트_기록을_모두_수행한다() {
         GroupBuy groupBuy = ongoingGroupBuy();
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         GroupBuyPart confirmedPart = GroupBuyPart.confirm(1L, 100L, 150);
+        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(confirmedPart));
 
-        GroupBuy result = closeProcessor.closeSucceeded(1L, 12_000, List.of(confirmedPart));
+        GroupBuy result = closeProcessor.closeSucceeded(1L, 12_000);
 
         assertThat(result.getStatus().name()).isEqualTo("SUCCESS");
         verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 12_000, GroupBuyPartStatus.CONFIRMED);

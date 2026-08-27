@@ -8,7 +8,6 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -88,23 +87,6 @@ class GroupBuyPartRepositoryTest {
                 .hasSize(2);
         assertThat(groupBuyPartRepository.countByGroupBuyIdAndStatus(groupBuyId, GroupBuyPartStatus.CONFIRMED))
                 .isEqualTo(2);
-    }
-
-    // findByGroupBuyIdInAndStatus가 여러 공동구매의 CONFIRMED 참여를 단 한 번의 쿼리로 함께 조회하는지 검증
-    // (GroupBuyLifecycleScheduler가 배치 마감 처리 시 건별 반복 조회 대신 사용하는 메서드)
-    @Test
-    void findByGroupBuyIdInAndStatus는_여러_공동구매의_참여를_한_번에_조회한다() {
-        Long groupBuyId1 = saveGroupBuy();
-        Long groupBuyId2 = saveGroupBuy();
-        Long otherGroupBuyId = saveGroupBuy();
-        GroupBuyPart part1 = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId1, saveMember(), 10));
-        GroupBuyPart part2 = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId2, saveMember(), 20));
-        groupBuyPartRepository.save(GroupBuyPart.confirm(otherGroupBuyId, saveMember(), 30));
-
-        var results = groupBuyPartRepository.findByGroupBuyIdInAndStatus(
-                List.of(groupBuyId1, groupBuyId2), GroupBuyPartStatus.CONFIRMED);
-
-        assertThat(results).extracting(GroupBuyPart::getId).containsExactlyInAnyOrder(part1.getId(), part2.getId());
     }
 
     // applyFinalPriceToConfirmedParts가 해당 공동구매의 CONFIRMED 참여자 전원에게만 최종가를 반영하고,
