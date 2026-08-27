@@ -89,4 +89,14 @@ class GroupBuyOutboxRelayTest {
         verify(dispatcher).recordFailures(failedCaptor.capture());
         assertThat(failedCaptor.getValue()).extracting(DispatchFailure::event).containsExactly(failed);
     }
+
+    // 조회/DB 반영 중 예외가 나도(DB 커넥션 문제 등) 이 메서드 밖으로 전파되지 않고 잡히는지 검증 -
+    // 그래야 @Scheduled(fixedDelay = 3_000)가 다음 주기에도 정상적으로 재실행된다
+    @Test
+    void 배치_처리_중_예외가_나도_밖으로_전파되지_않는다() {
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenThrow(new RuntimeException("DB 커넥션 실패"));
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> relay.relay()).doesNotThrowAnyException();
+    }
 }

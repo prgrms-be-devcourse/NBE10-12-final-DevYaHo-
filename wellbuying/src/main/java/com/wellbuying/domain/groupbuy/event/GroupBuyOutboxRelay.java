@@ -5,6 +5,8 @@ import com.wellbuying.domain.groupbuy.repository.GroupBuyEventOutboxRepository;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Component;
 // 여기서 Kafka 발행이 잠시 실패하거나 이 프로세스가 죽어도 이벤트 자체는 DB에 남아 다음 주기에 재시도된다
 @Component
 public class GroupBuyOutboxRelay {
+
+    private static final Logger log = LoggerFactory.getLogger(GroupBuyOutboxRelay.class);
 
     private static final String TOPIC = "groupbuy-events";
     private static final long SEND_TIMEOUT_SECONDS = 5;
@@ -37,29 +41,37 @@ public class GroupBuyOutboxRelay {
     // 배치 전체를 병렬로 발행한다 - 건별로 순차 .get()을 기다리면 브로커가 느려질 때 한 건당 최대 SEND_TIMEOUT_SECONDS만큼씩
     // 누적 지연되어(최악의 경우 배치 크기 x SEND_TIMEOUT_SECONDS) 이 스케줄러 스레드가 오래 묶인다. 모든 건을 동시에
     // 보내고 한 번만 기다리면 배치 전체의 지연이 SEND_TIMEOUT_SECONDS 한 번으로 상한이 걸린다
+    // 조회/DB 반영(markPublished, recordFailures) 중 예외가 나면(DB 커넥션 문제 등) 전체를 잡아 로그만 남기고
+    // 다음 3초 주기를 기약한다 - Kafka 발행 결과(성공/실패)는 sendAsync의 handle()에서 이미 예외 없이
+    // DispatchOutcome으로 감싸두었으므로 여기서 잡을 예외는 그 바깥의 인프라성 문제뿐이다
     @Scheduled(fixedDelay = 3_000)
     public void relay() {
-        List<GroupBuyEventOutbox> pending = outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(
-                GroupBuyEventOutbox.MAX_RETRY_COUNT, BATCH_LIMIT);
-        if (pending.isEmpty()) {
-            return;
+        try {
+            List<GroupBuyEventOutbox> pending =
+                    outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(
+                            GroupBuyEventOutbox.MAX_RETRY_COUNT, BATCH_LIMIT);
+            if (pending.isEmpty()) {
+                return;
+            }
+
+            List<CompletableFuture<DispatchOutcome>> futures = pending.stream().map(this::sendAsync).toList();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            List<DispatchOutcome> outcomes = futures.stream().map(CompletableFuture::join).toList();
+
+            List<GroupBuyEventOutbox> succeeded = outcomes.stream()
+                    .filter(outcome -> outcome.error() == null)
+                    .map(DispatchOutcome::event)
+                    .toList();
+            List<GroupBuyOutboxDispatcher.DispatchFailure> failed = outcomes.stream()
+                    .filter(outcome -> outcome.error() != null)
+                    .map(outcome -> new GroupBuyOutboxDispatcher.DispatchFailure(outcome.event(), outcome.error()))
+                    .toList();
+
+            dispatcher.markPublished(succeeded);
+            dispatcher.recordFailures(failed);
+        } catch (Exception e) {
+            log.error("아웃박스 릴레이 작업 중 예외 발생", e);
         }
-
-        List<CompletableFuture<DispatchOutcome>> futures = pending.stream().map(this::sendAsync).toList();
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        List<DispatchOutcome> outcomes = futures.stream().map(CompletableFuture::join).toList();
-
-        List<GroupBuyEventOutbox> succeeded = outcomes.stream()
-                .filter(outcome -> outcome.error() == null)
-                .map(DispatchOutcome::event)
-                .toList();
-        List<GroupBuyOutboxDispatcher.DispatchFailure> failed = outcomes.stream()
-                .filter(outcome -> outcome.error() != null)
-                .map(outcome -> new GroupBuyOutboxDispatcher.DispatchFailure(outcome.event(), outcome.error()))
-                .toList();
-
-        dispatcher.markPublished(succeeded);
-        dispatcher.recordFailures(failed);
     }
 
     // 같은 공동구매의 이벤트가 같은 파티션으로 모이도록 groupBuyId를 Kafka 메시지 키로 사용한다.
