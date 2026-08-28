@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 // SellerInfo.accountNumber/accountHolder 컬럼용 AES-256-GCM 암호화 컨버터
 // 매 암호화마다 랜덤 IV(12바이트)를 생성해 암호문 앞에 붙여 Base64로 저장 (IV 재사용 방지)
+// SellerInfoEncryptionProperties 등록은 SellerInfoCryptoConfig 참고
 @Converter(autoApply = false)
 @Component
 public class SellerInfoFieldConverter implements AttributeConverter<String, String> {
@@ -56,12 +58,14 @@ public class SellerInfoFieldConverter implements AttributeConverter<String, Stri
         if (dbData == null) {
             return null;
         }
+        byte[] decoded = Base64.getDecoder().decode(dbData);
+        // 빈 문자열이나 손상된 데이터가 들어오면 아래에서 음수 배열 크기 예외가 나므로 미리 명확한 예외로 방어
+        if (decoded.length < IV_LENGTH_BYTES) {
+            throw new IllegalStateException("SellerInfo 필드 복호화에 실패했습니다: 암호화된 데이터 길이가 유효하지 않습니다.");
+        }
         try {
-            byte[] decoded = Base64.getDecoder().decode(dbData);
-            byte[] iv = new byte[IV_LENGTH_BYTES];
-            byte[] ciphertext = new byte[decoded.length - IV_LENGTH_BYTES];
-            System.arraycopy(decoded, 0, iv, 0, IV_LENGTH_BYTES);
-            System.arraycopy(decoded, IV_LENGTH_BYTES, ciphertext, 0, ciphertext.length);
+            byte[] iv = Arrays.copyOfRange(decoded, 0, IV_LENGTH_BYTES);
+            byte[] ciphertext = Arrays.copyOfRange(decoded, IV_LENGTH_BYTES, decoded.length);
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(TAG_LENGTH_BITS, iv));

@@ -1,6 +1,7 @@
 package com.wellbuying.domain.seller.crypto;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,5 +48,19 @@ class SellerInfoFieldConverterTest {
     @Test
     void null을_복호화하면_null을_반환한다() {
         assertThat(converter.convertToEntityAttribute(null)).isNull();
+    }
+
+    @Test
+    void 빈_문자열을_복호화하면_예외가_발생한다() {
+        assertThatThrownBy(() -> converter.convertToEntityAttribute(""))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void IV_길이보다_짧은_데이터를_복호화하면_예외가_발생한다() {
+        String tooShort = java.util.Base64.getEncoder().encodeToString(new byte[]{1, 2, 3});
+
+        assertThatThrownBy(() -> converter.convertToEntityAttribute(tooShort))
+                .isInstanceOf(IllegalStateException.class);
     }
 }
