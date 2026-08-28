@@ -1,5 +1,6 @@
 package com.wellbuying.domain.admin.controller;
 
+import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.service.SellerInfoService;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,29 +39,33 @@ public class AdminSellerController {
 
     // 셀러 승인 - SELLER_INFO.status를 APPROVED로, MEMBERS.role을 SELLER로 변경
     @PostMapping("/{sellerId}/approve")
-    public ResponseEntity<Void> approve(@PathVariable Long sellerId) {
-        sellerInfoService.approve(sellerId);
+    public ResponseEntity<Void> approve(@PathVariable Long sellerId,
+            @AuthenticationPrincipal AuthenticatedMember admin) {
+        sellerInfoService.approve(sellerId, admin.memberId());
         return ResponseEntity.noContent().build();
     }
 
     // 셀러 거절 - SELLER_INFO.status를 REJECTED로 변경 (role은 BUYER 유지)
     @PostMapping("/{sellerId}/reject")
-    public ResponseEntity<Void> reject(@PathVariable Long sellerId) {
-        sellerInfoService.reject(sellerId);
+    public ResponseEntity<Void> reject(@PathVariable Long sellerId,
+            @AuthenticationPrincipal AuthenticatedMember admin) {
+        sellerInfoService.reject(sellerId, admin.memberId());
         return ResponseEntity.noContent().build();
     }
 
     // 셀러 정지 - SELLER_INFO.status를 SUSPENDED로 변경 (role은 SELLER 유지)
     @PostMapping("/{sellerId}/suspend")
-    public ResponseEntity<Void> suspend(@PathVariable Long sellerId) {
-        sellerInfoService.suspend(sellerId);
+    public ResponseEntity<Void> suspend(@PathVariable Long sellerId,
+            @AuthenticationPrincipal AuthenticatedMember admin) {
+        sellerInfoService.suspend(sellerId, admin.memberId());
         return ResponseEntity.noContent().build();
     }
 
     // 셀러 정지 복귀 - SELLER_INFO.status를 다시 APPROVED로 변경
     @PostMapping("/{sellerId}/reactivate")
-    public ResponseEntity<Void> reactivate(@PathVariable Long sellerId) {
-        sellerInfoService.reactivate(sellerId);
+    public ResponseEntity<Void> reactivate(@PathVariable Long sellerId,
+            @AuthenticationPrincipal AuthenticatedMember admin) {
+        sellerInfoService.reactivate(sellerId, admin.memberId());
         return ResponseEntity.noContent().build();
     }
 }

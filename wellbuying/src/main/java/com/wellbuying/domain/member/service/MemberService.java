@@ -16,6 +16,8 @@ import com.wellbuying.domain.seller.entity.SellerInfo;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MemberService {
+
+    private static final Logger log = LoggerFactory.getLogger(MemberService.class);
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -83,6 +87,7 @@ public class MemberService {
         sellerInfoRepository.findByMemberId(memberId)
                 .filter(SellerInfo::isDeletableOnWithdraw)
                 .ifPresent(sellerInfoRepository::delete);
+        log.info("회원 탈퇴 처리 완료: memberId={}", memberId);
     }
 
     // 로그인 시점마다 호출 - lastLoginAt 갱신 (휴면 전환 차단은 AuthService.login()/OAuthAccountService에서 토큰 발급 전에 처리)
