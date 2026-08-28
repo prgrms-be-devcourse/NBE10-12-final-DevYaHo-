@@ -7,6 +7,7 @@ import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
+import com.wellbuying.auth.oauth.OAuthExchangePayload;
 import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
@@ -109,18 +110,18 @@ public class AuthService {
                 deviceId);
     }
 
-    // 소셜 로그인 성공 후 토큰을 발급해 1회용 교환 코드에 저장 - 콜백 리다이렉트 URL에 토큰이 그대로 노출되지 않도록 함
+    // 소셜 로그인 성공 후 memberId/role만 1회용 교환 코드에 저장 - 토큰은 프론트의 실제 교환 요청 시점에 발급해 그때 보내는 deviceId를 재사용할 수 있게 함
     public String issueOAuthExchangeCode(Long memberId, Role role) {
-        LoginResponse loginResponse = issueTokens(memberId, role, null);
         String code = UUID.randomUUID().toString();
-        oAuthExchangeCodeRepository.save(code, loginResponse);
+        oAuthExchangeCodeRepository.save(code, new OAuthExchangePayload(memberId, role));
         return code;
     }
 
-    // 교환 코드를 1회 소비하여 저장된 토큰을 반환 - 코드가 없거나 이미 사용됐으면 예외
-    public LoginResponse exchangeOAuthCode(String code) {
-        return oAuthExchangeCodeRepository.consume(code)
+    // 교환 코드를 1회 소비해 저장된 memberId/role로 토큰을 발급 - 코드가 없거나 이미 사용됐으면 예외
+    public LoginResponse exchangeOAuthCode(String code, String requestDeviceId) {
+        OAuthExchangePayload payload = oAuthExchangeCodeRepository.consume(code)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_EXCHANGE_CODE_INVALID));
+        return issueTokens(payload.memberId(), payload.role(), requestDeviceId);
     }
 
     // refresh token 검증 후 Lua 스크립트로 rotate하여 access/refresh 토큰을 재발급 (RTR) - role은 DB에서 최신값을 다시 조회해 반영

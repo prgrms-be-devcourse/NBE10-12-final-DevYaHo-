@@ -61,19 +61,21 @@ class OAuthAccountServiceTest {
         verify(socialAccountRepository, never()).save(any());
     }
 
-    // 소셜계정 매칭은 없지만 동일 이메일의 기존 회원이 있으면 새 소셜계정을 연동하고 그 회원을 반환하는지 검증
+    // 소셜계정 매칭은 없지만 동일 이메일의 기존 회원이 있으면(일반 가입/소셜 전용/DORMANT 등 상태 무관) 자동
+    // 연동하지 않고 SOCIAL_EMAIL_ALREADY_EXISTS로 거부하는지 검증 - §2-4/§2-5 버그 수정의 회귀 테스트
     @Test
-    void 소셜계정_매칭은_없지만_동일_이메일_회원이_있으면_자동_연동한다() {
+    void 소셜계정_매칭은_없지만_동일_이메일_회원이_있으면_자동_연동하지_않고_거부한다() {
         when(socialAccountRepository.findByProviderAndProviderId("google", "google-uid-2"))
                 .thenReturn(Optional.empty());
         Member member = Member.signUp("existing@example.com", "encoded-password", "홍길동");
         when(memberRepository.findByEmailAndDeletedAtIsNull("existing@example.com")).thenReturn(Optional.of(member));
 
-        Member result = oAuthAccountService.findOrCreateMember("google", "google-uid-2", "existing@example.com",
-                "홍길동", null);
-
-        assertThat(result).isEqualTo(member);
-        verify(socialAccountRepository).save(any(SocialAccount.class));
+        assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-2",
+                "existing@example.com", "홍길동", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+        verify(socialAccountRepository, never()).save(any());
         verify(memberRepository, never()).save(any());
     }
 
@@ -111,23 +113,6 @@ class OAuthAccountServiceTest {
                 .isInstanceOf(DormantMemberException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_DORMANT);
-    }
-
-    // 동일 이메일로 자동 연동되는 기존 회원이 이미 DORMANT면 findOrCreateMember가 MEMBER_DORMANT 예외를 던지는지 검증
-    @Test
-    void 이메일_매칭_회원이_DORMANT면_로그인이_차단된다() {
-        when(socialAccountRepository.findByProviderAndProviderId("google", "google-uid-2"))
-                .thenReturn(Optional.empty());
-        Member member = Member.signUp("dormant2@example.com", "encoded-password", "홍길동");
-        member.markDormant();
-        when(memberRepository.findByEmailAndDeletedAtIsNull("dormant2@example.com")).thenReturn(Optional.of(member));
-
-        assertThatThrownBy(() -> oAuthAccountService.findOrCreateMember("google", "google-uid-2",
-                "dormant2@example.com", "홍길동", null))
-                .isInstanceOf(DormantMemberException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.MEMBER_DORMANT);
-        verify(socialAccountRepository, never()).save(any());
     }
 
     // 탈퇴한 회원의 이메일(유니크 제약으로 재사용 불가)이면 신규 생성 시 EMAIL_ALREADY_EXISTS 예외가 발생하는지 검증

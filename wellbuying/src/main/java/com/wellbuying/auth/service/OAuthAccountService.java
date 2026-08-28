@@ -30,7 +30,9 @@ public class OAuthAccountService {
         this.clientRegistrationRepository = clientRegistrationRepository;
     }
 
-    // (provider, providerId) 매칭 회원이 있으면 로그인, 동일 이메일의 기존 회원이 있으면 자동 연동, 둘 다 없으면 신규 생성
+    // (provider, providerId) 매칭 회원이 있으면 로그인, 동일 이메일의 기존 회원이 있으면 거부, 둘 다 없으면 신규 생성
+    // 이메일이 같다는 이유만으로는 자동 연동하지 않는다 - 소셜 제공자의 이메일 주장만으로 서로 다른 계정이
+    // 검증 절차 없이 묶이는 걸 막기 위함 (연동은 반드시 linkSocialAccount()의 명시적 흐름을 거쳐야 함)
     // 휴면 대상 회원은 SocialAccount 연동(save) 등 부수 효과 이전에 차단 - 신규 생성 회원은 항상 ACTIVE라 체크 대상이 아님
     // DormantMemberException 발생 시에도 member.markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
     // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
@@ -44,18 +46,15 @@ public class OAuthAccountService {
                     member.validateNotDormant();
                     return member;
                 })
-                .orElseGet(() -> linkOrCreateMember(provider, providerId, email, name, profileImage));
+                .orElseGet(() -> createIfEmailNotTaken(provider, providerId, email, name, profileImage));
     }
 
-    private Member linkOrCreateMember(String provider, String providerId, String email, String name,
+    private Member createIfEmailNotTaken(String provider, String providerId, String email, String name,
             String profileImage) {
-        return memberRepository.findByEmailAndDeletedAtIsNull(email)
-                .map(member -> {
-                    member.validateNotDormant();
-                    socialAccountRepository.save(SocialAccount.create(member.getId(), provider, providerId));
-                    return member;
-                })
-                .orElseGet(() -> createMember(provider, providerId, email, name, profileImage));
+        if (memberRepository.findByEmailAndDeletedAtIsNull(email).isPresent()) {
+            throw new BusinessException(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+        }
+        return createMember(provider, providerId, email, name, profileImage);
     }
 
     // 탈퇴 회원의 이메일은 members.email 유니크 제약으로 재사용될 수 없어 unfiltered existsByEmail로 사전 차단

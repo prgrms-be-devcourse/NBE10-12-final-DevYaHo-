@@ -76,10 +76,11 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
-    // 소셜 로그인 콜백에서 발급받은 1회용 교환 코드를 access/refresh 토큰으로 교환
+    // 소셜 로그인 콜백에서 발급받은 1회용 교환 코드를 access/refresh 토큰으로 교환 (X-Device-Id 없으면 서버가 새로 발급)
     @PostMapping("/api/auth/oauth/exchange")
-    public ResponseEntity<LoginResponse> exchangeOAuthCode(@Valid @RequestBody OAuthExchangeRequest request) {
-        LoginResponse response = authService.exchangeOAuthCode(request.code());
+    public ResponseEntity<LoginResponse> exchangeOAuthCode(@Valid @RequestBody OAuthExchangeRequest request,
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
+        LoginResponse response = authService.exchangeOAuthCode(request.code(), deviceId);
         return ResponseEntity.ok(response);
     }
 
