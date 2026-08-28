@@ -90,3 +90,8 @@ admin-seed:
 
 groupbuy-seed:
   enabled: ${GROUPBUY_SEED_ENABLED:false}
+
+seller-info:
+  encryption:
+    # AES-256(32바이트) 키를 Base64로 인코딩한 값. 운영에서는 반드시 SELLER_INFO_ENC_KEY 환경변수로 주입할 것
+    key: ${SELLER_INFO_ENC_KEY:Q0hBTkdFX01FX2xvY2FsX2Rldl8zMl9ieXRlX2tleSE=}

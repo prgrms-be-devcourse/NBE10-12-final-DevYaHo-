@@ -16,10 +16,12 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductSortType;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import org.mockito.ArgumentCaptor;
 import java.util.List;
 import java.util.Optional;
@@ -109,5 +111,53 @@ class ProductServiceTest {
         ArgumentCaptor<ProductSearchDataChangedEvent> captor = ArgumentCaptor.forClass(ProductSearchDataChangedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().productId()).isEqualTo(42L);
+    }
+
+    // approve 호출 시 조회한 Product의 approve()를 위임 호출한다
+    @Test
+    void approve_PENDING_상품을_승인한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
+        Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        productService.approve(1L);
+
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
+    }
+
+    // 존재하지 않는 productId로 approve 호출 시 PRODUCT_NOT_FOUND 예외를 던진다
+    @Test
+    void approve_존재하지_않는_상품이면_예외를_던진다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
+        when(productRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.approve(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    // reject 호출 시 조회한 Product의 reject()를 위임 호출한다
+    @Test
+    void reject_PENDING_상품을_거절한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
+        Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        productService.reject(1L);
+
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.REJECTED);
+    }
+
+    // 이미 처리된(APPROVED) 상품을 다시 승인 시도하면 PRODUCT_ALREADY_PROCESSED 예외를 던진다
+    @Test
+    void approve_이미_처리된_상품이면_예외를_던진다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
+        Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
+        product.approve();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> productService.approve(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_ALREADY_PROCESSED);
     }
 }

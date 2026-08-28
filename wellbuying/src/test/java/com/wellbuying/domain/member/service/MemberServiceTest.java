@@ -181,7 +181,7 @@ class MemberServiceTest {
         verify(socialAccountRepository).deleteAllByMemberId(1L);
     }
 
-    // 탈퇴 시 PENDING/TERMINATED 셀러 신청 이력은 즉시 삭제되는지 검증
+    // 탈퇴 시 PENDING/REJECTED 셀러 신청 이력은 즉시 삭제되는지 검증
     @Test
     void 탈퇴시_PENDING_셀러_신청은_삭제된다() {
         Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
@@ -194,14 +194,14 @@ class MemberServiceTest {
         verify(sellerInfoRepository).delete(pending);
     }
 
-    // 탈퇴 시 ACTIVE 셀러(금융 정보 보유)는 Phase 12까지 삭제하지 않는지 검증
+    // 탈퇴 시 APPROVED 셀러(금융 정보 보유)는 Phase 12까지 삭제하지 않는지 검증
     @Test
-    void 탈퇴시_ACTIVE_셀러_정보는_삭제하지_않는다() {
+    void 탈퇴시_APPROVED_셀러_정보는_삭제하지_않는다() {
         Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
-        SellerInfo active = SellerInfo.apply(1L, "004", "국민은행", "123456", "홍길동", "회사");
-        active.approve();
+        SellerInfo approved = SellerInfo.apply(1L, "004", "국민은행", "123456", "홍길동", "회사");
+        approved.approve();
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
-        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(active));
+        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(approved));
 
         memberService.withdraw(1L);
 

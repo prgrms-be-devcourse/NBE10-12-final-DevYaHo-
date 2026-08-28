@@ -1,1 +1,2 @@
 com.wellbuying.global.config.QuerydslConfig
+com.wellbuying.domain.seller.crypto.SellerInfoCryptoConfig
