@@ -23,12 +23,28 @@ public class SellerInfoFieldConverter implements AttributeConverter<String, Stri
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int IV_LENGTH_BYTES = 12;
     private static final int TAG_LENGTH_BITS = 128;
+    private static final int KEY_LENGTH_BYTES = 32;
 
     private final SecretKeySpec secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    // 키 설정 오류를 빈 생성 시점(애플리케이션 기동 시)에 바로 드러내기 위한 Fail-Fast 검증.
+    // 검증 없이 두면 첫 암/복호화 호출 시점(요청 처리 중)에야 실패해 원인 파악이 늦어짐
     public SellerInfoFieldConverter(SellerInfoEncryptionProperties properties) {
-        byte[] keyBytes = Base64.getDecoder().decode(properties.key());
+        if (properties.key() == null || properties.key().isBlank()) {
+            throw new IllegalStateException("SellerInfo 암호화 키(seller-info.encryption.key)가 설정되지 않았습니다.");
+        }
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(properties.key());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("SellerInfo 암호화 키가 Base64 형식이 아닙니다.", e);
+        }
+        if (keyBytes.length != KEY_LENGTH_BYTES) {
+            throw new IllegalStateException(
+                    "SellerInfo 암호화 키 길이가 올바르지 않습니다. AES-256에는 " + KEY_LENGTH_BYTES
+                            + "바이트 키가 필요합니다(현재 " + keyBytes.length + "바이트).");
+        }
         this.secretKey = new SecretKeySpec(keyBytes, "AES");
     }
 
