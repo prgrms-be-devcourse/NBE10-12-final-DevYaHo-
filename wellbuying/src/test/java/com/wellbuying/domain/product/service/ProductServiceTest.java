@@ -20,6 +20,7 @@ import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
+import org.mockito.ArgumentCaptor;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -105,6 +106,8 @@ class ProductServiceTest {
 
         productService.createProduct(1L, request);
 
-        verify(eventPublisher).publishEvent(any(ProductSearchDataChangedEvent.class));
+        ArgumentCaptor<ProductSearchDataChangedEvent> captor = ArgumentCaptor.forClass(ProductSearchDataChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().productId()).isEqualTo(42L);
     }
 }
