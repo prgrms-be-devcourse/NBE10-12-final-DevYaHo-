@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
@@ -38,10 +39,13 @@ class ProductServiceTest {
     @Mock
     private ProductCategoryRepository productCategoryRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     // getProducts 호출 시 전달받은 condition/pageable을 그대로 리포지토리에 넘기고, 결과를 그대로 반환한다
     @Test
     void getProducts_리포지토리_결과를_그대로_반환한다() {
-        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
         ProductSearchCondition condition = new ProductSearchCondition(1L, 1000, 5000, ProductSortType.LATEST);
         PageRequest pageable = PageRequest.of(0, 20);
         ProductSummaryResponse response = new ProductSummaryResponse(1L, "상품", 3000, "url", 0L);
@@ -57,7 +61,7 @@ class ProductServiceTest {
     // 존재하는 상품 ID로 조회하면 엔티티 필드를 그대로 담은 상세 응답을 반환한다
     @Test
     void getDetail_존재하는_상품이면_상세정보를_반환한다() {
-        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(10L);
         when(product.getProductName()).thenReturn("상품");
@@ -75,7 +79,7 @@ class ProductServiceTest {
     // 존재하지 않는 상품 ID로 조회하면 PRODUCT_NOT_FOUND 예외를 던진다
     @Test
     void getDetail_존재하지_않으면_예외를_던진다() {
-        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
         when(productRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.getDetail(99L)).isInstanceOf(BusinessException.class);
