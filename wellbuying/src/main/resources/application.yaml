@@ -23,6 +23,9 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+opensearch:
+  uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
   task:
     scheduling:
       pool:
