@@ -2,18 +2,23 @@ package com.wellbuying.domain.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.Role;
+import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductSortType;
-import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
+import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
 import java.util.List;
 import java.util.Optional;
@@ -83,5 +88,23 @@ class ProductServiceTest {
         when(productRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.getDetail(99L)).isInstanceOf(BusinessException.class);
+    }
+
+    // 상품 등록 성공 시 검색 인덱스 동기화를 위한 이벤트가 발행된다
+    @Test
+    void createProduct_성공시_검색동기화_이벤트를_발행한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, eventPublisher);
+        Member seller = mock(Member.class);
+        when(seller.getRole()).thenReturn(Role.SELLER);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(seller));
+        when(productCategoryRepository.existsById(10L)).thenReturn(true);
+        Product savedProduct = mock(Product.class);
+        when(savedProduct.getId()).thenReturn(42L);
+        when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
+        ProductCreateRequest request = new ProductCreateRequest(10L, "상품명", "설명", 1000, "url");
+
+        productService.createProduct(1L, request);
+
+        verify(eventPublisher).publishEvent(any(ProductSearchDataChangedEvent.class));
     }
 }
