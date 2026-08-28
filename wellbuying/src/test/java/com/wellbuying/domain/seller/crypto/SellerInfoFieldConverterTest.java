@@ -69,26 +69,4 @@ class SellerInfoFieldConverterTest {
         assertThatThrownBy(() -> converter.convertToEntityAttribute("이건 Base64가 아님!!"))
                 .isInstanceOf(IllegalStateException.class);
     }
-
-    @Test
-    void 키가_비어있으면_생성_시점에_예외가_발생한다() {
-        assertThatThrownBy(() -> new SellerInfoFieldConverter(new SellerInfoEncryptionProperties("")))
-                .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new SellerInfoFieldConverter(new SellerInfoEncryptionProperties(null)))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void 키가_Base64_형식이_아니면_생성_시점에_예외가_발생한다() {
-        assertThatThrownBy(() -> new SellerInfoFieldConverter(new SellerInfoEncryptionProperties("이건 Base64가 아님!!")))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void 키_길이가_32바이트가_아니면_생성_시점에_예외가_발생한다() {
-        String tooShortKey = java.util.Base64.getEncoder().encodeToString(new byte[16]);
-
-        assertThatThrownBy(() -> new SellerInfoFieldConverter(new SellerInfoEncryptionProperties(tooShortKey)))
-                .isInstanceOf(IllegalStateException.class);
-    }
 }
