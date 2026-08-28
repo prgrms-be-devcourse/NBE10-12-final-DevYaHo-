@@ -64,7 +64,7 @@ class ProductServiceTest {
         when(product.getDescription()).thenReturn("설명");
         when(product.getStartPrice()).thenReturn(3000);
         when(product.getThumbnailUrl()).thenReturn("url");
-        when(product.isAvailable()).thenReturn(true);
+        when(product.isApproved()).thenReturn(true);
         when(productRepository.findById(10L)).thenReturn(Optional.of(product));
 
         ProductDetailResponse result = productService.getDetail(10L);
