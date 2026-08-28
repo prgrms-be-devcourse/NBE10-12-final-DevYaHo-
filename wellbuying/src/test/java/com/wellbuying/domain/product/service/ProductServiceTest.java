@@ -123,6 +123,7 @@ class ProductServiceTest {
         productService.approve(1L);
 
         assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
+        verify(eventPublisher).publishEvent(any(ProductSearchDataChangedEvent.class));
     }
 
     // 존재하지 않는 productId로 approve 호출 시 PRODUCT_NOT_FOUND 예외를 던진다
@@ -146,6 +147,7 @@ class ProductServiceTest {
         productService.reject(1L);
 
         assertThat(product.getStatus()).isEqualTo(ProductStatus.REJECTED);
+        verify(eventPublisher).publishEvent(any(ProductSearchDataChangedEvent.class));
     }
 
     // 이미 처리된(APPROVED) 상품을 다시 승인 시도하면 PRODUCT_ALREADY_PROCESSED 예외를 던진다

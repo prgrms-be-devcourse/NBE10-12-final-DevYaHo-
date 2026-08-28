@@ -95,12 +95,14 @@ public class ProductService {
     @Transactional
     public void approve(Long productId) {
         findProduct(productId).approve();
+        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
     }
 
     // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
     public void reject(Long productId) {
         findProduct(productId).reject();
+        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
     }
 
     private Product findProduct(Long productId) {
