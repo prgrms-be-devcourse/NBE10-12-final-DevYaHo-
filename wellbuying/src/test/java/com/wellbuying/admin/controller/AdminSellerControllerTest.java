@@ -15,6 +15,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
+import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -131,7 +132,7 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
-    // 이미 처리된(ACTIVE) 셀러 신청을 다시 승인 시도하면 409와 SELLER_409_ALREADY_PROCESSED를 반환하는지 검증
+    // 이미 처리된(APPROVED) 셀러 신청을 다시 승인 시도하면 409와 SELLER_409_ALREADY_PROCESSED를 반환하는지 검증
     @Test
     void 이미_처리된_셀러_신청은_승인에_실패한다() throws Exception {
         Member admin = saveMember("admin-already-processed@example.com", Role.ADMIN);
@@ -144,6 +145,87 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SELLER_409_ALREADY_PROCESSED"));
+    }
+
+    // ADMIN이 APPROVED 상태의 셀러를 정지하면 204를 반환하고 status가 SUSPENDED로 바뀌는지 검증
+    @Test
+    void 관리자가_셀러_정지에_성공한다() throws Exception {
+        Member admin = saveMember("admin-suspend@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-suspend@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+        sellerInfo.approve();
+        sellerInfoRepository.save(sellerInfo);
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent())
+                .andDo(document("admin/seller-suspend-success"));
+
+        SellerInfo updated = sellerInfoRepository.findById(sellerInfo.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(updated.getStatus())
+                .isEqualTo(SellerStatus.SUSPENDED);
+    }
+
+    // APPROVED 상태가 아닌 셀러를 정지 시도하면 409와 SELLER_409_NOT_APPROVED를 반환하는지 검증
+    @Test
+    void APPROVED_상태가_아니면_셀러_정지에_실패한다() throws Exception {
+        Member admin = saveMember("admin-suspend-invalid@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-suspend-invalid@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SELLER_409_NOT_APPROVED"));
+    }
+
+    // ADMIN이 아닌 회원이 정지 API를 호출하면 403을 반환하는지 검증
+    @Test
+    void 관리자가_아니면_셀러_정지에_실패한다() throws Exception {
+        Member buyer = saveMember("buyer-suspend-forbidden@example.com", Role.BUYER);
+        Member applicant = saveMember("seller-suspend-forbidden@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+        sellerInfo.approve();
+        sellerInfoRepository.save(sellerInfo);
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .with(authentication(authOf(buyer))))
+                .andExpect(status().isForbidden());
+    }
+
+    // ADMIN이 SUSPENDED 상태의 셀러를 정지 복귀시키면 204를 반환하고 status가 다시 APPROVED로 바뀌는지 검증
+    @Test
+    void 관리자가_셀러_정지_복귀에_성공한다() throws Exception {
+        Member admin = saveMember("admin-reactivate@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-reactivate@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+        sellerInfo.approve();
+        sellerInfo.suspend();
+        sellerInfoRepository.save(sellerInfo);
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/reactivate", sellerInfo.getId())
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent())
+                .andDo(document("admin/seller-reactivate-success"));
+
+        SellerInfo updated = sellerInfoRepository.findById(sellerInfo.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(updated.getStatus())
+                .isEqualTo(SellerStatus.APPROVED);
+    }
+
+    // SUSPENDED 상태가 아닌 셀러를 정지 복귀 시도하면 409와 SELLER_409_NOT_SUSPENDED를 반환하는지 검증
+    @Test
+    void SUSPENDED_상태가_아니면_셀러_정지_복귀에_실패한다() throws Exception {
+        Member admin = saveMember("admin-reactivate-invalid@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-reactivate-invalid@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+        sellerInfo.approve();
+        sellerInfoRepository.save(sellerInfo);
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/reactivate", sellerInfo.getId())
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SELLER_409_NOT_SUSPENDED"));
     }
 
     // 상태별 셀러 신청 목록 조회가 PagedModel 형태(content + page 메타데이터)로 PENDING 목록만 반환하는지 검증

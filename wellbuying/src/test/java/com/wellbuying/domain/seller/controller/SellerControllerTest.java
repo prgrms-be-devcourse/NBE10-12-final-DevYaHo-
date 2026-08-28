@@ -114,7 +114,7 @@ class SellerControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
-    // 거절(TERMINATED)된 회원이 다시 신청하면 201을 반환하고 기존 행이 PENDING으로 갱신되는지 검증
+    // 거절(REJECTED)된 회원이 다시 신청하면 201을 반환하고 기존 행이 PENDING으로 갱신되는지 검증
     @Test
     void 거절된_회원은_재신청에_성공한다() throws Exception {
         Member member = memberRepository.save(

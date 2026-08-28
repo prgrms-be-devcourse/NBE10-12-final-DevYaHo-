@@ -35,17 +35,31 @@ public class AdminSellerController {
         return ResponseEntity.ok(sellerInfoService.findByStatus(status, pageable));
     }
 
-    // 셀러 승인 - SELLER_INFO.status를 ACTIVE로, MEMBERS.role을 SELLER로 변경
+    // 셀러 승인 - SELLER_INFO.status를 APPROVED로, MEMBERS.role을 SELLER로 변경
     @PostMapping("/{sellerId}/approve")
     public ResponseEntity<Void> approve(@PathVariable Long sellerId) {
         sellerInfoService.approve(sellerId);
         return ResponseEntity.noContent().build();
     }
 
-    // 셀러 거절 - SELLER_INFO.status를 TERMINATED로 변경 (role은 BUYER 유지)
+    // 셀러 거절 - SELLER_INFO.status를 REJECTED로 변경 (role은 BUYER 유지)
     @PostMapping("/{sellerId}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long sellerId) {
         sellerInfoService.reject(sellerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 셀러 정지 - SELLER_INFO.status를 SUSPENDED로 변경 (role은 SELLER 유지)
+    @PostMapping("/{sellerId}/suspend")
+    public ResponseEntity<Void> suspend(@PathVariable Long sellerId) {
+        sellerInfoService.suspend(sellerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 셀러 정지 복귀 - SELLER_INFO.status를 다시 APPROVED로 변경
+    @PostMapping("/{sellerId}/reactivate")
+    public ResponseEntity<Void> reactivate(@PathVariable Long sellerId) {
+        sellerInfoService.reactivate(sellerId);
         return ResponseEntity.noContent().build();
     }
 }

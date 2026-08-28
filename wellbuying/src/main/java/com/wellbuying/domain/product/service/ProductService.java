@@ -83,4 +83,21 @@ public class ProductService {
     public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
         return productRepository.findBySeller(sellerId, pageable);
     }
+
+    // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
+    @Transactional
+    public void approve(Long productId) {
+        findProduct(productId).approve();
+    }
+
+    // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
+    @Transactional
+    public void reject(Long productId) {
+        findProduct(productId).reject();
+    }
+
+    private Product findProduct(Long productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
 }
