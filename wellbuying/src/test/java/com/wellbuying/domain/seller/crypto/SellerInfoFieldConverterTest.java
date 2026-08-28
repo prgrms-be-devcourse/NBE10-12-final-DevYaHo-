@@ -63,4 +63,10 @@ class SellerInfoFieldConverterTest {
         assertThatThrownBy(() -> converter.convertToEntityAttribute(tooShort))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void Base64_형식이_아닌_데이터를_복호화하면_예외가_발생한다() {
+        assertThatThrownBy(() -> converter.convertToEntityAttribute("이건 Base64가 아님!!"))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

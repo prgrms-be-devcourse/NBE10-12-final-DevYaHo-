@@ -58,7 +58,12 @@ public class SellerInfoFieldConverter implements AttributeConverter<String, Stri
         if (dbData == null) {
             return null;
         }
-        byte[] decoded = Base64.getDecoder().decode(dbData);
+        byte[] decoded;
+        try {
+            decoded = Base64.getDecoder().decode(dbData);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("SellerInfo 필드 복호화에 실패했습니다: Base64 형식이 아닙니다.", e);
+        }
         // 빈 문자열이나 손상된 데이터가 들어오면 아래에서 음수 배열 크기 예외가 나므로 미리 명확한 예외로 방어
         if (decoded.length < IV_LENGTH_BYTES) {
             throw new IllegalStateException("SellerInfo 필드 복호화에 실패했습니다: 암호화된 데이터 길이가 유효하지 않습니다.");
