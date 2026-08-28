@@ -1,6 +1,7 @@
 package com.wellbuying.domain.seller.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -10,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
+import com.wellbuying.domain.seller.crypto.SellerInfoFieldConverter;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import org.hibernate.annotations.CreationTimestamp;
@@ -37,10 +39,13 @@ public class SellerInfo {
     @Column(name = "bank_name", nullable = false)
     private String bankName;
 
-    @Column(name = "account_number", nullable = false)
+    // AES-256-GCM 암호화 저장 (SellerInfoFieldConverter) - 컬럼에는 IV+암호문을 Base64로 인코딩해 저장
+    @Convert(converter = SellerInfoFieldConverter.class)
+    @Column(name = "account_number", nullable = false, length = 500)
     private String accountNumber;
 
-    @Column(name = "account_holder", nullable = false)
+    @Convert(converter = SellerInfoFieldConverter.class)
+    @Column(name = "account_holder", nullable = false, length = 500)
     private String accountHolder;
 
     @Column(name = "company_name")
