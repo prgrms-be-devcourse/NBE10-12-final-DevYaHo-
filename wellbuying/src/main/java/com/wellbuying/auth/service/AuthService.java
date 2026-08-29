@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -62,11 +66,15 @@ public class AuthService {
     @Transactional(noRollbackFor = DormantMemberException.class)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+                .orElseThrow(() -> {
+                    log.warn("로그인 실패: 존재하지 않는 이메일");
+                    return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+                });
         if (member.isSocialOnly()) {
             throw new BusinessException(ErrorCode.SOCIAL_ONLY_ACCOUNT);
         }
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
+            log.warn("로그인 실패: 비밀번호 불일치 - memberId={}", member.getId());
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         member.validateNotDormant();
@@ -133,9 +141,11 @@ public class AuthService {
 
         long result = refreshTokenRepository.rotate(memberId, deviceId, oldTokenHash, newTokenHash);
         if (result == 0) {
+            log.debug("토큰 재발급 실패: 세션 없음(만료/로그아웃) - memberId={}, deviceId={}", memberId, deviceId);
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         if (result < 0) {
+            log.warn("리프레시 토큰 재사용 탐지: memberId={}, deviceId={}", memberId, deviceId);
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
         }
 

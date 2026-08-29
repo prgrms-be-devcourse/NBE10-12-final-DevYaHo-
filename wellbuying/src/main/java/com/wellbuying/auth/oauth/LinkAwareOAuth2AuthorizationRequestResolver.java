@@ -1,6 +1,8 @@
 package com.wellbuying.auth.oauth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
@@ -8,6 +10,8 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 
 // 소셜 계정 추가 연동 요청(link_token 쿼리파라미터)을 세션에 옮겨 담아 콜백 시점의 CustomOAuth2UserService가 읽을 수 있게 함
 public class LinkAwareOAuth2AuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(LinkAwareOAuth2AuthorizationRequestResolver.class);
 
     public static final String SOCIAL_LINK_MEMBER_ID_SESSION_KEY = "SOCIAL_LINK_MEMBER_ID";
     private static final String LINK_TOKEN_PARAM = "link_token";
@@ -47,6 +51,8 @@ public class LinkAwareOAuth2AuthorizationRequestResolver implements OAuth2Author
             return;
         }
         socialLinkTicketRepository.consume(linkToken)
-                .ifPresent(memberId -> request.getSession().setAttribute(SOCIAL_LINK_MEMBER_ID_SESSION_KEY, memberId));
+                .ifPresentOrElse(
+                        memberId -> request.getSession().setAttribute(SOCIAL_LINK_MEMBER_ID_SESSION_KEY, memberId),
+                        () -> log.warn("소셜 계정 연동 요청 실패: link_token이 만료됐거나 이미 사용됨"));
     }
 }
