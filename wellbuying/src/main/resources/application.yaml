@@ -26,9 +26,6 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
-opensearch:
-  uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
   task:
     scheduling:
       pool:
@@ -72,6 +69,9 @@ opensearch:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
+
+opensearch:
+  uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
 
 jwt:
   secret: ${JWT_SECRET:CHANGE_ME_local_dev_secret_key_min_256_bits_______}
