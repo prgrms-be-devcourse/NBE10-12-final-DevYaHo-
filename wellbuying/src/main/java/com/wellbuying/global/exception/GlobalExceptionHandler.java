@@ -60,7 +60,7 @@ public class GlobalExceptionHandler {
         }
 
         String message = violations.stream()
-                .sorted(Comparator.comparing(cv -> cv.getPropertyPath().toString()))
+                .sorted(Comparator.comparing(cv -> cv.getPropertyPath() != null ? cv.getPropertyPath().toString() : ""))
                 .map(cv -> extractPropertyName(cv) + ": " + cv.getMessage())
                 .collect(Collectors.joining(", "));
 
