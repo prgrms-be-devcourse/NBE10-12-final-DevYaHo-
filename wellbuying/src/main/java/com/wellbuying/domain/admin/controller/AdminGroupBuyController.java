@@ -5,6 +5,10 @@ import com.wellbuying.domain.groupbuy.dto.GroupBuySummaryResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuySuspensionRequestResponse;
 import com.wellbuying.domain.groupbuy.entity.GroupBuySuspensionStatus;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
+import com.wellbuying.global.config.OpenApiConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -22,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/groupBuys")
 @PreAuthorize("hasRole('ADMIN')")
+@Tag(name = "관리자 - 공동구매", description = "공동구매 목록 조회/판매정지 요청 승인·반려")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AdminGroupBuyController {
 
     private final GroupBuyService groupBuyService;
@@ -31,6 +37,7 @@ public class AdminGroupBuyController {
     }
 
     // 전체 공동구매 목록 조회 (상태 필터 선택)
+    @Operation(summary = "전체 공동구매 목록 조회 (상태 필터 선택)")
     @GetMapping
     public ResponseEntity<Page<GroupBuySummaryResponse>> list(
             @RequestParam(required = false) GroupBuyStatus status,
@@ -39,6 +46,7 @@ public class AdminGroupBuyController {
     }
 
     // 상태별 판매정지 요청 목록 조회 (예: ?status=PENDING으로 처리 대기 목록 조회)
+    @Operation(summary = "상태별 판매정지 요청 목록 조회")
     @GetMapping("/suspension-requests")
     public ResponseEntity<Page<GroupBuySuspensionRequestResponse>> listSuspensionRequests(
             @RequestParam GroupBuySuspensionStatus status,
@@ -47,6 +55,7 @@ public class AdminGroupBuyController {
     }
 
     // 판매정지 요청 승인 - 대상 공동구매를 suspended=true로 전환
+    @Operation(summary = "판매정지 요청 승인 - 대상 공동구매를 suspended=true로 전환")
     @PostMapping("/suspension-requests/{id}/approve")
     public ResponseEntity<Void> approve(@PathVariable Long id) {
         groupBuyService.approveSuspensionRequest(id);
@@ -54,6 +63,7 @@ public class AdminGroupBuyController {
     }
 
     // 판매정지 요청 반려
+    @Operation(summary = "판매정지 요청 반려")
     @PostMapping("/suspension-requests/{id}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long id) {
         groupBuyService.rejectSuspensionRequest(id);
