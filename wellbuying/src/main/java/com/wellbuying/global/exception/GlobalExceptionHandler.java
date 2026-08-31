@@ -1,5 +1,6 @@
 package com.wellbuying.global.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,6 +38,17 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .orElse(ErrorCode.INVALID_INPUT.getMessage());
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+    }
+
+    // @Validated + @RequestParam 제약 위반(NotBlank/Min/Max 등)을 400으로 응답
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .findFirst()
+                .map(cv -> cv.getMessage())
                 .orElse(ErrorCode.INVALID_INPUT.getMessage());
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));

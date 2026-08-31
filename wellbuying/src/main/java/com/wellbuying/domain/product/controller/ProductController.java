@@ -16,12 +16,16 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/products")
+@Validated
 @Tag(name = "상품", description = "상품 조회/등록")
 public class ProductController {
 
@@ -90,11 +95,11 @@ public class ProductController {
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
     @GetMapping("/search")
     public Slice<ProductSearchResponse> searchProducts(
-            @RequestParam String keyword,
+            @RequestParam @NotBlank(message = "검색 키워드는 필수입니다.") String keyword,
             @RequestParam(defaultValue = "RELEVANCE") SearchSortType sort,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
-        return productSearchService.search(keyword, sort, page, size);
+        return productSearchService.search(keyword.trim(), sort, page, size);
     }
 }

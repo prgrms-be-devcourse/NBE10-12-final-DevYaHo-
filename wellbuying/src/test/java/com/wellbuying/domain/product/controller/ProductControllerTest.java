@@ -81,4 +81,18 @@ class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].productName").value("비타민C"));
     }
+
+    // 빈 문자열 keyword는 @NotBlank 위반 → 400
+    @Test
+    void searchProducts_빈_키워드로_검색하면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", ""))
+                .andExpect(status().isBadRequest());
+    }
+
+    // size가 100 초과이면 @Max(100) 위반 → 400
+    @Test
+    void searchProducts_size가_100_초과이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "101"))
+                .andExpect(status().isBadRequest());
+    }
 }

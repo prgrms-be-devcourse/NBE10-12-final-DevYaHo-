@@ -1,6 +1,7 @@
 package com.wellbuying.domain.product.search;
 
-import java.util.ArrayList;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +23,11 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
 
     @Override
     public Slice<ProductSearchResponse> search(String keyword, SearchSortType sort, int page, int size) {
+        // TODO: 최신순, 가격순 정렬 확장 시 이 분기 추가
+        if (sort != SearchSortType.RELEVANCE) {
+            throw new BusinessException(ErrorCode.SEARCH_SORT_NOT_SUPPORTED);
+        }
+
         Query searchQuery = buildQuery(keyword);
 
         NativeQuery nativeQuery = new NativeQueryBuilder()
@@ -32,17 +38,13 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
 
         SearchHits<ProductSearchDocument> hits = operations.search(nativeQuery, ProductSearchDocument.class);
 
-        List<ProductSearchResponse> content = new ArrayList<>(
-                hits.stream()
-                        .map(SearchHit::getContent)
-                        .map(ProductSearchResponse::from)
-                        .toList()
-        );
+        boolean hasNext = hits.getSearchHits().size() > size;
 
-        boolean hasNext = content.size() > size;
-        if (hasNext) {
-            content.remove(content.size() - 1);
-        }
+        List<ProductSearchResponse> content = hits.stream()
+                .limit(size)
+                .map(SearchHit::getContent)
+                .map(ProductSearchResponse::from)
+                .toList();
 
         return new SliceImpl<>(content, PageRequest.of(page, size), hasNext);
     }
