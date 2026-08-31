@@ -215,7 +215,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             int quantity = entry[2];
             try {
                 groupBuyParticipationService.participate(buyerId, groupBuyId,
-                        new GroupBuyPartCreateRequest(quantity));
+                        new GroupBuyPartCreateRequest(quantity, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
             } catch (RuntimeException e) {
                 log.warn("GroupBuySeedRunner: failed to seed participation for groupBuy {} - {}", groupBuyId,
                         e.getMessage());

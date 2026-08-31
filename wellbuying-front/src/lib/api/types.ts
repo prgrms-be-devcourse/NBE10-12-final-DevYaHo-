@@ -155,6 +155,9 @@ export type GroupBuySummaryResponse = {
 
 export type GroupBuyPartCreateRequest = {
   quantity: number;
+  address: string;
+  addressDetail?: string;
+  zipcode: string;
 };
 
 export type GroupBuySuspensionStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -227,6 +230,9 @@ export type GroupBuyPartResponse = {
   quantity: number;
   appliedPrice: number | null;
   status: GroupBuyPartStatus;
+  address: string | null;
+  addressDetail: string | null;
+  zipcode: string | null;
   createdAt: string;
 };
 
