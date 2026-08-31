@@ -20,6 +20,7 @@ public enum ErrorCode {
     SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다."),
     OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다."),
     SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.CONFLICT, "SOCIAL_409_ALREADY_LINKED", "이미 연동된 소셜 계정입니다."),
+    SOCIAL_EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "SOCIAL_409_EMAIL_EXISTS", "이미 가입된 이메일입니다. 로그인 후 연동해주세요."),
     SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "SOCIAL_404_NOT_FOUND", "연동되지 않은 소셜 계정입니다."),
     SOCIAL_ACCOUNT_LAST_LOGIN_METHOD(HttpStatus.CONFLICT, "SOCIAL_409_LAST_LOGIN_METHOD",
             "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요."),

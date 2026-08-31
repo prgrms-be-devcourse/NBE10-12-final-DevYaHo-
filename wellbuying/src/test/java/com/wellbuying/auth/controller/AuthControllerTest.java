@@ -435,7 +435,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
         assertThat(redisTemplate.hasKey("ReT:" + member.getId())).isFalse();
     }
 
-    // 소셜 로그인 성공 후 발급된 1회용 교환 코드로 access/refresh 토큰을 정상 교환하는지 검증
+    // 소셜 로그인 성공 후 발급된 1회용 교환 코드로 access/refresh 토큰을 정상 교환하고, X-Device-Id로 보낸 기존 deviceId를 그대로 재사용하는지 검증
     @Test
     void 유효한_교환코드로_토큰을_교환한다() throws Exception {
         Member member = signUpMember("oauth-exchange-success@example.com");
@@ -446,12 +446,16 @@ class AuthControllerTest extends AbstractIntegrationTest {
                 """.formatted(code);
 
         mockMvc.perform(post("/api/auth/oauth/exchange")
+                        .header("X-Device-Id", "pc_web_browser_uuid")
                         .contentType("application/json")
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.deviceId").value("pc_web_browser_uuid"))
                 .andDo(document("auth/oauth-exchange-success",
+                        requestHeaders(
+                                headerWithName("X-Device-Id").description("기기 식별자 (선택, 없으면 서버가 신규 발급)").optional()),
                         requestFields(fieldWithPath("code").description("소셜 로그인 콜백에서 발급받은 1회용 교환 코드")),
                         responseFields(
                                 fieldWithPath("accessToken").description("Access Token"),

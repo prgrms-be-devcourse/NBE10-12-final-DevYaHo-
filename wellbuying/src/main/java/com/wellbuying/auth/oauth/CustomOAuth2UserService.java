@@ -4,7 +4,6 @@ import com.wellbuying.auth.service.OAuthAccountService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.domain.member.entity.Member;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,10 +20,13 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private static final Logger log = LoggerFactory.getLogger(CustomOAuth2UserService.class);
 
     private final OAuthAccountService oAuthAccountService;
+    private final SocialLinkTicketRepository socialLinkTicketRepository;
     private final HttpServletRequest request;
 
-    public CustomOAuth2UserService(OAuthAccountService oAuthAccountService, HttpServletRequest request) {
+    public CustomOAuth2UserService(OAuthAccountService oAuthAccountService,
+            SocialLinkTicketRepository socialLinkTicketRepository, HttpServletRequest request) {
         this.oAuthAccountService = oAuthAccountService;
+        this.socialLinkTicketRepository = socialLinkTicketRepository;
         this.request = request;
     }
 
@@ -61,15 +63,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         }
     }
 
-    // 성공/실패 관계없이 세션에 남지 않도록 읽는 즉시 제거
+    // 이 콜백 요청의 state로 조회 - LinkAwareOAuth2AuthorizationRequestResolver가 동일 인가요청에서
+    // 실제로 link_token을 소비해 바인딩해둔 경우에만 값이 존재하므로, 무관한 요청으로는 연동되지 않음
     private Long consumeLinkMemberId() {
-        HttpSession session = request.getSession(false);
-        if (session == null) {
-            return null;
-        }
-        Long linkMemberId = (Long) session.getAttribute(
-                LinkAwareOAuth2AuthorizationRequestResolver.SOCIAL_LINK_MEMBER_ID_SESSION_KEY);
-        session.removeAttribute(LinkAwareOAuth2AuthorizationRequestResolver.SOCIAL_LINK_MEMBER_ID_SESSION_KEY);
-        return linkMemberId;
+        String state = request.getParameter("state");
+        return socialLinkTicketRepository.consumeByState(state).orElse(null);
     }
 }

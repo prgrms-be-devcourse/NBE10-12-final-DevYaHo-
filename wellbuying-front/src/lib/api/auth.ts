@@ -80,7 +80,12 @@ export function getOAuthAuthorizationUrl(provider: OAuthProvider): string {
 }
 
 export async function exchangeOAuthCode(code: string): Promise<LoginResponse> {
-  const response = await http.post<LoginResponse>("/api/auth/oauth/exchange", { code });
+  const deviceId = getDeviceId();
+  const response = await http.post<LoginResponse>(
+    "/api/auth/oauth/exchange",
+    { code },
+    { headers: deviceId ? { "X-Device-Id": deviceId } : {} },
+  );
   saveTokens({ accessToken: response.accessToken, refreshToken: response.refreshToken });
   saveDeviceId(response.deviceId);
   return response;
