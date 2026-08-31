@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,9 @@ class ProductControllerTest {
 
     @MockitoBean
     private ProductService productService;
+
+    @MockitoBean
+    private ProductSearchService productSearchService;
 
     // 파라미터 없이 호출해도 200과 함께 목록이 반환된다
     @Test
@@ -63,5 +68,17 @@ class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.productName").value("상품"))
                 .andExpect(jsonPath("$.description").value("설명"));
+    }
+
+    // keyword 파라미터로 검색 시 200과 함께 결과 목록이 반환된다
+    @Test
+    void searchProducts_키워드로_검색하면_결과를_반환한다() throws Exception {
+        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L);
+        Slice<ProductSearchResponse> slice = new SliceImpl<>(List.of(response), PageRequest.of(0, 20), false);
+        when(productSearchService.search(any(), any(), any(int.class), any(int.class))).thenReturn(slice);
+
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].productName").value("비타민C"));
     }
 }

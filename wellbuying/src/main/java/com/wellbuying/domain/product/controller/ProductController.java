@@ -7,6 +7,9 @@ import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.search.SearchSortType;
+import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -28,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductSearchService productSearchService;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, ProductSearchService productSearchService) {
         this.productService = productService;
+        this.productSearchService = productSearchService;
     }
 
     // 카테고리/가격 필터와 정렬 조건을 받아 상품 목록을 페이지 단위로 조회
@@ -69,5 +74,16 @@ public class ProductController {
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return productService.getMyProducts(authenticatedMember.memberId(), pageable);
+    }
+
+    // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
+    @GetMapping("/search")
+    public Slice<ProductSearchResponse> searchProducts(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "RELEVANCE") SearchSortType sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return productSearchService.search(keyword, sort, page, size);
     }
 }
