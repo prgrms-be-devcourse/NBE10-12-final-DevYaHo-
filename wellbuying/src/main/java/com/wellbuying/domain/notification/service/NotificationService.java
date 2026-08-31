@@ -1,6 +1,5 @@
 package com.wellbuying.domain.notification.service;
 
-import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.notification.dto.NotificationResponse;
@@ -28,9 +27,6 @@ public class NotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
-    private static final String COMPLETED_MESSAGE = "공동구매가 성사되었습니다. 결제를 진행해주세요.";
-    private static final String FAILED_MESSAGE = "공동구매가 목표 수량 미달로 취소되었습니다.";
-
     private final NotificationRepository notificationRepository;
     private final GroupBuyPartRepository groupBuyPartRepository;
 
@@ -43,18 +39,19 @@ public class NotificationService {
     // 성사 이벤트는 참여자 1명당 1건 발행되므로 memberId가 이미 페이로드에 들어있다
     @Transactional
     public void notifyCompleted(GroupBuyCompletedPayload payload) {
-        save(payload.memberId(), NotificationType.GROUP_BUY_COMPLETED, payload.groupBuyId(), payload.productId(),
-                COMPLETED_MESSAGE);
+        save(payload.memberId(), NotificationType.GROUP_BUY_COMPLETED, payload.groupBuyId(), payload.productId());
     }
 
     // 실패 이벤트는 공동구매당 1건만 발행되므로, 확정 참여자 목록을 직접 조회해 각자에게 알림을 남긴다.
     // 참여자가 N명이면 건별 exists+save로는 2N번의 왕복이 나가므로, 이미 알림이 간 memberId를 한 번의
-    // 쿼리로 모아 걸러낸 뒤 나머지만 saveAll로 한 번에 저장한다(재처리로 일부만 남아있어도 안전)
+    // 쿼리로 모아 걸러낸 뒤 나머지만 saveAll로 한 번에 저장한다(재처리로 일부만 남아있어도 안전).
+    // 필요한 건 memberId뿐이라 GroupBuyPart 엔티티 전체가 아니라 memberId만 프로젝션으로 조회한다
+    // (참여자가 수천~수만 명이어도 영속성 컨텍스트에 불필요한 엔티티가 쌓이지 않도록)
     @Transactional
     public void notifyFailed(GroupBuyFailedPayload payload) {
-        List<GroupBuyPart> confirmedParts = groupBuyPartRepository.findByGroupBuyIdAndStatus(payload.groupBuyId(),
-                GroupBuyPartStatus.CONFIRMED);
-        if (confirmedParts.isEmpty()) {
+        List<Long> confirmedMemberIds = groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(
+                payload.groupBuyId(), GroupBuyPartStatus.CONFIRMED);
+        if (confirmedMemberIds.isEmpty()) {
             return;
         }
 
@@ -63,12 +60,11 @@ public class NotificationService {
 
         // 유니크 제약(member_id, group_buy_id, type) 위반으로 배치 전체가 실패하지 않도록,
         // 같은 회원이 참여자 목록에 중복으로 잡혀도 한 건만 남긴다
-        List<Notification> newNotifications = confirmedParts.stream()
-                .map(GroupBuyPart::getMemberId)
+        List<Notification> newNotifications = confirmedMemberIds.stream()
                 .filter(memberId -> !alreadyNotifiedMemberIds.contains(memberId))
                 .distinct()
                 .map(memberId -> Notification.of(memberId, NotificationType.GROUP_BUY_FAILED, payload.groupBuyId(),
-                        payload.productId(), FAILED_MESSAGE))
+                        payload.productId(), NotificationType.GROUP_BUY_FAILED.defaultMessage()))
                 .toList();
 
         if (!newNotifications.isEmpty()) {
@@ -81,12 +77,13 @@ public class NotificationService {
     // 들어오는 경우), 그 경우 유니크 제약(uq_notification_member_group_buy_type) 위반이 나므로
     // "이미 다른 스레드가 만들어놨다"는 뜻으로 보고 흡수한다 - IDENTITY 채번이라 save()가 즉시
     // INSERT를 실행하므로 이 catch 지점에서 바로 잡힌다
-    private void save(Long memberId, NotificationType type, Long groupBuyId, Long productId, String message) {
+    private void save(Long memberId, NotificationType type, Long groupBuyId, Long productId) {
         if (notificationRepository.existsByMemberIdAndGroupBuyIdAndType(memberId, groupBuyId, type)) {
             return;
         }
         try {
-            notificationRepository.save(Notification.of(memberId, type, groupBuyId, productId, message));
+            notificationRepository.save(
+                    Notification.of(memberId, type, groupBuyId, productId, type.defaultMessage()));
         } catch (DataIntegrityViolationException e) {
             log.debug("동시 처리로 이미 생성된 알림이라 무시함 - memberId: {}, groupBuyId: {}, type: {}", memberId, groupBuyId,
                     type);

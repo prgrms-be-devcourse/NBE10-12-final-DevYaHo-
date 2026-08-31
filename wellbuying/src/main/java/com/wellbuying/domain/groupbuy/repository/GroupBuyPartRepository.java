@@ -21,6 +21,12 @@ public interface GroupBuyPartRepository extends JpaRepository<GroupBuyPart, Long
     // 공동구매 성사 시 Kafka 이벤트를 참여자별로 개별 발행하기 위한 확정 참여자 목록 조회
     List<GroupBuyPart> findByGroupBuyIdAndStatus(Long groupBuyId, GroupBuyPartStatus status);
 
+    // notifyFailed처럼 memberId만 필요한 경우를 위한 프로젝션 - 참여자가 수천~수만 명이어도
+    // GroupBuyPart 엔티티 전체를 영속성 컨텍스트에 올리지 않는다
+    @Query("SELECT p.memberId FROM GroupBuyPart p WHERE p.groupBuyId = :groupBuyId AND p.status = :status")
+    List<Long> findMemberIdsByGroupBuyIdAndStatus(@Param("groupBuyId") Long groupBuyId,
+            @Param("status") GroupBuyPartStatus status);
+
     // GroupBuySeedRunner가 이전에 시딩한 공동구매를 정리할 때 그 참여 내역을 함께 삭제하기 위한 용도
     void deleteByGroupBuyIdIn(List<Long> groupBuyIds);
 

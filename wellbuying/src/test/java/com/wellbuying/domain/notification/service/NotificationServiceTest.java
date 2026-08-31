@@ -9,7 +9,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.notification.entity.Notification;
@@ -92,10 +91,8 @@ class NotificationServiceTest {
     @Test
     void notifyFailed은_확정_참여자_전원에게_알림을_saveAll로_한_번에_저장한다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
-        GroupBuyPart part2 = GroupBuyPart.confirm(1L, 200L, 3);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(part1, part2));
+        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(100L, 200L));
         when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
                 .thenReturn(Set.of());
 
@@ -113,10 +110,8 @@ class NotificationServiceTest {
     @Test
     void notifyFailed은_일부가_중복이어도_나머지는_저장한다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
-        GroupBuyPart part2 = GroupBuyPart.confirm(1L, 200L, 3);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(part1, part2));
+        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(100L, 200L));
         when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
                 .thenReturn(Set.of(100L));
 
@@ -131,9 +126,8 @@ class NotificationServiceTest {
     @Test
     void notifyFailed은_대상이_모두_중복이면_saveAll을_호출하지_않는다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(part1));
+        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(100L));
         when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
                 .thenReturn(Set.of(100L));
 
@@ -147,10 +141,8 @@ class NotificationServiceTest {
     @Test
     void notifyFailed은_같은_회원이_중복이면_한_건으로_합쳐_저장한다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
-        GroupBuyPart part2 = GroupBuyPart.confirm(1L, 100L, 3);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(part1, part2));
+        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(100L, 100L));
         when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
                 .thenReturn(Set.of());
 
