@@ -6,6 +6,11 @@ import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.service.SellerInfoService;
+import com.wellbuying.global.config.OpenApiConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "판매자", description = "셀러 신청/다이렉트 가입/내 셀러 정보")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class SellerController {
 
     private final SellerInfoService sellerInfoService;
@@ -25,6 +32,7 @@ public class SellerController {
     }
 
     // 기존 회원의 셀러 신청 API - 은행/사업자 정보를 받아 PENDING 상태로 신청, 이미 신청 이력이 있으면 409
+    @Operation(summary = "셀러 신청 - 은행/사업자 정보로 PENDING 상태 신청")
     @PostMapping("/api/auth/seller/apply")
     public ResponseEntity<Void> apply(@AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @RequestBody SellerApplyRequest request) {
@@ -33,6 +41,8 @@ public class SellerController {
     }
 
     // 판매자 다이렉트 가입 API - 이메일 인증 완료 확인 후 계정 생성과 셀러 신청을 한 번에 처리 (승인 전까지 role은 BUYER 유지)
+    @Operation(summary = "판매자 다이렉트 가입 - 계정 생성과 셀러 신청을 한 번에 처리")
+    @SecurityRequirements
     @PostMapping("/api/auth/seller/signup")
     public ResponseEntity<SellerSignupResponse> signUp(@Valid @RequestBody SellerSignupRequest request) {
         SellerSignupResponse response = sellerInfoService.signUp(request);
@@ -40,6 +50,7 @@ public class SellerController {
     }
 
     // 내 셀러 신청 상태 조회 API - 신청 이력이 없으면 404
+    @Operation(summary = "내 셀러 신청 상태 조회")
     @GetMapping("/api/members/me/seller-info")
     public ResponseEntity<SellerInfoResponse> getMySellerInfo(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember) {

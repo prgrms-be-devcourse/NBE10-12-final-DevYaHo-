@@ -40,7 +40,10 @@ public class SecurityConfig {
             "/api/auth/reactivation/send",
             "/api/auth/reactivation/verify",
             "/oauth2/**",
-            "/login/oauth2/**"
+            "/login/oauth2/**",
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html"
     };
 
     // 공동구매 조회(GET)는 로그인 없이도 둘러볼 수 있어야 하므로 별도로 permitAll 처리 - 생성/수정/참여 등 쓰기 작업은 인증 필요
