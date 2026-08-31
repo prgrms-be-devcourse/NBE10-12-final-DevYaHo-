@@ -23,6 +23,9 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:wellbuying-payment}
+      auto-offset-reset: earliest
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
@@ -78,3 +81,9 @@ admin-seed:
   enabled: ${ADMIN_SEED_ENABLED:false}
   email: ${ADMIN_SEED_EMAIL:admin@wellbuying.local}
   password: ${ADMIN_SEED_PASSWORD:CHANGE_ME_local_dev_admin_password}
+
+toss:
+  base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
+  secret-key: ${TOSS_SECRET_KEY:CHANGE_ME_local_dev_toss_test_secret_key}
+  # 빌링키 저장 위치가 확정될 때까지 쓰는 임시 테스트 키 (ConfiguredBillingKeyProvider 참고)
+  test-billing-key: ${TOSS_TEST_BILLING_KEY:}
