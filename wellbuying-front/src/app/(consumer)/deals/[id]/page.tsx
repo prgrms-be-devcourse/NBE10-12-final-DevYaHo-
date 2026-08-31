@@ -49,6 +49,9 @@ export default function DealDetailPage() {
   const [resourceNotFound, setResourceNotFound] = useState(false);
 
   const [quantity, setQuantity] = useState(1);
+  const [address, setAddress] = useState("");
+  const [addressDetail, setAddressDetail] = useState("");
+  const [zipcode, setZipcode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -101,7 +104,12 @@ export default function DealDetailPage() {
     setActionMessage(null);
     setSubmitting(true);
     try {
-      await participateInGroupBuy(groupBuyId, { quantity });
+      await participateInGroupBuy(groupBuyId, {
+        quantity,
+        address,
+        addressDetail: addressDetail || undefined,
+        zipcode,
+      });
       await reload();
       setActionMessage("참여가 완료됐어요.");
     } catch (e) {
@@ -143,7 +151,8 @@ export default function DealDetailPage() {
   }
 
   const catalog = resolveCatalogEntry(detail.productName);
-  const canParticipate = status.status === "ONGOING" && !myPart?.participated;
+  const canParticipate =
+    status.status === "ONGOING" && !myPart?.participated && address.trim() !== "" && zipcode.trim() !== "";
   const currentPrice = resolveCurrentUnitPrice(detail.priceTiers, status.currentQuantity);
   const achievementRate =
     detail.maxQuantity === 0 ? 0 : Math.round((status.currentQuantity / detail.maxQuantity) * 100);
@@ -245,6 +254,11 @@ export default function DealDetailPage() {
                     </>
                   )}
                 </p>
+                {myPart.part.address && (
+                  <p className="text-xs text-wb-secondary">
+                    [{myPart.part.zipcode}] {myPart.part.address} {myPart.part.addressDetail ?? ""}
+                  </p>
+                )}
                 {status.status === "ONGOING" && myPart.part.status === "CONFIRMED" && (
                   <Button
                     variant="secondary"
@@ -339,6 +353,21 @@ export default function DealDetailPage() {
                       const value = Number(e.target.value);
                       setQuantity(Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1);
                     }}
+                  />
+                  <TextField
+                    label="우편번호"
+                    value={zipcode}
+                    onChange={(e) => setZipcode(e.target.value)}
+                  />
+                  <TextField
+                    label="배송지 주소"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
+                  <TextField
+                    label="상세주소 (선택)"
+                    value={addressDetail}
+                    onChange={(e) => setAddressDetail(e.target.value)}
                   />
                   <Button className="w-full" disabled={!canParticipate} loading={submitting} onClick={handleParticipate}>
                     {status.status !== "ONGOING" ? "참여할 수 없어요" : "참여하기"}

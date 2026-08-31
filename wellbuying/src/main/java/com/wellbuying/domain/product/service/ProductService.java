@@ -3,18 +3,21 @@ package com.wellbuying.domain.product.service;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
@@ -89,6 +92,12 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
         return productRepository.findBySeller(sellerId, pageable);
+    }
+
+    // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회
+    @Transactional(readOnly = true)
+    public Page<ProductAdminResponse> findByStatus(ProductStatus status, Pageable pageable) {
+        return productRepository.findByStatus(status, pageable).map(ProductAdminResponse::of);
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)

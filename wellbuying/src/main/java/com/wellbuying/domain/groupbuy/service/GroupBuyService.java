@@ -262,7 +262,6 @@ public class GroupBuyService {
         if (groupBuy.getStatus() != GroupBuyStatus.READY) {
             throw new BusinessException(ErrorCode.GROUP_BUY_CANCEL_NOT_ALLOWED);
         }
-
         groupBuy.cancel();
         groupBuyCounterRepository.delete(groupBuyId);
         groupBuyEventPublisher.publishCanceled(groupBuy);

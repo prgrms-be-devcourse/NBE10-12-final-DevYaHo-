@@ -83,7 +83,7 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50));
+                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
 
         assertThat(response.quantity()).isEqualTo(50);
         assertThat(response.appliedPrice()).isNull();
@@ -109,7 +109,8 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(confirmedPart));
 
-        groupBuyParticipationService.participate(100L, 1L, new GroupBuyPartCreateRequest(100));
+        groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(100, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
 
         assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
         assertThat(confirmedPart.getAppliedPrice()).isEqualTo(15_000);
@@ -149,7 +150,7 @@ class GroupBuyParticipationServiceTest {
                 .thenAnswer(invocation -> List.of(earlyParticipant, savedPartHolder[0]));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50));
+                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
 
         assertThat(response.appliedPrice()).isEqualTo(10_000);
         assertThat(earlyParticipant.getAppliedPrice()).isEqualTo(10_000);
@@ -164,7 +165,7 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 100)).thenReturn(-1L);
 
         assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50)))
+                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_SOLD_OUT);
@@ -180,7 +181,7 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(readyGroupBuy));
 
         assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(10)))
+                new GroupBuyPartCreateRequest(10, "서울특별시 강남구 테헤란로 123", "4층", "06234")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_NOT_ONGOING);

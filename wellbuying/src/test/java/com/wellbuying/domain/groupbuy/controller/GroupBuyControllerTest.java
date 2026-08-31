@@ -323,19 +323,27 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50}"))
+                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", "
+                                + "\"addressDetail\": \"4층\", \"zipcode\": \"06234\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.quantity").value(50))
                 .andExpect(jsonPath("$.appliedPrice").value(nullValue()))
                 .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 .andDo(document("groupbuy/part-create-success",
-                        requestFields(fieldWithPath("quantity").description("참여 수량")),
+                        requestFields(
+                                fieldWithPath("quantity").description("참여 수량"),
+                                fieldWithPath("address").description("배송지 주소"),
+                                fieldWithPath("addressDetail").description("배송지 상세주소").optional(),
+                                fieldWithPath("zipcode").description("우편번호")),
                         responseFields(
                                 fieldWithPath("id").description("참여 ID"),
                                 fieldWithPath("groupBuyId").description("공동구매 ID"),
                                 fieldWithPath("quantity").description("참여 수량"),
                                 fieldWithPath("appliedPrice").description("확정 단가 (공동구매 성사 전에는 null)").optional(),
                                 fieldWithPath("status").description("참여 상태"),
+                                fieldWithPath("address").description("배송지 주소"),
+                                fieldWithPath("addressDetail").description("배송지 상세주소").optional(),
+                                fieldWithPath("zipcode").description("우편번호"),
                                 fieldWithPath("createdAt").description("참여 일시"))));
 
         mockMvc.perform(get("/api/groupBuys/{id}/part/me", groupBuy.getId())
@@ -365,7 +373,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(earlyBuyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50}"))
+                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.appliedPrice").value(nullValue()));
 
@@ -373,7 +381,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(lastBuyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50}"))
+                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.appliedPrice").value(10_000));
 
@@ -397,7 +405,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 200}"))
+                        .content("{\"quantity\": 200, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_409_SOLD_OUT"))
                 .andDo(document("groupbuy/part-create-sold-out",
@@ -506,7 +514,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50}"))
+                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_409_SUSPENDED"));
     }
