@@ -16,9 +16,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/notifications")
 @Tag(name = "알림", description = "공동구매 성사/실패 알림 조회 및 읽음 처리")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class NotificationController {
@@ -30,7 +32,7 @@ public class NotificationController {
     }
 
     @Operation(summary = "내 알림 목록 조회 - 최신순")
-    @GetMapping("/api/notifications")
+    @GetMapping
     public ResponseEntity<Page<NotificationResponse>> list(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -38,7 +40,7 @@ public class NotificationController {
     }
 
     @Operation(summary = "읽지 않은 알림 개수 조회")
-    @GetMapping("/api/notifications/unread-count")
+    @GetMapping("/unread-count")
     public ResponseEntity<NotificationUnreadCountResponse> unreadCount(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
         long count = notificationService.getUnreadCount(authenticatedMember.memberId());
@@ -46,7 +48,7 @@ public class NotificationController {
     }
 
     @Operation(summary = "알림 단건 읽음 처리")
-    @PatchMapping("/api/notifications/{notificationId}/read")
+    @PatchMapping("/{notificationId}/read")
     public ResponseEntity<Void> markAsRead(@AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long notificationId) {
         notificationService.markAsRead(authenticatedMember.memberId(), notificationId);
@@ -54,7 +56,7 @@ public class NotificationController {
     }
 
     @Operation(summary = "내 알림 전체 읽음 처리")
-    @PatchMapping("/api/notifications/read-all")
+    @PatchMapping("/read-all")
     public ResponseEntity<Void> markAllAsRead(@AuthenticationPrincipal AuthenticatedMember authenticatedMember) {
         notificationService.markAllAsRead(authenticatedMember.memberId());
         return ResponseEntity.noContent().build();

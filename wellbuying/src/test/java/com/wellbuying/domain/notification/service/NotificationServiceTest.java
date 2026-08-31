@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
 import com.wellbuying.domain.notification.event.GroupBuyCompletedPayload;
@@ -20,7 +19,6 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,13 +36,10 @@ class NotificationServiceTest {
     @Mock
     private NotificationRepository notificationRepository;
 
-    @Mock
-    private GroupBuyPartRepository groupBuyPartRepository;
-
     // 성사 이벤트는 페이로드에 이미 memberId가 있으므로, 참여자 조회 없이 바로 알림 1건을 저장한다
     @Test
     void notifyCompleted은_중복이_아니면_알림을_저장한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
                 NotificationType.GROUP_BUY_COMPLETED)).thenReturn(false);
 
@@ -62,7 +57,7 @@ class NotificationServiceTest {
     // Kafka 재처리로 같은 성사 이벤트가 다시 들어와도 이미 알림이 있으면 저장하지 않는다
     @Test
     void notifyCompleted은_이미_존재하면_저장하지_않는다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
                 NotificationType.GROUP_BUY_COMPLETED)).thenReturn(true);
 
@@ -75,7 +70,7 @@ class NotificationServiceTest {
     // 위반으로 실패하는 레이스 상황 - 예외가 밖으로 새지 않고 이미 처리된 것으로 흡수돼야 한다
     @Test
     void notifyCompleted은_저장_시점에_유니크_제약_위반이_나도_예외를_던지지_않는다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
                 NotificationType.GROUP_BUY_COMPLETED)).thenReturn(false);
         when(notificationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
@@ -85,16 +80,14 @@ class NotificationServiceTest {
         verify(notificationRepository, times(1)).save(any());
     }
 
-    // 실패 이벤트는 memberId가 없으므로 확정 참여자 목록을 직접 조회해 참여자 수만큼 알림을 저장한다.
-    // 참여자별로 exists를 개별 호출하는 대신 이미 알림이 간 memberId를 한 번의 쿼리로 모아 걸러내고,
-    // 나머지는 saveAll로 한 번에 저장하는지 검증(N+1 방지)
+    // 실패 이벤트는 memberId가 없으므로, 확정 참여자 중 아직 알림을 못 받은 memberId를 NOT EXISTS
+    // 서브쿼리(findUnnotifiedMemberIds)로 한 번에 조회해 saveAll로 저장하는지 검증.
+    // "일부만 이미 처리됨" 같은 필터링 자체는 이제 SQL 쪽 책임이라 여기서는 결과를 그대로 쓰는지만 본다
     @Test
-    void notifyFailed은_확정_참여자_전원에게_알림을_saveAll로_한_번에_저장한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(100L, 200L));
-        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(Set.of());
+    void notifyFailed은_대상_전원에게_알림을_saveAll로_한_번에_저장한다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.findUnnotifiedMemberIds(1L, GroupBuyPartStatus.CONFIRMED,
+                NotificationType.GROUP_BUY_FAILED)).thenReturn(List.of(100L, 200L));
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
@@ -106,45 +99,25 @@ class NotificationServiceTest {
                 .containsExactlyInAnyOrder(100L, 200L);
     }
 
-    // 참여자 중 일부가 이미 처리(재전달)된 상태여도 나머지 참여자는 그대로 저장 대상에 포함된다
+    // 대상이 없으면(전원 이미 처리됨) saveAll조차 호출하지 않는다(빈 리스트로 왕복하지 않음)
     @Test
-    void notifyFailed은_일부가_중복이어도_나머지는_저장한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(100L, 200L));
-        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(Set.of(100L));
-
-        service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
-
-        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
-        verify(notificationRepository, times(1)).saveAll(captor.capture());
-        assertThat(captor.getValue()).extracting(Notification::getMemberId).containsExactly(200L);
-    }
-
-    // 확정 참여자 전원이 이미 알림을 받은 상태면 saveAll조차 호출하지 않는다(빈 리스트로 왕복하지 않음)
-    @Test
-    void notifyFailed은_대상이_모두_중복이면_saveAll을_호출하지_않는다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(100L));
-        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(Set.of(100L));
+    void notifyFailed은_대상이_없으면_saveAll을_호출하지_않는다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.findUnnotifiedMemberIds(1L, GroupBuyPartStatus.CONFIRMED,
+                NotificationType.GROUP_BUY_FAILED)).thenReturn(List.of());
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
         verify(notificationRepository, never()).saveAll(any());
     }
 
-    // 같은 회원이 확정 참여자 목록에 중복으로 잡혀도(이론상 방어) (member_id, group_buy_id, type) 유니크
+    // 같은 회원이 대상 목록에 중복으로 잡혀도(이론상 방어) (member_id, group_buy_id, type) 유니크
     // 제약을 건드리지 않도록 한 건으로 합쳐 저장한다
     @Test
     void notifyFailed은_같은_회원이_중복이면_한_건으로_합쳐_저장한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
-        when(groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(100L, 100L));
-        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(Set.of());
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.findUnnotifiedMemberIds(1L, GroupBuyPartStatus.CONFIRMED,
+                NotificationType.GROUP_BUY_FAILED)).thenReturn(List.of(100L, 100L));
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
@@ -158,7 +131,7 @@ class NotificationServiceTest {
     // Pageable의 정렬이 합쳐져 꼬이는 걸 막기 위해 서비스가 정렬을 직접 강제한다
     @Test
     void getNotifications은_요청_Pageable의_정렬을_무시하고_항상_최신순으로_조회한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         Pageable clientRequestedSort = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
         when(notificationRepository.findByMemberId(eq(100L), any())).thenReturn(new PageImpl<>(List.of()));
 
@@ -171,7 +144,7 @@ class NotificationServiceTest {
 
     @Test
     void markAsRead은_본인_알림이_아니면_예외를_던진다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         when(notificationRepository.findByIdAndMemberId(1L, 999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.markAsRead(999L, 1L))
@@ -182,7 +155,7 @@ class NotificationServiceTest {
 
     @Test
     void markAsRead은_본인_알림이면_읽음_처리한다() {
-        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        NotificationService service = new NotificationService(notificationRepository);
         Notification notification = Notification.of(100L, NotificationType.GROUP_BUY_COMPLETED, 1L, 10L, "메시지");
         when(notificationRepository.findByIdAndMemberId(1L, 100L)).thenReturn(Optional.of(notification));
 

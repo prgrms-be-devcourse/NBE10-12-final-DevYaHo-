@@ -1,7 +1,6 @@
 package com.wellbuying.domain.notification.service;
 
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.notification.dto.NotificationResponse;
 import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
@@ -11,7 +10,6 @@ import com.wellbuying.domain.notification.repository.NotificationRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,12 +26,9 @@ public class NotificationService {
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private final NotificationRepository notificationRepository;
-    private final GroupBuyPartRepository groupBuyPartRepository;
 
-    public NotificationService(NotificationRepository notificationRepository,
-            GroupBuyPartRepository groupBuyPartRepository) {
+    public NotificationService(NotificationRepository notificationRepository) {
         this.notificationRepository = notificationRepository;
-        this.groupBuyPartRepository = groupBuyPartRepository;
     }
 
     // 성사 이벤트는 참여자 1명당 1건 발행되므로 memberId가 이미 페이로드에 들어있다
@@ -42,34 +37,26 @@ public class NotificationService {
         save(payload.memberId(), NotificationType.GROUP_BUY_COMPLETED, payload.groupBuyId(), payload.productId());
     }
 
-    // 실패 이벤트는 공동구매당 1건만 발행되므로, 확정 참여자 목록을 직접 조회해 각자에게 알림을 남긴다.
-    // 참여자가 N명이면 건별 exists+save로는 2N번의 왕복이 나가므로, 이미 알림이 간 memberId를 한 번의
-    // 쿼리로 모아 걸러낸 뒤 나머지만 saveAll로 한 번에 저장한다(재처리로 일부만 남아있어도 안전).
-    // 필요한 건 memberId뿐이라 GroupBuyPart 엔티티 전체가 아니라 memberId만 프로젝션으로 조회한다
-    // (참여자가 수천~수만 명이어도 영속성 컨텍스트에 불필요한 엔티티가 쌓이지 않도록)
+    // 실패 이벤트는 공동구매당 1건만 발행되므로, 확정 참여자 중 아직 알림을 못 받은 memberId를
+    // NOT EXISTS 서브쿼리로 한 번에 조회한 뒤(참여자 조회 + 발송여부 조회로 왕복 2번 내지 않도록),
+    // saveAll로 한 번에 저장한다(재처리로 일부만 남아있어도 안전)
     @Transactional
     public void notifyFailed(GroupBuyFailedPayload payload) {
-        List<Long> confirmedMemberIds = groupBuyPartRepository.findMemberIdsByGroupBuyIdAndStatus(
-                payload.groupBuyId(), GroupBuyPartStatus.CONFIRMED);
-        if (confirmedMemberIds.isEmpty()) {
+        List<Long> targetMemberIds = notificationRepository.findUnnotifiedMemberIds(payload.groupBuyId(),
+                GroupBuyPartStatus.CONFIRMED, NotificationType.GROUP_BUY_FAILED);
+        if (targetMemberIds.isEmpty()) {
             return;
         }
 
-        Set<Long> alreadyNotifiedMemberIds = notificationRepository.findMemberIdsByGroupBuyIdAndType(
-                payload.groupBuyId(), NotificationType.GROUP_BUY_FAILED);
-
         // 유니크 제약(member_id, group_buy_id, type) 위반으로 배치 전체가 실패하지 않도록,
         // 같은 회원이 참여자 목록에 중복으로 잡혀도 한 건만 남긴다
-        List<Notification> newNotifications = confirmedMemberIds.stream()
-                .filter(memberId -> !alreadyNotifiedMemberIds.contains(memberId))
+        List<Notification> newNotifications = targetMemberIds.stream()
                 .distinct()
                 .map(memberId -> Notification.of(memberId, NotificationType.GROUP_BUY_FAILED, payload.groupBuyId(),
                         payload.productId(), NotificationType.GROUP_BUY_FAILED.defaultMessage()))
                 .toList();
 
-        if (!newNotifications.isEmpty()) {
-            notificationRepository.saveAll(newNotifications);
-        }
+        notificationRepository.saveAll(newNotifications);
     }
 
     // Kafka는 at-least-once라 같은 이벤트가 재처리될 수 있어, 저장 전 존재 여부를 먼저 확인한다.
