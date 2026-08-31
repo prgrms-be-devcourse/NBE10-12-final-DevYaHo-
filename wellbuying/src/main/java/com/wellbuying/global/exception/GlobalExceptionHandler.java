@@ -2,6 +2,7 @@ package com.wellbuying.global.exception;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -45,14 +46,25 @@ public class GlobalExceptionHandler {
     }
 
     // @Validated + @RequestParam 제약 위반(NotBlank/Min/Max 등)을 400으로 응답
+    // 위반 항목을 모두 결합하고 propertyPath에서 파라미터명을 추출해 "page: must be >= 0" 형태로 응답
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException e) {
         String message = e.getConstraintViolations().stream()
-                .findFirst()
-                .map(ConstraintViolation::getMessage)
-                .orElse(ErrorCode.INVALID_INPUT.getMessage());
+                .map(cv -> extractPropertyName(cv) + ": " + cv.getMessage())
+                .collect(Collectors.joining(", "));
+
+        if (message.isBlank()) {
+            message = ErrorCode.INVALID_INPUT.getMessage();
+        }
+
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+    }
+
+    private String extractPropertyName(ConstraintViolation<?> violation) {
+        String propertyPath = violation.getPropertyPath().toString();
+        int dotIndex = propertyPath.lastIndexOf('.');
+        return (dotIndex != -1) ? propertyPath.substring(dotIndex + 1) : propertyPath;
     }
 
     // 잘못된 sort 필드명(?sort=wrongProperty)은 SQL이 생성되기 전 리포지토리 프록시 단계에서 실패 - 클라이언트 잘못이므로 500이 아닌 400으로 응답
