@@ -58,4 +58,17 @@ class GroupBuyEventConsumerTest {
         verify(notificationService, never()).notifyCompleted(any());
         verify(notificationService, never()).notifyFailed(any());
     }
+
+    // 형식이 깨진 메시지(poison message)는 재시도해도 성공할 수 없으므로, 예외를 밖으로 던져
+    // Kafka 컨슈머를 무한 재시도에 빠뜨리는 대신 여기서 잡아 소비를 끝내야 한다
+    @Test
+    void 형식이_깨진_페이로드는_예외를_던지지_않고_건너뛴다() {
+        NotificationService notificationService = mock(NotificationService.class);
+        GroupBuyEventConsumer consumer = new GroupBuyEventConsumer(notificationService, new ObjectMapper());
+
+        consumer.onMessage("{이것은-유효한-JSON이-아님");
+
+        verify(notificationService, never()).notifyCompleted(any());
+        verify(notificationService, never()).notifyFailed(any());
+    }
 }

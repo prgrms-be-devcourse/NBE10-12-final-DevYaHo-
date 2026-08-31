@@ -20,6 +20,7 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -65,22 +66,30 @@ class NotificationServiceTest {
         verify(notificationRepository, never()).save(any());
     }
 
-    // 실패 이벤트는 memberId가 없으므로 확정 참여자 목록을 직접 조회해 참여자 수만큼 알림을 저장한다
+    // 실패 이벤트는 memberId가 없으므로 확정 참여자 목록을 직접 조회해 참여자 수만큼 알림을 저장한다.
+    // 참여자별로 exists를 개별 호출하는 대신 이미 알림이 간 memberId를 한 번의 쿼리로 모아 걸러내고,
+    // 나머지는 saveAll로 한 번에 저장하는지 검증(N+1 방지)
     @Test
-    void notifyFailed은_확정_참여자_전원에게_알림을_저장한다() {
+    void notifyFailed은_확정_참여자_전원에게_알림을_saveAll로_한_번에_저장한다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
         GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
         GroupBuyPart part2 = GroupBuyPart.confirm(1L, 200L, 3);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(part1, part2));
-        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(any(), any(), any())).thenReturn(false);
+        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
+                .thenReturn(Set.of());
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
-        verify(notificationRepository, times(2)).save(any());
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, times(1)).saveAll(captor.capture());
+        verify(notificationRepository, never()).save(any());
+        assertThat(captor.getValue()).hasSize(2)
+                .extracting(Notification::getMemberId)
+                .containsExactlyInAnyOrder(100L, 200L);
     }
 
-    // 참여자 중 일부가 이미 처리(재전달)된 상태여도 나머지 참여자 저장은 그대로 진행된다
+    // 참여자 중 일부가 이미 처리(재전달)된 상태여도 나머지 참여자는 그대로 저장 대상에 포함된다
     @Test
     void notifyFailed은_일부가_중복이어도_나머지는_저장한다() {
         NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
@@ -88,14 +97,48 @@ class NotificationServiceTest {
         GroupBuyPart part2 = GroupBuyPart.confirm(1L, 200L, 3);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(part1, part2));
-        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(true);
-        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(200L, 1L, NotificationType.GROUP_BUY_FAILED))
-                .thenReturn(false);
+        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
+                .thenReturn(Set.of(100L));
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
-        verify(notificationRepository, times(1)).save(any());
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, times(1)).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Notification::getMemberId).containsExactly(200L);
+    }
+
+    // 확정 참여자 전원이 이미 알림을 받은 상태면 saveAll조차 호출하지 않는다(빈 리스트로 왕복하지 않음)
+    @Test
+    void notifyFailed은_대상이_모두_중복이면_saveAll을_호출하지_않는다() {
+        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
+        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(part1));
+        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
+                .thenReturn(Set.of(100L));
+
+        service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
+
+        verify(notificationRepository, never()).saveAll(any());
+    }
+
+    // 같은 회원이 확정 참여자 목록에 중복으로 잡혀도(이론상 방어) (member_id, group_buy_id, type) 유니크
+    // 제약을 건드리지 않도록 한 건으로 합쳐 저장한다
+    @Test
+    void notifyFailed은_같은_회원이_중복이면_한_건으로_합쳐_저장한다() {
+        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
+        GroupBuyPart part2 = GroupBuyPart.confirm(1L, 100L, 3);
+        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
+                .thenReturn(List.of(part1, part2));
+        when(notificationRepository.findMemberIdsByGroupBuyIdAndType(1L, NotificationType.GROUP_BUY_FAILED))
+                .thenReturn(Set.of());
+
+        service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
+
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, times(1)).saveAll(captor.capture());
+        assertThat(captor.getValue()).hasSize(1);
     }
 
     @Test

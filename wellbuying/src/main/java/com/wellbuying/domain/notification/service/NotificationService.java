@@ -12,6 +12,7 @@ import com.wellbuying.domain.notification.repository.NotificationRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -40,14 +41,31 @@ public class NotificationService {
     }
 
     // 실패 이벤트는 공동구매당 1건만 발행되므로, 확정 참여자 목록을 직접 조회해 각자에게 알림을 남긴다.
-    // 한 명씩 개별 저장해서, 이미 처리된(재전달로 인한) 참여자가 있어도 나머지 참여자 처리가 막히지 않게 한다
+    // 참여자가 N명이면 건별 exists+save로는 2N번의 왕복이 나가므로, 이미 알림이 간 memberId를 한 번의
+    // 쿼리로 모아 걸러낸 뒤 나머지만 saveAll로 한 번에 저장한다(재처리로 일부만 남아있어도 안전)
     @Transactional
     public void notifyFailed(GroupBuyFailedPayload payload) {
         List<GroupBuyPart> confirmedParts = groupBuyPartRepository.findByGroupBuyIdAndStatus(payload.groupBuyId(),
                 GroupBuyPartStatus.CONFIRMED);
-        for (GroupBuyPart part : confirmedParts) {
-            save(part.getMemberId(), NotificationType.GROUP_BUY_FAILED, payload.groupBuyId(), payload.productId(),
-                    FAILED_MESSAGE);
+        if (confirmedParts.isEmpty()) {
+            return;
+        }
+
+        Set<Long> alreadyNotifiedMemberIds = notificationRepository.findMemberIdsByGroupBuyIdAndType(
+                payload.groupBuyId(), NotificationType.GROUP_BUY_FAILED);
+
+        // 유니크 제약(member_id, group_buy_id, type) 위반으로 배치 전체가 실패하지 않도록,
+        // 같은 회원이 참여자 목록에 중복으로 잡혀도 한 건만 남긴다
+        List<Notification> newNotifications = confirmedParts.stream()
+                .map(GroupBuyPart::getMemberId)
+                .filter(memberId -> !alreadyNotifiedMemberIds.contains(memberId))
+                .distinct()
+                .map(memberId -> Notification.of(memberId, NotificationType.GROUP_BUY_FAILED, payload.groupBuyId(),
+                        payload.productId(), FAILED_MESSAGE))
+                .toList();
+
+        if (!newNotifications.isEmpty()) {
+            notificationRepository.saveAll(newNotifications);
         }
     }
 
