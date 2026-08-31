@@ -1,3 +1,10 @@
 logging:
   level:
     com.wellbuying: INFO
+  file:
+    name: /app/logs/app.log
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_FILE}.%d{yyyy-MM-dd}.log
+      max-history: 14
+      total-size-cap: 500MB
