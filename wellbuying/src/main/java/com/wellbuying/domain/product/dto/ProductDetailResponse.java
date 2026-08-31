@@ -8,7 +8,7 @@ public record ProductDetailResponse(
         String description,
         Integer startPrice,
         String thumbnailUrl,
-        boolean available
+        boolean approved
 ) {
 
     public static ProductDetailResponse of(Product product) {

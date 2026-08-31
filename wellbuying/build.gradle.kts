@@ -41,6 +41,10 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    implementation("org.opensearch.client:spring-data-opensearch-starter:3.1.1") {
+        exclude(group = "org.opensearch.client", module = "opensearch-rest-high-level-client")
+    }
+    implementation("org.opensearch.client:opensearch-java:3.7.0")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-restdocs")
     testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-client-test")
