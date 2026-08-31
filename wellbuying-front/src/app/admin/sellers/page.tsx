@@ -6,13 +6,14 @@ import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill, Tag } from "@/components/ui/Tag";
-import { approveSeller, listSellerApplications, rejectSeller } from "@/lib/api/admin";
+import { approveSeller, listSellerApplications, reactivateSeller, rejectSeller, suspendSeller } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/http";
 import type { SellerInfoResponse, SellerStatus } from "@/lib/api/types";
 
 const TABS: { status: SellerStatus; label: string }[] = [
   { status: "PENDING", label: "승인 대기" },
   { status: "ACTIVE", label: "승인됨" },
+  { status: "SUSPENDED", label: "정지됨" },
   { status: "TERMINATED", label: "거절됨" },
 ];
 
@@ -75,6 +76,32 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
     }
   }
 
+  async function handleSuspend(id: number) {
+    setActioningId(id);
+    setError(null);
+    try {
+      await suspendSeller(id);
+      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "정지에 실패했어요.");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  async function handleReactivate(id: number) {
+    setActioningId(id);
+    setError(null);
+    try {
+      await reactivateSeller(id);
+      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "정지 복귀에 실패했어요.");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
   if (items === null) {
     return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
   }
@@ -120,6 +147,21 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
                       승인
                     </Button>
                   </div>
+                )}
+                {item.status === "ACTIVE" && (
+                  <Button
+                    variant="secondary"
+                    className="px-3 py-1.5 text-xs"
+                    loading={actioningId === item.id}
+                    onClick={() => handleSuspend(item.id)}
+                  >
+                    정지
+                  </Button>
+                )}
+                {item.status === "SUSPENDED" && (
+                  <Button className="px-3 py-1.5 text-xs" loading={actioningId === item.id} onClick={() => handleReactivate(item.id)}>
+                    정지 복귀
+                  </Button>
                 )}
               </div>
             </div>

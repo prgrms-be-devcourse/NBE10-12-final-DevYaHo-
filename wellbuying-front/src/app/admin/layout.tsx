@@ -1,14 +1,31 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, UserCheck, Users, Wallet } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
+import { listAdminProducts } from "@/lib/api/admin";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
 
 const WORKSPACE_LINKS: NavItem[] = [{ href: "/home", label: "소비자 모드", icon: ShoppingCart }];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { pendingReviewCount, readySettlementCount } = useDemoStore();
+  const { readySettlementCount } = useDemoStore();
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
+
+  useEffect(() => {
+    let ignore = false;
+    listAdminProducts({ status: "PENDING", size: 1 })
+      .then((response) => {
+        if (!ignore) setPendingReviewCount(response.page.totalElements);
+      })
+      .catch(() => {
+        if (!ignore) setPendingReviewCount(0);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const navItems: NavItem[] = [
     { href: "/admin/dashboard", label: "대시보드", icon: LayoutDashboard },
