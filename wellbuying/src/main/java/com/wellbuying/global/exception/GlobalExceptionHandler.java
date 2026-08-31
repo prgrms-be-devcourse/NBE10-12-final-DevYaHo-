@@ -3,7 +3,6 @@ package com.wellbuying.global.exception;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
-import java.util.Comparator;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -60,8 +59,8 @@ public class GlobalExceptionHandler {
         }
 
         String message = violations.stream()
-                .sorted(Comparator.comparing(cv -> cv.getPropertyPath() != null ? cv.getPropertyPath().toString() : ""))
                 .map(cv -> extractPropertyName(cv) + ": " + cv.getMessage())
+                .sorted()
                 .collect(Collectors.joining(", "));
 
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
