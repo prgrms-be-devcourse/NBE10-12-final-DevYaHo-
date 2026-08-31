@@ -2,6 +2,8 @@ package com.wellbuying.global.exception;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Path;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,22 +51,34 @@ public class GlobalExceptionHandler {
     // 위반 항목을 모두 결합하고 propertyPath에서 파라미터명을 추출해 "page: must be >= 0" 형태로 응답
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException e) {
-        String message = e.getConstraintViolations().stream()
+        Set<ConstraintViolation<?>> violations = e.getConstraintViolations();
+
+        if (violations == null || violations.isEmpty()) {
+            return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                    .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage()));
+        }
+
+        String message = violations.stream()
                 .map(cv -> extractPropertyName(cv) + ": " + cv.getMessage())
                 .collect(Collectors.joining(", "));
 
-        if (message.isBlank()) {
-            message = ErrorCode.INVALID_INPUT.getMessage();
-        }
-
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT,
+                        message.isBlank() ? ErrorCode.INVALID_INPUT.getMessage() : message));
     }
 
     private String extractPropertyName(ConstraintViolation<?> violation) {
-        String propertyPath = violation.getPropertyPath().toString();
-        int dotIndex = propertyPath.lastIndexOf('.');
-        return (dotIndex != -1) ? propertyPath.substring(dotIndex + 1) : propertyPath;
+        Path path = violation.getPropertyPath();
+        if (path == null) {
+            return "unknown";
+        }
+
+        String propertyName = null;
+        for (Path.Node node : path) {
+            propertyName = node.getName();
+        }
+
+        return propertyName != null ? propertyName : path.toString();
     }
 
     // 잘못된 sort 필드명(?sort=wrongProperty)은 SQL이 생성되기 전 리포지토리 프록시 단계에서 실패 - 클라이언트 잘못이므로 500이 아닌 400으로 응답

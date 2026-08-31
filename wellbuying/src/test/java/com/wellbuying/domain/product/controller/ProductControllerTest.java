@@ -106,11 +106,13 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("page")));
     }
 
-    // size가 0이면 @Min(1) 위반 → 400
+    // size가 0이면 @Min(1) 위반 → 400, 응답 메시지에 "size" 포함
     @Test
     void searchProducts_size가_0이면_400을_반환한다() throws Exception {
         mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "0"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.message").value(containsString("size")));
     }
 
     // 공백만 있는 keyword는 @NotBlank 위반 → 400, 응답 메시지에 "keyword" 포함
@@ -120,5 +122,15 @@ class ProductControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").isNotEmpty())
                 .andExpect(jsonPath("$.message").value(containsString("keyword")));
+    }
+
+    // keyword, page 둘 다 유효하지 않으면 두 파라미터의 에러 메시지가 모두 응답에 포함되는지 검증
+    // (여러 위반 항목을 결합하는 이번 변경의 핵심 동작을 검증)
+    @Test
+    void searchProducts_여러_파라미터가_유효하지_않으면_모든_에러_메시지를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", " ").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("keyword")))
+                .andExpect(jsonPath("$.message").value(containsString("page")));
     }
 }
