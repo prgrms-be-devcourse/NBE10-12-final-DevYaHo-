@@ -43,7 +43,8 @@ public enum ErrorCode {
     PRODUCT_ALREADY_PROCESSED(HttpStatus.CONFLICT, "PRODUCT_409_ALREADY_PROCESSED", "이미 처리된 상품입니다."),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_404_CATEGORY_NOT_FOUND", "존재하지 않는 카테고리입니다."),
     MEMBER_DORMANT(HttpStatus.FORBIDDEN, "MEMBER_403_DORMANT", "휴면 처리된 계정입니다. 이메일 인증 후 재활성화해주세요."),
-    MEMBER_NOT_DORMANT(HttpStatus.CONFLICT, "MEMBER_409_NOT_DORMANT", "휴면 상태가 아닙니다.");
+    MEMBER_NOT_DORMANT(HttpStatus.CONFLICT, "MEMBER_409_NOT_DORMANT", "휴면 상태가 아닙니다."),
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_NOT_FOUND", "존재하지 않는 결제입니다.");
 
     private final HttpStatus status;
     private final String code;

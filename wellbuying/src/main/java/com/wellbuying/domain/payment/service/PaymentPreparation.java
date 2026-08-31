@@ -1,0 +1,19 @@
+package com.wellbuying.domain.payment.service;
+
+// PG 승인을 시도하기 직전까지 준비된 상태 (TX1의 결과)
+// failed=true면 승인을 시도하지 않고 곧바로 실패 처리한다 - 돈이 나가기 전에 걸러낸 경우다
+public record PaymentPreparation(
+        Long paymentId,
+        String shippingAddress,
+        boolean failed,
+        String failureReason
+) {
+
+    public static PaymentPreparation ready(Long paymentId, String shippingAddress) {
+        return new PaymentPreparation(paymentId, shippingAddress, false, null);
+    }
+
+    public static PaymentPreparation failed(Long paymentId, String reason) {
+        return new PaymentPreparation(paymentId, null, true, reason);
+    }
+}
