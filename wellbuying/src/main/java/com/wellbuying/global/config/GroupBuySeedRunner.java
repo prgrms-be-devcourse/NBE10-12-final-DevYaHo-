@@ -14,6 +14,7 @@ import com.wellbuying.domain.groupbuy.service.GroupBuyParticipationService;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.notification.repository.NotificationRepository;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
@@ -57,6 +58,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final GroupBuyEventOutboxRepository groupBuyEventOutboxRepository;
+    private final NotificationRepository notificationRepository;
     private final TransactionTemplate transactionTemplate;
 
     public GroupBuySeedRunner(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
@@ -65,6 +67,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             GroupBuyService groupBuyService, GroupBuyParticipationService groupBuyParticipationService,
             ProductRepository productRepository, ProductCategoryRepository productCategoryRepository,
             GroupBuyEventOutboxRepository groupBuyEventOutboxRepository,
+            NotificationRepository notificationRepository,
             PlatformTransactionManager transactionManager) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -75,6 +78,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
         this.groupBuyService = groupBuyService;
         this.groupBuyParticipationService = groupBuyParticipationService;
         this.groupBuyEventOutboxRepository = groupBuyEventOutboxRepository;
+        this.notificationRepository = notificationRepository;
         this.productRepository = productRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -123,6 +127,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             groupBuyPartRepository.deleteByGroupBuyIdIn(ids);
             groupBuyPriceRepository.deleteByGroupBuyIdIn(ids);
             groupBuyEventOutboxRepository.deleteByGroupBuyIdIn(ids);
+            notificationRepository.deleteByGroupBuyIdIn(ids);
             groupBuyCounterRepository.deleteAll(ids);
             groupBuyRepository.deleteAll(previous);
         }

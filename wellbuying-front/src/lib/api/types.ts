@@ -246,3 +246,19 @@ export type PageResponse<T> = {
     totalPages: number;
   };
 };
+
+export type NotificationType = "GROUP_BUY_COMPLETED" | "GROUP_BUY_FAILED";
+
+export type NotificationResponse = {
+  id: number;
+  type: NotificationType;
+  groupBuyId: number;
+  productId: number | null;
+  message: string;
+  read: boolean;
+  createdAt: string;
+};
+
+export type NotificationUnreadCountResponse = {
+  count: number;
+};
