@@ -95,4 +95,25 @@ class ProductControllerTest {
         mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "101"))
                 .andExpect(status().isBadRequest());
     }
+
+    // page가 -1이면 @Min(0) 위반 → 400
+    @Test
+    void searchProducts_page가_음수이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // size가 0이면 @Min(1) 위반 → 400
+    @Test
+    void searchProducts_size가_0이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // 공백만 있는 keyword는 @NotBlank 위반 → 400
+    @Test
+    void searchProducts_공백_키워드로_검색하면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", " "))
+                .andExpect(status().isBadRequest());
+    }
 }

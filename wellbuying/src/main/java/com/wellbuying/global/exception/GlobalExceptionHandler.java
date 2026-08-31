@@ -1,5 +1,6 @@
 package com.wellbuying.global.exception;
 
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +49,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException e) {
         String message = e.getConstraintViolations().stream()
                 .findFirst()
-                .map(cv -> cv.getMessage())
+                .map(ConstraintViolation::getMessage)
                 .orElse(ErrorCode.INVALID_INPUT.getMessage());
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
