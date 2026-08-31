@@ -14,7 +14,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    Page<Notification> findByMemberIdOrderByCreatedAtDescIdDesc(Long memberId, Pageable pageable);
+    // 정렬은 항상 서비스가 고정해서 넘기는 Pageable에 맡긴다 - 메서드명에 OrderBy를 같이 쓰면
+    // 클라이언트가 ?sort=로 보낸 정렬이 뒤에 덧붙어 정렬 조건이 꼬일 수 있다(예: id DESC, id ASC가 동시에 붙음)
+    Page<Notification> findByMemberId(Long memberId, Pageable pageable);
 
     long countByMemberIdAndReadFalse(Long memberId);
 

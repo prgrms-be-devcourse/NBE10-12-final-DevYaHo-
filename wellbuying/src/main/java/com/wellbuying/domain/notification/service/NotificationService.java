@@ -13,13 +13,20 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private static final String COMPLETED_MESSAGE = "공동구매가 성사되었습니다. 결제를 진행해주세요.";
     private static final String FAILED_MESSAGE = "공동구매가 목표 수량 미달로 취소되었습니다.";
@@ -69,18 +76,31 @@ public class NotificationService {
         }
     }
 
-    // Kafka는 at-least-once라 같은 이벤트가 재처리될 수 있어, 저장 전 존재 여부를 먼저 확인한다
+    // Kafka는 at-least-once라 같은 이벤트가 재처리될 수 있어, 저장 전 존재 여부를 먼저 확인한다.
+    // exists 확인과 save 사이에는 여전히 레이스가 있을 수 있는데(같은 이벤트가 거의 동시에 두 번
+    // 들어오는 경우), 그 경우 유니크 제약(uq_notification_member_group_buy_type) 위반이 나므로
+    // "이미 다른 스레드가 만들어놨다"는 뜻으로 보고 흡수한다 - IDENTITY 채번이라 save()가 즉시
+    // INSERT를 실행하므로 이 catch 지점에서 바로 잡힌다
     private void save(Long memberId, NotificationType type, Long groupBuyId, Long productId, String message) {
         if (notificationRepository.existsByMemberIdAndGroupBuyIdAndType(memberId, groupBuyId, type)) {
             return;
         }
-        notificationRepository.save(Notification.of(memberId, type, groupBuyId, productId, message));
+        try {
+            notificationRepository.save(Notification.of(memberId, type, groupBuyId, productId, message));
+        } catch (DataIntegrityViolationException e) {
+            log.debug("동시 처리로 이미 생성된 알림이라 무시함 - memberId: {}, groupBuyId: {}, type: {}", memberId, groupBuyId,
+                    type);
+        }
     }
 
+    // 정렬은 항상 최신순으로 고정한다 - 클라이언트가 넘긴 Pageable의 sort를 그대로 쓰면 리포지토리의
+    // 정렬 조건과 합쳐져 꼬일 수 있어(예: id DESC/ASC가 동시에 붙음), 여기서 페이지 번호/크기만 취하고
+    // 정렬은 새로 강제한다
     @Transactional(readOnly = true)
     public Page<NotificationResponse> getNotifications(Long memberId, Pageable pageable) {
-        return notificationRepository.findByMemberIdOrderByCreatedAtDescIdDesc(memberId, pageable)
-                .map(NotificationResponse::of);
+        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt", "id"));
+        return notificationRepository.findByMemberId(memberId, sorted).map(NotificationResponse::of);
     }
 
     @Transactional(readOnly = true)

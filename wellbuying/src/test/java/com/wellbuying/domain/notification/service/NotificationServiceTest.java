@@ -3,6 +3,7 @@ package com.wellbuying.domain.notification.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -64,6 +70,20 @@ class NotificationServiceTest {
         service.notifyCompleted(new GroupBuyCompletedPayload(1L, 10L, 100L));
 
         verify(notificationRepository, never()).save(any());
+    }
+
+    // exists 확인 시점엔 없었지만(false), 동시에 들어온 다른 스레드가 먼저 커밋해 save()가 유니크 제약
+    // 위반으로 실패하는 레이스 상황 - 예외가 밖으로 새지 않고 이미 처리된 것으로 흡수돼야 한다
+    @Test
+    void notifyCompleted은_저장_시점에_유니크_제약_위반이_나도_예외를_던지지_않는다() {
+        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
+                NotificationType.GROUP_BUY_COMPLETED)).thenReturn(false);
+        when(notificationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        service.notifyCompleted(new GroupBuyCompletedPayload(1L, 10L, 100L));
+
+        verify(notificationRepository, times(1)).save(any());
     }
 
     // 실패 이벤트는 memberId가 없으므로 확정 참여자 목록을 직접 조회해 참여자 수만큼 알림을 저장한다.
@@ -139,6 +159,22 @@ class NotificationServiceTest {
         ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
         verify(notificationRepository, times(1)).saveAll(captor.capture());
         assertThat(captor.getValue()).hasSize(1);
+    }
+
+    // 클라이언트가 Pageable에 다른 정렬(예: ?sort=id,asc)을 실어 보내도, 리포지토리에는 항상
+    // 최신순(createdAt DESC, id DESC)으로 고정된 Pageable이 전달돼야 한다 - 메서드명 정렬과
+    // Pageable의 정렬이 합쳐져 꼬이는 걸 막기 위해 서비스가 정렬을 직접 강제한다
+    @Test
+    void getNotifications은_요청_Pageable의_정렬을_무시하고_항상_최신순으로_조회한다() {
+        NotificationService service = new NotificationService(notificationRepository, groupBuyPartRepository);
+        Pageable clientRequestedSort = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
+        when(notificationRepository.findByMemberId(eq(100L), any())).thenReturn(new PageImpl<>(List.of()));
+
+        service.getNotifications(100L, clientRequestedSort);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findByMemberId(eq(100L), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt", "id"));
     }
 
     @Test
