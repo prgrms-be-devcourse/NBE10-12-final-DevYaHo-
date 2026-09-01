@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -36,11 +37,16 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.DUPLICATE_RESOURCE));
     }
 
-    // @Valid 검증 실패 시 모든 필드 에러 메시지를 필드명 기준으로 정렬해 400 응답
+    // @Valid 검증 실패 시 필드/클래스 레벨 에러를 모두 수집해 정렬 후 400 응답
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+        String message = e.getBindingResult().getAllErrors().stream()
+                .map(error -> {
+                    if (error instanceof FieldError fieldError) {
+                        return fieldError.getField() + ": " + fieldError.getDefaultMessage();
+                    }
+                    return error.getObjectName() + ": " + error.getDefaultMessage();
+                })
                 .sorted()
                 .collect(Collectors.joining(", "));
         if (message.isBlank()) {
