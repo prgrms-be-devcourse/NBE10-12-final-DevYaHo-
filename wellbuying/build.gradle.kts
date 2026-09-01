@@ -28,6 +28,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    // RestClient.Builder 자동 구성 - Boot 4에서 webmvc 스타터에 포함되지 않아 별도로 추가한다 (TossPaymentGateway가 주입받음)
+    implementation("org.springframework.boot:spring-boot-restclient")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.springframework.boot:spring-boot-flyway")
