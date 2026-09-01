@@ -4,6 +4,10 @@
 --
 -- 비밀번호는 세 계정 모두 testpass1234 (BCrypt 해시는 애플리케이션의 BCryptPasswordEncoder 기본 강도로 생성)
 
+-- 시각 기준: 컨테이너 Postgres는 UTC로 뜨지만 애플리케이션은 LocalDateTime(KST 벽시계)으로 비교한다.
+-- now()를 그대로 쓰면 9시간 어긋나 '마감 임박' 공구가 시더 직후 FAILED로 확정된다.
+-- 그래서 KST 벽시계를 뜻하는 now() AT TIME ZONE 'Asia/Seoul' 을 기준으로 삼는다.
+
 BEGIN;
 
 -- 재실행 가능하도록 FK 역순으로 비운다
@@ -11,6 +15,8 @@ DELETE FROM payment_failure_log;
 DELETE FROM orders;
 DELETE FROM payment;
 DELETE FROM payment_consumed_event;
+DELETE FROM group_buy_event_outbox;
+DELETE FROM group_buy_suspension_request;
 DELETE FROM group_buy_part;
 DELETE FROM group_buy_price;
 DELETE FROM group_buy;
@@ -19,6 +25,7 @@ DELETE FROM product;
 DELETE FROM product_category;
 DELETE FROM buyer_address;
 DELETE FROM seller_info;
+DELETE FROM notification;
 DELETE FROM social_account;
 DELETE FROM members;
 
@@ -30,7 +37,7 @@ INSERT INTO members (email, name, password, role, status, phone_number) VALUES
 
 -- ── 판매자 정보 (승인 완료 상태) ──────────────────────
 INSERT INTO seller_info (member_id, bank_code, bank_name, account_number, account_holder, company_name, status, rank, settlement_cycle, approved_at)
-SELECT id, '004', '국민은행', '12345678901234', '김생산', '웰바잉농장', 'ACTIVE', 'GOLD', 'MONTHLY', now() - INTERVAL '30 days'
+SELECT id, '004', '국민은행', '12345678901234', '김생산', '웰바잉농장', 'APPROVED', 'GOLD', 'MONTHLY', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '30 days'
 FROM members WHERE email = 'seller@wellbuying.local';
 
 -- ── 구매자 기본 배송지 ────────────────────────────────
@@ -63,10 +70,10 @@ INSERT INTO group_buy (product_id, producer_id, title, status, start_at, end_at,
 SELECT p.id, p.seller_id, g.title, g.status::group_buy_status, g.start_at, g.end_at, g.min_q, g.max_q, g.cur_q
 FROM product p
 JOIN (VALUES
-    ('해남 꿀고구마 5kg',   '해남 꿀고구마 공동구매 3차', 'ONGOING', now() - INTERVAL '2 days',  now() + INTERVAL '7 days',  10, 100, 6),
-    ('제주 노지 감귤 10kg', '제주 감귤 마감 임박 공구',   'ONGOING', now() - INTERVAL '5 days',  now() + INTERVAL '2 hours',  5,  50, 4),
-    ('완도 활전복 1kg',     '완도 활전복 오픈 예정',      'READY',   now() + INTERVAL '1 day',   now() + INTERVAL '10 days',  8,  40, 0),
-    ('전통 방식 조청 500g', '조청 공동구매 (성사 완료)',  'SUCCESS', now() - INTERVAL '20 days', now() - INTERVAL '3 days',  10,  60, 32)
+    ('해남 꿀고구마 5kg',   '해남 꿀고구마 공동구매 3차', 'ONGOING', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '2 days',  (now() AT TIME ZONE 'Asia/Seoul') + INTERVAL '7 days',  10, 100, 6),
+    ('제주 노지 감귤 10kg', '제주 감귤 마감 임박 공구',   'ONGOING', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '5 days',  (now() AT TIME ZONE 'Asia/Seoul') + INTERVAL '2 hours',  5,  50, 4),
+    ('완도 활전복 1kg',     '완도 활전복 오픈 예정',      'READY',   (now() AT TIME ZONE 'Asia/Seoul') + INTERVAL '1 day',   (now() AT TIME ZONE 'Asia/Seoul') + INTERVAL '10 days',  8,  40, 0),
+    ('전통 방식 조청 500g', '조청 공동구매 (성사 완료)',  'SUCCESS', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '20 days', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '3 days',  10,  60, 32)
 ) AS g(product_name, title, status, start_at, end_at, min_q, max_q, cur_q)
   ON g.product_name = p.product_name;
 
@@ -77,8 +84,8 @@ FROM group_buy gb
 CROSS JOIN (VALUES (1, 0, 0), (2, 20, 2000), (3, 50, 4000)) AS t(tier_order, threshold, discount);
 
 -- ── 구매자의 참여 1건 (진행중 공구에 참여한 상태) ──────
-INSERT INTO group_buy_part (group_buy_id, member_id, quantity, applied_price, status)
-SELECT gb.id, m.id, 2, 18000, 'PENDING'
+INSERT INTO group_buy_part (group_buy_id, member_id, quantity, applied_price, status, address, address_detail, zipcode)
+SELECT gb.id, m.id, 2, 18000, 'PENDING', '서울특별시 강남구 테헤란로 123', '4층 401호', '06234'
 FROM group_buy gb, members m
 WHERE gb.title = '해남 꿀고구마 공동구매 3차' AND m.email = 'buyer@wellbuying.local';
 
