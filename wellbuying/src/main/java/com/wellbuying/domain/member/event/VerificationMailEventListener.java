@@ -1,7 +1,6 @@
 package com.wellbuying.domain.member.event;
 
 import com.wellbuying.domain.member.mail.MailService;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -22,7 +21,8 @@ public class VerificationMailEventListener {
         mailService.sendHtmlEmail(event.email(), "[Wellbuying] 휴면 계정 재활성화 인증 코드", event.content());
     }
 
-    // sendVerificationCode()는 트랜잭션 없이 호출되므로(DB 상태 변경 없음) AFTER_COMMIT이 아닌 일반 EventListener로 처리
+    // sendVerificationCode()는 현재 트랜잭션 없이 호출되지만, 향후 상위 로직이 @Transactional 안에서 호출하게 될 경우를 대비해
+    // fallbackExecution = true를 사용 - 트랜잭션이 있으면 AFTER_COMMIT 이후에, 없으면 즉시 실행된다
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handleVerificationCodeIssued(VerificationCodeIssuedEvent event) {
         mailService.sendHtmlEmail(event.email(), "[Wellbuying] 이메일 인증 코드", event.content());
