@@ -133,4 +133,13 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("keyword")))
                 .andExpect(jsonPath("$.message").value(containsString("page")));
     }
+
+    // 잘못된 sort 값은 enum 변환 실패 → MethodArgumentNotValidException → 400
+    @Test
+    void searchProducts_잘못된_sort_타입이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search")
+                        .param("keyword", "비타민")
+                        .param("sort", "INVALID_TYPE"))
+                .andExpect(status().isBadRequest());
+    }
 }
