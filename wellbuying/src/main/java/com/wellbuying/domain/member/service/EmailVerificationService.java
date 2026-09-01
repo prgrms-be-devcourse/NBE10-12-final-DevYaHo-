@@ -4,8 +4,8 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
+import com.wellbuying.domain.member.event.VerificationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
-import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
@@ -26,23 +26,21 @@ public class EmailVerificationService {
     private static final long COOLDOWN_SECONDS = 30L;
     private static final long VERIFIED_TTL_MINUTES = 30L;
 
-    private final MailService mailService;
     private final EmailCooldownGuard emailCooldownGuard;
     private final StringRedisTemplate redisTemplate;
     private final MemberRepository memberRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public EmailVerificationService(MailService mailService, EmailCooldownGuard emailCooldownGuard,
+    public EmailVerificationService(EmailCooldownGuard emailCooldownGuard,
             StringRedisTemplate redisTemplate, MemberRepository memberRepository,
             ApplicationEventPublisher eventPublisher) {
-        this.mailService = mailService;
         this.emailCooldownGuard = emailCooldownGuard;
         this.redisTemplate = redisTemplate;
         this.memberRepository = memberRepository;
         this.eventPublisher = eventPublisher;
     }
 
-    // 이미 가입된 이메일이면 거부, 쿨다운 선점(SETNX, 30초) 후 6자리 코드 생성 → Redis 저장(5분 TTL) → 메일 발송
+    // 이미 가입된 이메일이면 거부, 쿨다운 선점(SETNX, 30초) 후 6자리 코드 생성 → Redis 저장(5분 TTL) → 메일 발송 이벤트 발행
     public void sendVerificationCode(String email) {
         if (memberRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
@@ -51,7 +49,7 @@ public class EmailVerificationService {
 
         String code = generateCode();
         redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, Duration.ofMinutes(CODE_TTL_MINUTES));
-        mailService.sendHtmlEmail(email, "[Wellbuying] 이메일 인증 코드", buildVerificationContent(code));
+        eventPublisher.publishEvent(new VerificationCodeIssuedEvent(email, buildVerificationContent(code)));
     }
 
     // Redis에 저장된 코드와 대조, 불일치/만료 시 예외. 성공 시 코드 삭제 + email:verified 플래그 저장(30분 TTL)

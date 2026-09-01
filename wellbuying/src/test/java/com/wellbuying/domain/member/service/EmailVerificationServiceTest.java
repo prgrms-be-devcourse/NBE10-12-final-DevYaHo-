@@ -15,8 +15,8 @@ import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
+import com.wellbuying.domain.member.event.VerificationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
-import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -34,9 +34,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class EmailVerificationServiceTest {
-
-    @Mock
-    private MailService mailService;
 
     @Mock
     private EmailCooldownGuard emailCooldownGuard;
@@ -67,7 +64,7 @@ class EmailVerificationServiceTest {
         verify(valueOperations).set(eq("email:verification:test@example.com"), anyString(),
                 eq(Duration.ofMinutes(5)));
         verify(emailCooldownGuard).acquire(eq("verification"), eq("test@example.com"), eq(30L));
-        verify(mailService).sendHtmlEmail(eq("test@example.com"), anyString(), anyString());
+        verify(eventPublisher).publishEvent(any(VerificationCodeIssuedEvent.class));
     }
 
     // existsByEmail이 true인 이메일로 발송 요청 시 예외가 발생하고 메일이 발송되지 않는지 검증
@@ -79,7 +76,7 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
-        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // 직전 발송 후 30초 이내 재요청 시 쿨다운 예외가 발생하는지 검증
@@ -93,7 +90,7 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EMAIL_VERIFICATION_COOLDOWN);
-        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // 저장된 코드와 일치하는 코드로 검증 시 코드는 삭제되고 email:verified:{email} 플래그가 30분 TTL로 저장되는지 검증
