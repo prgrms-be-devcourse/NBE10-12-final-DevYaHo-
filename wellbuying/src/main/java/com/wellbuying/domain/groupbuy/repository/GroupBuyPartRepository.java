@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.repository;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,8 +21,8 @@ public interface GroupBuyPartRepository extends JpaRepository<GroupBuyPart, Long
     // 공동구매 성사 시 Kafka 이벤트를 참여자별로 개별 발행하기 위한 확정 참여자 목록 조회
     List<GroupBuyPart> findByGroupBuyIdAndStatus(Long groupBuyId, GroupBuyPartStatus status);
 
-    // GroupBuyLifecycleScheduler가 이번 배치에서 성사 처리할 공동구매 전체의 확정 참여자를 한 번의 쿼리로 조회 (N+1 방지)
-    List<GroupBuyPart> findByGroupBuyIdInAndStatus(List<Long> groupBuyIds, GroupBuyPartStatus status);
+    // GroupBuySeedRunner가 이전에 시딩한 공동구매를 정리할 때 그 참여 내역을 함께 삭제하기 위한 용도
+    void deleteByGroupBuyIdIn(List<Long> groupBuyIds);
 
     // 실시간 상태 조회용 참여자 수 집계
     long countByGroupBuyIdAndStatus(Long groupBuyId, GroupBuyPartStatus status);

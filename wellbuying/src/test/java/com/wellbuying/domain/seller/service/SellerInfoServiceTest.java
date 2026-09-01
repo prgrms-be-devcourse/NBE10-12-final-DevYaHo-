@@ -59,7 +59,7 @@ class SellerInfoServiceTest {
         verify(sellerInfoRepository).save(any());
     }
 
-    // PENDING/ACTIVE 신청 이력이 있는 회원이 다시 신청하면 SELLER_APPLICATION_ALREADY_EXISTS 예외가 발생하고 저장이 일어나지 않는지 검증
+    // PENDING/APPROVED 신청 이력이 있는 회원이 다시 신청하면 SELLER_APPLICATION_ALREADY_EXISTS 예외가 발생하고 저장이 일어나지 않는지 검증
     @Test
     void 이미_신청_이력이_있으면_셀러_신청에_실패한다() {
         when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(pendingSellerInfo(1L, 1L)));
@@ -72,18 +72,18 @@ class SellerInfoServiceTest {
         verify(sellerInfoRepository, never()).save(any());
     }
 
-    // 거절(TERMINATED)된 이력이 있는 회원이 재신청하면 기존 행이 PENDING으로 갱신되고 별도 저장은 호출되지 않는지 검증
+    // 거절(REJECTED)된 이력이 있는 회원이 재신청하면 기존 행이 PENDING으로 갱신되고 별도 저장은 호출되지 않는지 검증
     @Test
     void 거절된_회원이_재신청에_성공한다() {
-        SellerInfo terminated = pendingSellerInfo(1L, 1L);
-        terminated.reject();
-        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(terminated));
+        SellerInfo rejected = pendingSellerInfo(1L, 1L);
+        rejected.reject();
+        when(sellerInfoRepository.findByMemberId(1L)).thenReturn(Optional.of(rejected));
 
         sellerInfoService.apply(1L,
                 new SellerApplyRequest("004", "국민은행", "110-987-654321", "김철수", "웰바잉스토어2"));
 
-        assertThat(terminated.getStatus()).isEqualTo(SellerStatus.PENDING);
-        assertThat(terminated.getBankName()).isEqualTo("국민은행");
+        assertThat(rejected.getStatus()).isEqualTo(SellerStatus.PENDING);
+        assertThat(rejected.getBankName()).isEqualTo("국민은행");
         verify(sellerInfoRepository, never()).save(any());
     }
 
@@ -140,7 +140,7 @@ class SellerInfoServiceTest {
         return sellerInfo;
     }
 
-    // PENDING 상태의 셀러 신청을 승인하면 status가 ACTIVE로, 회원 role이 SELLER로 바뀌는지 검증
+    // PENDING 상태의 셀러 신청을 승인하면 status가 APPROVED로, 회원 role이 SELLER로 바뀌는지 검증
     @Test
     void 셀러_승인에_성공한다() {
         SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
@@ -148,21 +148,21 @@ class SellerInfoServiceTest {
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
         when(memberRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(member));
 
-        sellerInfoService.approve(1L);
+        sellerInfoService.approve(1L, 99L);
 
-        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.ACTIVE);
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
         assertThat(member.getRole()).isEqualTo(Role.SELLER);
     }
 
-    // PENDING 상태의 셀러 신청을 거절하면 status가 TERMINATED로 바뀌고 role은 변경되지 않는지 검증
+    // PENDING 상태의 셀러 신청을 거절하면 status가 REJECTED로 바뀌고 role은 변경되지 않는지 검증
     @Test
     void 셀러_거절에_성공한다() {
         SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        sellerInfoService.reject(1L);
+        sellerInfoService.reject(1L, 99L);
 
-        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.TERMINATED);
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.REJECTED);
         verify(memberRepository, never()).findByIdAndDeletedAtIsNull(any());
     }
 
@@ -171,7 +171,7 @@ class SellerInfoServiceTest {
     void 존재하지_않는_셀러_신청은_승인_거절에_실패한다() {
         when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> sellerInfoService.approve(999L))
+        assertThatThrownBy(() -> sellerInfoService.approve(999L, 99L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
@@ -184,10 +184,82 @@ class SellerInfoServiceTest {
         sellerInfo.approve();
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        assertThatThrownBy(() -> sellerInfoService.reject(1L))
+        assertThatThrownBy(() -> sellerInfoService.reject(1L, 99L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_ALREADY_PROCESSED);
+    }
+
+    // APPROVED 상태의 셀러를 정지하면 status가 SUSPENDED로 바뀌는지 검증
+    @Test
+    void 셀러_정지에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        sellerInfoService.suspend(1L, 99L);
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.SUSPENDED);
+    }
+
+    // APPROVED 상태가 아닌 셀러를 정지하려 하면 SELLER_NOT_APPROVED 예외가 발생하는지 검증
+    @Test
+    void APPROVED_상태가_아니면_셀러_정지에_실패한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        assertThatThrownBy(() -> sellerInfoService.suspend(1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_APPROVED);
+    }
+
+    // 존재하지 않는 sellerId로 정지 시도 시 SELLER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_셀러는_정지에_실패한다() {
+        when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sellerInfoService.suspend(999L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
+    }
+
+    // SUSPENDED 상태의 셀러를 정지 복귀시키면 status가 다시 APPROVED로 바뀌는지 검증
+    @Test
+    void 셀러_정지_복귀에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        sellerInfo.suspend();
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        sellerInfoService.reactivate(1L, 99L);
+
+        assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
+    }
+
+    // SUSPENDED 상태가 아닌 셀러를 정지 복귀시키려 하면 SELLER_NOT_SUSPENDED 예외가 발생하는지 검증
+    @Test
+    void SUSPENDED_상태가_아니면_셀러_정지_복귀에_실패한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
+
+        assertThatThrownBy(() -> sellerInfoService.reactivate(1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_SUSPENDED);
+    }
+
+    // 존재하지 않는 sellerId로 정지 복귀 시도 시 SELLER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_셀러는_정지_복귀에_실패한다() {
+        when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sellerInfoService.reactivate(999L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
     }
 
     // 신청 이력이 있는 회원의 내 셀러 신청 상태 조회가 성공하는지 검증

@@ -12,10 +12,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
 import javax.crypto.SecretKey;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class TokenProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(TokenProvider.class);
 
     private static final String CLAIM_DEVICE_ID = "deviceId";
     private static final String CLAIM_ROLE = "role";
@@ -64,8 +68,10 @@ public class TokenProvider {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (ExpiredJwtException e) {
+            // 정상 만료는 로그인 흐름에서 흔히 발생하므로 로그를 남기지 않음
             throw new BusinessException(ErrorCode.TOKEN_EXPIRED);
         } catch (JwtException | IllegalArgumentException e) {
+            log.warn("토큰 위조/서명 불일치 의심: {}", e.getMessage());
             throw new BusinessException(ErrorCode.INVALID_TOKEN);
         }
     }

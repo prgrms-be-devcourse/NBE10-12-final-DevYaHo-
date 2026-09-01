@@ -1,6 +1,6 @@
 package com.wellbuying.domain.groupbuy.event;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import java.time.LocalDateTime;
 
 // 공동구매 실패(마감까지 최소 수량 미달) 이벤트 - 참여자별 결제가 없는 단계이므로 집계 단위로 1건만 발행

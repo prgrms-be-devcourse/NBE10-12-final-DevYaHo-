@@ -40,7 +40,10 @@ public class SecurityConfig {
             "/api/auth/reactivation/send",
             "/api/auth/reactivation/verify",
             "/oauth2/**",
-            "/login/oauth2/**"
+            "/login/oauth2/**",
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html"
     };
 
     // 공동구매 조회(GET)는 로그인 없이도 둘러볼 수 있어야 하므로 별도로 permitAll 처리 - 생성/수정/참여 등 쓰기 작업은 인증 필요
@@ -118,6 +121,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
+                        // 컨트롤러의 @PreAuthorize가 누락되는 실수를 대비한 이중 방어선 - 관리자 API는 게이트웨이 레벨에서도 걸러낸다
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/groupBuys/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, GROUP_BUY_PUBLIC_GET_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/mine").authenticated()
                         .requestMatchers(HttpMethod.GET, PRODUCT_PUBLIC_GET_PATHS).permitAll()

@@ -20,6 +20,7 @@ public enum ErrorCode {
     SELLER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SELLER_409_APPLICATION_EXISTS", "이미 셀러 신청 또는 가입 이력이 있습니다."),
     OAUTH_EXCHANGE_CODE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_OAUTH_CODE_INVALID", "유효하지 않거나 만료된 교환 코드입니다."),
     SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.CONFLICT, "SOCIAL_409_ALREADY_LINKED", "이미 연동된 소셜 계정입니다."),
+    SOCIAL_EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "SOCIAL_409_EMAIL_EXISTS", "이미 가입된 이메일입니다. 로그인 후 연동해주세요."),
     SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "SOCIAL_404_NOT_FOUND", "연동되지 않은 소셜 계정입니다."),
     SOCIAL_ACCOUNT_LAST_LOGIN_METHOD(HttpStatus.CONFLICT, "SOCIAL_409_LAST_LOGIN_METHOD",
             "마지막 로그인 수단은 해제할 수 없습니다. 다른 소셜 계정을 먼저 연동해주세요."),
@@ -36,17 +37,26 @@ public enum ErrorCode {
     GROUP_BUY_PART_FORBIDDEN(HttpStatus.FORBIDDEN, "GROUPBUY_403_PART_FORBIDDEN", "해당 참여 내역에 대한 권한이 없습니다."),
     GROUP_BUY_PART_ALREADY_CANCELED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_ALREADY_CANCELED", "이미 취소된 참여 내역입니다."),
     GROUP_BUY_PART_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_PART_CANCEL_NOT_ALLOWED", "진행 중인 공동구매만 참여를 취소할 수 있습니다."),
+    GROUP_BUY_SUSPENDED(HttpStatus.CONFLICT, "GROUPBUY_409_SUSPENDED", "판매가 정지된 공동구매입니다."),
+    GROUP_BUY_SUSPENSION_ALREADY_REQUESTED(HttpStatus.CONFLICT, "GROUPBUY_409_SUSPENSION_ALREADY_REQUESTED", "이미 처리 대기 중인 판매정지 요청이 있습니다."),
+    GROUP_BUY_SUSPENSION_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUPBUY_404_SUSPENSION_NOT_FOUND", "존재하지 않는 판매정지 요청입니다."),
+    GROUP_BUY_SUSPENSION_ALREADY_PROCESSED(HttpStatus.CONFLICT, "GROUPBUY_409_SUSPENSION_ALREADY_PROCESSED", "이미 처리된 판매정지 요청입니다."),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON_409_DUPLICATE", "이미 존재하는 데이터입니다."),
     SELLER_NOT_FOUND(HttpStatus.NOT_FOUND, "SELLER_404_NOT_FOUND", "존재하지 않는 셀러 신청입니다."),
     SELLER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "SELLER_409_ALREADY_PROCESSED", "이미 처리된 셀러 신청입니다."),
+    SELLER_NOT_APPROVED(HttpStatus.CONFLICT, "SELLER_409_NOT_APPROVED", "승인된 셀러가 아닙니다."),
+    SELLER_NOT_SUSPENDED(HttpStatus.CONFLICT, "SELLER_409_NOT_SUSPENDED", "정지된 셀러가 아닙니다."),
     PRODUCT_FORBIDDEN(HttpStatus.FORBIDDEN, "PRODUCT_403_SELLER_ONLY", "생산자만 상품을 등록할 수 있습니다."),
     PRODUCT_ALREADY_PROCESSED(HttpStatus.CONFLICT, "PRODUCT_409_ALREADY_PROCESSED", "이미 처리된 상품입니다."),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_404_CATEGORY_NOT_FOUND", "존재하지 않는 카테고리입니다."),
+    PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_404_NOT_FOUND", "존재하지 않는 상품입니다."),
     MEMBER_DORMANT(HttpStatus.FORBIDDEN, "MEMBER_403_DORMANT", "휴면 처리된 계정입니다. 이메일 인증 후 재활성화해주세요."),
     MEMBER_NOT_DORMANT(HttpStatus.CONFLICT, "MEMBER_409_NOT_DORMANT", "휴면 상태가 아닙니다."),
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_NOT_FOUND", "존재하지 않는 결제입니다."),
     BILLING_KEY_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_BILLING_KEY_NOT_FOUND", "등록된 결제 수단이 없습니다."),
-    BILLING_KEY_ISSUE_FAILED(HttpStatus.BAD_GATEWAY, "PAYMENT_502_BILLING_KEY_ISSUE_FAILED", "카드 등록에 실패했습니다. 다시 시도해주세요.");
+    BILLING_KEY_ISSUE_FAILED(HttpStatus.BAD_GATEWAY, "PAYMENT_502_BILLING_KEY_ISSUE_FAILED", "카드 등록에 실패했습니다. 다시 시도해주세요."),
+    SEARCH_SORT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "SEARCH_400_SORT_NOT_SUPPORTED", "지원하지 않는 정렬 방식입니다."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_404_NOT_FOUND", "존재하지 않는 알림입니다.");
 
     private final HttpStatus status;
     private final String code;

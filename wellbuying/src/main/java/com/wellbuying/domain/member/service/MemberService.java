@@ -13,10 +13,11 @@ import com.wellbuying.domain.member.dto.UpdateMemberRequest;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.repository.SocialAccountRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
-import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MemberService {
+
+    private static final Logger log = LoggerFactory.getLogger(MemberService.class);
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -74,7 +77,7 @@ public class MemberService {
     }
 
     // 탈퇴하지 않은 회원을 soft delete하며 개인정보를 익명화, 연동된 소셜 계정을 전부 해제하고
-    // PENDING/TERMINATED 셀러 신청 이력을 즉시 삭제 (ACTIVE 셀러의 금융 정보는 Phase 12까지 보존)
+    // PENDING/REJECTED 셀러 신청 이력을 즉시 삭제 (APPROVED 셀러의 금융 정보는 Phase 12까지 보존)
     @Transactional
     public void withdraw(Long memberId) {
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
@@ -82,9 +85,9 @@ public class MemberService {
         member.withdraw();
         socialAccountRepository.deleteAllByMemberId(memberId);
         sellerInfoRepository.findByMemberId(memberId)
-                .filter(sellerInfo -> sellerInfo.getStatus() == SellerStatus.PENDING
-                        || sellerInfo.getStatus() == SellerStatus.TERMINATED)
+                .filter(SellerInfo::isDeletableOnWithdraw)
                 .ifPresent(sellerInfoRepository::delete);
+        log.info("회원 탈퇴 처리 완료: memberId={}", memberId);
     }
 
     // 로그인 시점마다 호출 - lastLoginAt 갱신 (휴면 전환 차단은 AuthService.login()/OAuthAccountService에서 토큰 발급 전에 처리)

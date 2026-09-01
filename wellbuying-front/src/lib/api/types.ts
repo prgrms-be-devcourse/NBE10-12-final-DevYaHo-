@@ -82,6 +82,19 @@ export type SellerInfoResponse = {
   createdAt: string;
 };
 
+export type MemberStatus = "ACTIVE" | "DORMANT" | "WITHDRAWN";
+
+// GET /api/admin/members 응답 - 관리자 회원 목록 조회
+export type MemberSummaryResponse = {
+  id: number;
+  email: string;
+  name: string;
+  role: Role;
+  status: MemberStatus;
+  phoneNumber: string | null;
+  createdAt: string;
+};
+
 export type ErrorResponse = {
   code: string;
   message: string;
@@ -155,6 +168,9 @@ export type GroupBuySummaryResponse = {
 
 export type GroupBuyPartCreateRequest = {
   quantity: number;
+  address: string;
+  addressDetail?: string;
+  zipcode: string;
 };
 
 export type GroupBuySuspensionStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -191,11 +207,23 @@ export type ProductCreateRequest = {
   thumbnailUrl?: string;
 };
 
-export type ProductStatus = "ON_SALE" | "SOLD_OUT";
+export type ProductStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 // GET /api/products/mine 응답 - 판매자 본인이 등록한 상품(상태 무관) 조회
 export type ProductMineResponse = {
   id: number;
+  productName: string;
+  startPrice: number;
+  thumbnailUrl: string | null;
+  status: ProductStatus;
+  createdAt: string;
+};
+
+// GET /api/admin/products 응답 - 관리자 상품 심사 목록 조회
+export type ProductAdminResponse = {
+  id: number;
+  sellerId: number;
+  categoryId: number;
   productName: string;
   startPrice: number;
   thumbnailUrl: string | null;
@@ -227,6 +255,9 @@ export type GroupBuyPartResponse = {
   quantity: number;
   appliedPrice: number | null;
   status: GroupBuyPartStatus;
+  address: string | null;
+  addressDetail: string | null;
+  zipcode: string | null;
   createdAt: string;
 };
 
@@ -245,6 +276,22 @@ export type PageResponse<T> = {
     totalElements: number;
     totalPages: number;
   };
+};
+
+export type NotificationType = "GROUP_BUY_COMPLETED" | "GROUP_BUY_FAILED";
+
+export type NotificationResponse = {
+  id: number;
+  type: NotificationType;
+  groupBuyId: number;
+  productId: number | null;
+  message: string;
+  read: boolean;
+  createdAt: string;
+};
+
+export type NotificationUnreadCountResponse = {
+  count: number;
 };
 
 export type BillingKeyAuthRequestResponse = {

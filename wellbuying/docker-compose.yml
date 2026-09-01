@@ -47,7 +47,27 @@ services:
     volumes:
       - wellbuying-kafka-data:/var/lib/kafka/data
 
+  opensearch:
+    build:
+      context: ./docker/opensearch
+    container_name: wellbuying-opensearch
+    mem_limit: 1800m
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true # 로컬 개발 전용 (운영 환경 적용 금지)
+      - OPENSEARCH_JAVA_OPTS=-Xms900m -Xmx900m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - wellbuying-opensearch-data:/usr/share/opensearch/data
+
 volumes:
   wellbuying-postgres-data:
   wellbuying-redis-data:
   wellbuying-kafka-data:
+  wellbuying-opensearch-data:

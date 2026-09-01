@@ -7,6 +7,7 @@ import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
+import com.wellbuying.auth.oauth.OAuthExchangePayload;
 import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
@@ -24,6 +25,8 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -62,11 +67,15 @@ public class AuthService {
     @Transactional(noRollbackFor = DormantMemberException.class)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+                .orElseThrow(() -> {
+                    log.warn("로그인 실패: 존재하지 않는 이메일");
+                    return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+                });
         if (member.isSocialOnly()) {
             throw new BusinessException(ErrorCode.SOCIAL_ONLY_ACCOUNT);
         }
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
+            log.warn("로그인 실패: 비밀번호 불일치 - memberId={}", member.getId());
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         member.validateNotDormant();
@@ -101,18 +110,18 @@ public class AuthService {
                 deviceId);
     }
 
-    // 소셜 로그인 성공 후 토큰을 발급해 1회용 교환 코드에 저장 - 콜백 리다이렉트 URL에 토큰이 그대로 노출되지 않도록 함
+    // 소셜 로그인 성공 후 memberId/role만 1회용 교환 코드에 저장 - 토큰은 프론트의 실제 교환 요청 시점에 발급해 그때 보내는 deviceId를 재사용할 수 있게 함
     public String issueOAuthExchangeCode(Long memberId, Role role) {
-        LoginResponse loginResponse = issueTokens(memberId, role, null);
         String code = UUID.randomUUID().toString();
-        oAuthExchangeCodeRepository.save(code, loginResponse);
+        oAuthExchangeCodeRepository.save(code, new OAuthExchangePayload(memberId, role));
         return code;
     }
 
-    // 교환 코드를 1회 소비하여 저장된 토큰을 반환 - 코드가 없거나 이미 사용됐으면 예외
-    public LoginResponse exchangeOAuthCode(String code) {
-        return oAuthExchangeCodeRepository.consume(code)
+    // 교환 코드를 1회 소비해 저장된 memberId/role로 토큰을 발급 - 코드가 없거나 이미 사용됐으면 예외
+    public LoginResponse exchangeOAuthCode(String code, String requestDeviceId) {
+        OAuthExchangePayload payload = oAuthExchangeCodeRepository.consume(code)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_EXCHANGE_CODE_INVALID));
+        return issueTokens(payload.memberId(), payload.role(), requestDeviceId);
     }
 
     // refresh token 검증 후 Lua 스크립트로 rotate하여 access/refresh 토큰을 재발급 (RTR) - role은 DB에서 최신값을 다시 조회해 반영
@@ -133,9 +142,11 @@ public class AuthService {
 
         long result = refreshTokenRepository.rotate(memberId, deviceId, oldTokenHash, newTokenHash);
         if (result == 0) {
+            log.debug("토큰 재발급 실패: 세션 없음(만료/로그아웃) - memberId={}, deviceId={}", memberId, deviceId);
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         if (result < 0) {
+            log.warn("리프레시 토큰 재사용 탐지: memberId={}, deviceId={}", memberId, deviceId);
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
         }
 

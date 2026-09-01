@@ -1,6 +1,7 @@
 package com.wellbuying.domain.seller.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -10,6 +11,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
+import com.wellbuying.domain.seller.crypto.SellerInfoFieldConverter;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -35,10 +39,13 @@ public class SellerInfo {
     @Column(name = "bank_name", nullable = false)
     private String bankName;
 
-    @Column(name = "account_number", nullable = false)
+    // AES-256-GCM 암호화 저장 (SellerInfoFieldConverter) - 컬럼에는 IV+암호문을 Base64로 인코딩해 저장
+    @Convert(converter = SellerInfoFieldConverter.class)
+    @Column(name = "account_number", nullable = false, length = 500)
     private String accountNumber;
 
-    @Column(name = "account_holder", nullable = false)
+    @Convert(converter = SellerInfoFieldConverter.class)
+    @Column(name = "account_holder", nullable = false, length = 500)
     private String accountHolder;
 
     @Column(name = "company_name")
@@ -95,18 +102,45 @@ public class SellerInfo {
         return new SellerInfo(memberId, bankCode, bankName, accountNumber, accountHolder, companyName);
     }
 
-    // 셀러 승인 - status를 ACTIVE로 전환하고 승인 시각을 기록 ("PENDING이어야만 승인 가능"이라는 검증은 서비스 레이어 책임)
+    // 셀러 승인 - PENDING 상태일 때만 승인 가능, status를 APPROVED로 전환하고 승인 시각을 기록
     public void approve() {
-        this.status = SellerStatus.ACTIVE;
+        if (this.status != SellerStatus.PENDING) {
+            throw new BusinessException(ErrorCode.SELLER_ALREADY_PROCESSED);
+        }
+        this.status = SellerStatus.APPROVED;
         this.approvedAt = LocalDateTime.now();
     }
 
-    // 셀러 거절 - status를 TERMINATED로 전환 (approvedAt은 기록하지 않음)
+    // 셀러 거절 - PENDING 상태일 때만 거절 가능, status를 REJECTED로 전환 (approvedAt은 기록하지 않음)
     public void reject() {
-        this.status = SellerStatus.TERMINATED;
+        if (this.status != SellerStatus.PENDING) {
+            throw new BusinessException(ErrorCode.SELLER_ALREADY_PROCESSED);
+        }
+        this.status = SellerStatus.REJECTED;
     }
 
-    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("TERMINATED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
+    // 셀러 정지 - APPROVED 상태일 때만 정지 가능, status를 SUSPENDED로 전환
+    public void suspend() {
+        if (this.status != SellerStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.SELLER_NOT_APPROVED);
+        }
+        this.status = SellerStatus.SUSPENDED;
+    }
+
+    // 셀러 정지 복귀 - SUSPENDED 상태일 때만 복귀 가능, status를 다시 APPROVED로 전환
+    public void reactivate() {
+        if (this.status != SellerStatus.SUSPENDED) {
+            throw new BusinessException(ErrorCode.SELLER_NOT_SUSPENDED);
+        }
+        this.status = SellerStatus.APPROVED;
+    }
+
+    // 탈퇴 시 삭제 대상인지 판단 - 승인 전(PENDING)/거절(REJECTED) 신청만 삭제, 금융 정보 보유 상태(APPROVED/SUSPENDED)는 보존
+    public boolean isDeletableOnWithdraw() {
+        return this.status == SellerStatus.PENDING || this.status == SellerStatus.REJECTED;
+    }
+
+    // 재신청 - 새 신청 정보로 갱신하고 PENDING으로 되돌림 ("REJECTED여야만 재신청 가능"이라는 검증은 서비스 레이어 책임)
     public void reapply(String bankCode, String bankName, String accountNumber, String accountHolder,
             String companyName) {
         this.bankCode = bankCode;

@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyDetailResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
@@ -10,9 +10,14 @@ import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPriceResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyStatusResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuySummaryResponse;
+import com.wellbuying.domain.groupbuy.dto.GroupBuySuspensionRequestCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyUpdateRequest;
 import com.wellbuying.domain.groupbuy.service.GroupBuyParticipationService;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
+import com.wellbuying.global.config.OpenApiConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -34,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/groupBuys")
+@Tag(name = "공동구매", description = "공동구매 생성/조회/수정/취소/참여")
 public class GroupBuyController {
 
     private final GroupBuyService groupBuyService;
@@ -46,6 +52,8 @@ public class GroupBuyController {
     }
 
     // 공동구매 생성 (생산자)
+    @Operation(summary = "공동구매 생성 (생산자)")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @PostMapping
     public ResponseEntity<GroupBuyDetailResponse> create(@AuthenticationPrincipal AuthenticatedMember member,
             @Valid @RequestBody GroupBuyCreateRequest request) {
@@ -53,18 +61,21 @@ public class GroupBuyController {
     }
 
     // 상세 조회 (잘 안 바뀌는 정보만)
+    @Operation(summary = "공동구매 상세 조회")
     @GetMapping("/{id}")
     public ResponseEntity<GroupBuyDetailResponse> getDetail(@PathVariable Long id) {
         return ResponseEntity.ok(groupBuyService.getDetail(id));
     }
 
     // 실시간 상태 조회 (참여자 수, 잔여 수량, 남은 시간)
+    @Operation(summary = "공동구매 실시간 상태 조회 - 참여자 수/잔여 수량/남은 시간")
     @GetMapping("/{id}/status")
     public ResponseEntity<GroupBuyStatusResponse> getStatus(@PathVariable Long id) {
         return ResponseEntity.ok(groupBuyService.getStatus(id));
     }
 
     // 목록/검색
+    @Operation(summary = "공동구매 목록/검색")
     @GetMapping
     public ResponseEntity<Page<GroupBuySummaryResponse>> list(
             @RequestParam(required = false) GroupBuyStatus status,
@@ -72,7 +83,29 @@ public class GroupBuyController {
         return ResponseEntity.ok(groupBuyService.list(status, pageable));
     }
 
+    // 내 공동구매 목록 조회 (생산자 본인)
+    @Operation(summary = "내 공동구매 목록 조회 (생산자 본인)")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @GetMapping("/mine")
+    public ResponseEntity<Page<GroupBuySummaryResponse>> listMine(@AuthenticationPrincipal AuthenticatedMember member,
+            @RequestParam(required = false) GroupBuyStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(groupBuyService.listMine(member.memberId(), status, pageable));
+    }
+
+    // 판매정지 요청 (생산자 본인, ONGOING 상태만)
+    @Operation(summary = "판매정지 요청 (생산자 본인, ONGOING 상태만)")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PostMapping("/{id}/suspension-requests")
+    public ResponseEntity<Void> requestSuspension(@AuthenticationPrincipal AuthenticatedMember member,
+            @PathVariable Long id, @RequestBody GroupBuySuspensionRequestCreateRequest request) {
+        groupBuyService.requestSuspension(member.memberId(), id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
     // 정보 수정
+    @Operation(summary = "공동구매 정보 수정")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @PatchMapping("/{id}")
     public ResponseEntity<GroupBuyDetailResponse> update(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable Long id, @Valid @RequestBody GroupBuyUpdateRequest request) {
@@ -80,6 +113,8 @@ public class GroupBuyController {
     }
 
     // 취소 (시작 전에만)
+    @Operation(summary = "공동구매 취소 (시작 전에만)")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> cancel(@AuthenticationPrincipal AuthenticatedMember member, @PathVariable Long id) {
         groupBuyService.cancel(member.memberId(), id);
@@ -87,12 +122,15 @@ public class GroupBuyController {
     }
 
     // 가격 구간 조회
+    @Operation(summary = "가격 구간 조회")
     @GetMapping("/{id}/price")
     public ResponseEntity<List<GroupBuyPriceResponse>> getPriceTiers(@PathVariable Long id) {
         return ResponseEntity.ok(groupBuyService.getPriceTiers(id));
     }
 
     // 참여 신청
+    @Operation(summary = "공동구매 참여 신청")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @PostMapping("/{id}/part")
     public ResponseEntity<GroupBuyPartResponse> participate(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable Long id, @Valid @RequestBody GroupBuyPartCreateRequest request) {
@@ -101,6 +139,8 @@ public class GroupBuyController {
     }
 
     // 참여 취소
+    @Operation(summary = "공동구매 참여 취소")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @DeleteMapping("/{id}/part/{partId}")
     public ResponseEntity<Void> cancelParticipation(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable Long id, @PathVariable Long partId) {
@@ -109,6 +149,8 @@ public class GroupBuyController {
     }
 
     // 내 참여 내역 여부
+    @Operation(summary = "내 참여 내역 여부 조회")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @GetMapping("/{id}/part/me")
     public ResponseEntity<GroupBuyPartMeResponse> myParticipation(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable Long id) {

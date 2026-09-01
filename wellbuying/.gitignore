@@ -47,6 +47,5 @@ out/
 docs/
 capcature/
 
-### bam ignore ###
-docs/
-CLAUDE.md
+### 개인 작업 규칙 (CLAUDE.md는 팀 공용이라 추적한다) ###
+CLAUDE.local.md

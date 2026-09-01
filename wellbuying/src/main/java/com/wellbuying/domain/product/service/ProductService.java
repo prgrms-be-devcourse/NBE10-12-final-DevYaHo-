@@ -3,15 +3,21 @@ package com.wellbuying.domain.product.service;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
+import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
@@ -23,18 +29,40 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
-                          ProductCategoryRepository productCategoryRepository) {
+                          ProductCategoryRepository productCategoryRepository,
+                          ApplicationEventPublisher eventPublisher) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 페이지 단위로 조회
     @Transactional(readOnly = true)
     public Slice<ProductSummaryResponse> getProducts(ProductSearchCondition condition, Pageable pageable) {
         return productRepository.search(condition, pageable);
+    }
+
+    // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
+    @Transactional(readOnly = true)
+    public ProductDetailResponse getDetail(Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        return ProductDetailResponse.of(product);
+    }
+
+    // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
+    @Transactional(readOnly = true)
+    public Product getOwnedOrThrow(Long sellerId, Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        if (!product.getSellerId().equals(sellerId)) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return product;
     }
 
     // 생산자(SELLER)만 상품을 등록할 수 있음
@@ -55,12 +83,39 @@ public class ProductService {
         }
         Product product = Product.register(sellerId, request.categoryId(), request.productName(),
                 request.description(), request.startPrice(), request.thumbnailUrl());
-        return productRepository.save(product).getId();
+        Long productId = productRepository.save(product).getId();
+        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+        return productId;
     }
 
     // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관) 조회
     @Transactional(readOnly = true)
     public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
         return productRepository.findBySeller(sellerId, pageable);
+    }
+
+    // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회
+    @Transactional(readOnly = true)
+    public Page<ProductAdminResponse> findByStatus(ProductStatus status, Pageable pageable) {
+        return productRepository.findByStatus(status, pageable).map(ProductAdminResponse::of);
+    }
+
+    // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
+    @Transactional
+    public void approve(Long productId) {
+        findProduct(productId).approve();
+        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+    }
+
+    // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
+    @Transactional
+    public void reject(Long productId) {
+        findProduct(productId).reject();
+        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+    }
+
+    private Product findProduct(Long productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 }

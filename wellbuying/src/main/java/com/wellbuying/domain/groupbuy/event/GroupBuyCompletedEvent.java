@@ -1,7 +1,7 @@
 package com.wellbuying.domain.groupbuy.event;
 
-import com.wellbuying.domain.groupbuy.domain.GroupBuy;
-import com.wellbuying.domain.groupbuy.domain.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import java.time.LocalDateTime;
 
 // 공동구매 성사 이벤트 - 참여자 1명당 1건씩 발행되어, 결제 도메인이 참여자 단위로 결제를 개시할 수 있게 한다

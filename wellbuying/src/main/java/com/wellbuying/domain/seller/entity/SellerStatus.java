@@ -2,7 +2,7 @@ package com.wellbuying.domain.seller.entity;
 
 public enum SellerStatus {
     PENDING,
-    ACTIVE,
+    APPROVED,
     SUSPENDED,
-    TERMINATED
+    REJECTED
 }

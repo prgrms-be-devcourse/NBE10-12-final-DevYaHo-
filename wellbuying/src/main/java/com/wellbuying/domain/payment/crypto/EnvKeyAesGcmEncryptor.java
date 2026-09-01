@@ -30,7 +30,8 @@ public class EnvKeyAesGcmEncryptor implements BillingKeyEncryptor {
     private final SecureRandom secureRandom = new SecureRandom();
 
     public EnvKeyAesGcmEncryptor(@Value("${billing-key.master-key:}") String base64MasterKey) {
-        // 키가 없거나 길이가 틀리면 부팅 단계에서 끊는다 - 결제 도중에 터지면 이미 승인된 건을 수습해야 한다
+        // 키 형식이 틀리면 부팅 단계에서 끊는다 - 결제 도중에 터지면 이미 승인된 건을 수습해야 한다.
+        // 기본값은 로컬/테스트용 자리표시자이며, 운영에서는 BILLING_KEY_MASTER_KEY로 반드시 덮어써야 한다
         if (base64MasterKey == null || base64MasterKey.isBlank()) {
             throw new IllegalStateException(
                     "billing-key.master-key가 비어 있습니다. .env.local의 BILLING_KEY_MASTER_KEY를 설정하세요");

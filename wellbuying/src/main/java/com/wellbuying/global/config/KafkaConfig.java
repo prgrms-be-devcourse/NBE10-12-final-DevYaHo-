@@ -9,6 +9,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
@@ -18,6 +19,9 @@ import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
+// @EnableKafka가 있어야 @KafkaListener가 실제 리스너 컨테이너로 등록된다 - 이게 없으면 컴파일/기동은 되지만
+// 컨슈머가 아예 뜨지 않아 조용히 아무 메시지도 소비하지 못한다(로컬 통합 테스트로 이 문제를 직접 확인함)
+@EnableKafka
 @Configuration
 public class KafkaConfig {
 
@@ -37,18 +41,18 @@ public class KafkaConfig {
         return new KafkaTemplate<>(producerFactory);
     }
 
-    // 발행 측과 짝을 맞춰 문자열로 수신하고, 역직렬화는 각 리스너가 필요한 타입으로 직접 한다
+    // key/value 모두 문자열로 역직렬화 - 페이로드는 각 리스너가 필요한 타입으로 직접 파싱한다.
+    // group.id는 여기서 주지 않고 @KafkaListener(groupId=...)에서 리스너별로 지정한다
+    // (리스너가 늘어나도 이 팩토리를 공유할 수 있도록)
     @Bean
     public ConsumerFactory<String, String> consumerFactory(
-            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
-            @Value("${spring.kafka.consumer.group-id}") String groupId,
-            @Value("${spring.kafka.consumer.auto-offset-reset:earliest}") String autoOffsetReset) {
+            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers) {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
+        // 컨슈머 그룹이 처음 붙는 시점엔 커밋된 오프셋이 없으므로, 그 이전 이벤트를 놓치지 않도록 처음부터 읽는다
+        configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         // 결제는 재처리 비용이 큰 작업이라 커밋 시점을 컨테이너가 제어하도록 자동 커밋을 끈다
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         return new DefaultKafkaConsumerFactory<>(configProps);
