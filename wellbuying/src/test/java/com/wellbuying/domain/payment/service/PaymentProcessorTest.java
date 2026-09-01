@@ -13,6 +13,7 @@ import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
 import com.wellbuying.domain.payment.event.PaymentCompletedEvent;
 import com.wellbuying.domain.payment.event.PaymentEventPublisher;
 import com.wellbuying.domain.payment.event.PaymentFailedEvent;
+import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
 import com.wellbuying.domain.payment.gateway.PgApprovalException;
@@ -79,7 +80,8 @@ class PaymentProcessorTest {
     }
 
     private PgApproveResult givenApproved() {
-        when(billingKeyProvider.findBillingKey(MEMBER_ID)).thenReturn(Optional.of("bk_test"));
+        when(billingKeyProvider.findBillingKey(MEMBER_ID))
+                .thenReturn(Optional.of(new BillingCredential("bk_test", "cust_test")));
         PgApproveResult result = new PgApproveResult(PG_TRANSACTION_ID, LocalDateTime.now());
         when(paymentGateway.approve(any(PgApproveCommand.class))).thenReturn(result);
         return result;
@@ -155,7 +157,8 @@ class PaymentProcessorTest {
     @DisplayName("PG가 승인을 거절하면 결제를 FAILED로 남기고 실패 이벤트를 발행한다")
     void PG_승인_거절() {
         givenPrepared();
-        when(billingKeyProvider.findBillingKey(MEMBER_ID)).thenReturn(Optional.of("bk_test"));
+        when(billingKeyProvider.findBillingKey(MEMBER_ID))
+                .thenReturn(Optional.of(new BillingCredential("bk_test", "cust_test")));
         when(paymentGateway.approve(any(PgApproveCommand.class)))
                 .thenThrow(new PgApprovalException("카드 한도 초과"));
 

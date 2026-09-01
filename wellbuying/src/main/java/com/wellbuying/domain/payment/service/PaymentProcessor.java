@@ -6,6 +6,7 @@ import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
 import com.wellbuying.domain.payment.event.PaymentCompletedEvent;
 import com.wellbuying.domain.payment.event.PaymentEventPublisher;
 import com.wellbuying.domain.payment.event.PaymentFailedEvent;
+import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
 import com.wellbuying.domain.payment.gateway.PgApproveCommand;
@@ -67,8 +68,8 @@ public class PaymentProcessor {
             return;
         }
 
-        Optional<String> billingKey = billingKeyProvider.findBillingKey(message.memberId());
-        if (billingKey.isEmpty()) {
+        Optional<BillingCredential> credential = billingKeyProvider.findBillingKey(message.memberId());
+        if (credential.isEmpty()) {
             paymentTransactionService.markFailed(preparation.paymentId());
             publishFailed(message, preparation.paymentId(), "등록된 빌링키가 없음");
             return;
@@ -76,7 +77,7 @@ public class PaymentProcessor {
 
         PgApproveResult result;
         try {
-            result = paymentGateway.approve(toApproveCommand(message, billingKey.get()));
+            result = paymentGateway.approve(toApproveCommand(message, credential.get()));
         } catch (PgApprovalException e) {
             log.warn("PG 승인 실패 - eventId={}, paymentId={}", message.eventId(), preparation.paymentId(), e);
             paymentTransactionService.markFailed(preparation.paymentId());
@@ -102,10 +103,11 @@ public class PaymentProcessor {
                 PaymentCompletedEvent.of(order, message.groupBuyId(), message.producerId(), result.pgTransactionId()));
     }
 
-    private PgApproveCommand toApproveCommand(GroupBuyCompletedMessage message, String billingKey) {
+    private PgApproveCommand toApproveCommand(GroupBuyCompletedMessage message, BillingCredential credential) {
         return new PgApproveCommand(
-                billingKey,
-                "member-" + message.memberId(),
+                credential.billingKey(),
+                // 발급 때 쓴 값을 그대로 보내야 한다 - 승인 시점에 새로 만들면 토스가 다른 고객으로 보고 거부한다
+                credential.customerKey(),
                 // 토스 orderId는 영문/숫자/-/_ 만 허용하므로 eventId(콜론 포함)를 그대로 쓰지 않는다
                 "gb-" + message.partId(),
                 "공동구매 결제",

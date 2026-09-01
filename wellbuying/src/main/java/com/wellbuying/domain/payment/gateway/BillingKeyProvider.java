@@ -3,9 +3,9 @@ package com.wellbuying.domain.payment.gateway;
 import java.util.Optional;
 
 // 회원의 빌링키를 가져오는 경계.
-// 빌링키를 어느 테이블에 저장할지가 GroupBuy 도메인과 협의 중이라(00-payment-design.md 참고),
-// 저장 위치가 정해질 때까지 이 인터페이스의 구현체만 교체하면 되도록 분리해 둔다
+// 성사 이벤트에는 memberId만 실려 오고 빌링키는 결제 도메인이 자기 저장소에서 찾는다
+// (02-billingkey.md 방안 A). 저장 방식이 바뀌어도 PaymentProcessor는 이 인터페이스만 본다
 public interface BillingKeyProvider {
 
-    Optional<String> findBillingKey(Long memberId);
+    Optional<BillingCredential> findBillingKey(Long memberId);
 }
