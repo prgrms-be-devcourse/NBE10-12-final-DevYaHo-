@@ -246,3 +246,14 @@ export type PageResponse<T> = {
     totalPages: number;
   };
 };
+
+export type BillingKeyAuthRequestResponse = {
+  customerKey: string;
+};
+
+// 빌링키 자체는 응답에 실리지 않는다 - 등록 여부와 표시용 카드 정보만 온다
+export type BillingKeyResponse = {
+  registered: boolean;
+  cardCompany: string | null;
+  cardLast4: string | null;
+};
