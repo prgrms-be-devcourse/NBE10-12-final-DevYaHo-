@@ -23,7 +23,7 @@ public class VerificationMailEventListener {
     }
 
     // sendVerificationCode()는 트랜잭션 없이 호출되므로(DB 상태 변경 없음) AFTER_COMMIT이 아닌 일반 EventListener로 처리
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handleVerificationCodeIssued(VerificationCodeIssuedEvent event) {
         mailService.sendHtmlEmail(event.email(), "[Wellbuying] 이메일 인증 코드", event.content());
     }
