@@ -1,4 +1,4 @@
-그다으package com.wellbuying.domain.payment.gateway;
+package com.wellbuying.domain.payment.gateway;
 
 import java.time.LocalDateTime;
 
