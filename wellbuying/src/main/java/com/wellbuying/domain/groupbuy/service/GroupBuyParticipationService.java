@@ -64,7 +64,8 @@ public class GroupBuyParticipationService {
             // 참여 시점에는 가격을 계산/저장하지 않는다 - 성사되면 최종가로 소급 확정되고,
             // 실패하면 애초에 가격이 필요 없으므로 여기서 계산하는 건 낭비다. 예상가는 프론트가
             // GET /price(구간표) + GET /status(현재 수량)로 직접 계산해 보여준다
-            GroupBuyPart part = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, memberId, quantity));
+            GroupBuyPart part = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, memberId, quantity,
+                    request.address(), request.addressDetail(), request.zipcode()));
 
             // 자바 메모리에서 읽은 값에 더해 통째로 덮어쓰는 방식이 아니라, DB에서 직접 원자적으로 증가시킨다
             // (동시에 여러 참여가 몰려도 lost update가 없다). 이 호출 이후 영속성 컨텍스트가 비워지므로

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, LogOut, type LucideIcon } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 
 export type NavItem = {
   href: string;
@@ -119,6 +120,8 @@ export function AppShell({
                 </Link>
               );
             })}
+
+            {member && <NotificationBell />}
 
             {member && (
               <div className="relative hidden items-center sm:flex">
