@@ -46,3 +46,7 @@ out/
 ### docs ###
 docs/
 capcature/
+
+### bam ignore ###
+docs/
+CLAUDE.md
