@@ -7,8 +7,8 @@ import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.search.ProductSearchRequest;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
-import com.wellbuying.domain.product.search.SearchSortType;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -16,9 +16,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -27,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -94,12 +92,7 @@ public class ProductController {
 
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
     @GetMapping("/search")
-    public Slice<ProductSearchResponse> searchProducts(
-            @RequestParam @NotBlank(message = "검색 키워드는 필수입니다.") String keyword,
-            @RequestParam(defaultValue = "RELEVANCE") SearchSortType sort,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
-    ) {
-        return productSearchService.search(keyword.trim(), sort, page, size);
+    public Slice<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
+        return productSearchService.search(request.keyword(), request.sort(), request.page(), request.size());
     }
 }

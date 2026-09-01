@@ -36,13 +36,16 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.DUPLICATE_RESOURCE));
     }
 
-    // @Valid 검증 실패 시 첫 번째 필드 에러 메시지를 담아 400 응답
+    // @Valid 검증 실패 시 모든 필드 에러 메시지를 필드명 기준으로 정렬해 400 응답
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()
-                .findFirst()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
-                .orElse(ErrorCode.INVALID_INPUT.getMessage());
+                .sorted()
+                .collect(Collectors.joining(", "));
+        if (message.isBlank()) {
+            message = ErrorCode.INVALID_INPUT.getMessage();
+        }
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
     }
