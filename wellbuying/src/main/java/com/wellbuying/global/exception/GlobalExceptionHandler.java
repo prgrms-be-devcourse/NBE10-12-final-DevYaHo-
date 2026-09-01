@@ -3,7 +3,6 @@ package com.wellbuying.global.exception;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -11,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -58,10 +58,12 @@ public class GlobalExceptionHandler {
                 ? fieldError.getField()
                 : error.getObjectName();
 
-        String defaultMessage = Objects.requireNonNullElse(
-                error.getDefaultMessage(), ErrorCode.INVALID_INPUT.getMessage());
+        String rawMessage = error.getDefaultMessage();
+        String message = StringUtils.hasText(rawMessage)
+                ? rawMessage
+                : ErrorCode.INVALID_INPUT.getMessage();
 
-        return name + ": " + defaultMessage;
+        return name + ": " + message;
     }
 
     // @Validated + @RequestParam 제약 위반(NotBlank/Min/Max 등)을 400으로 응답
