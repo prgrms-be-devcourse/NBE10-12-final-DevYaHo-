@@ -17,16 +17,13 @@ public class EmailCooldownGuard {
         this.redisTemplate = redisTemplate;
     }
 
-    // 쿨다운이 남아있으면 EMAIL_VERIFICATION_COOLDOWN 예외 발생 (발송 전 호출)
-    public void check(String purpose, String key) {
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(buildKey(purpose, key)))) {
+    // SETNX로 쿨다운 확인+선점을 한 번에 처리 (check+mark 사이의 동시 요청 레이스 제거)
+    public void acquire(String purpose, String key, long seconds) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(buildKey(purpose, key), "1", Duration.ofSeconds(seconds));
+        if (!Boolean.TRUE.equals(acquired)) {
             throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_COOLDOWN);
         }
-    }
-
-    // 발송 직후 쿨다운 키를 TTL과 함께 선점 (만료되면 자동 삭제되어 재발송 가능)
-    public void mark(String purpose, String key, long seconds) {
-        redisTemplate.opsForValue().set(buildKey(purpose, key), "1", Duration.ofSeconds(seconds));
     }
 
     private String buildKey(String purpose, String key) {

@@ -3,11 +3,13 @@ package com.wellbuying.domain.member.service;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,25 +30,27 @@ public class EmailVerificationService {
     private final EmailCooldownGuard emailCooldownGuard;
     private final StringRedisTemplate redisTemplate;
     private final MemberRepository memberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public EmailVerificationService(MailService mailService, EmailCooldownGuard emailCooldownGuard,
-            StringRedisTemplate redisTemplate, MemberRepository memberRepository) {
+            StringRedisTemplate redisTemplate, MemberRepository memberRepository,
+            ApplicationEventPublisher eventPublisher) {
         this.mailService = mailService;
         this.emailCooldownGuard = emailCooldownGuard;
         this.redisTemplate = redisTemplate;
         this.memberRepository = memberRepository;
+        this.eventPublisher = eventPublisher;
     }
 
-    // 이미 가입된 이메일이면 거부, 쿨다운 확인 후 6자리 코드 생성 → Redis 저장(5분 TTL) → 쿨다운 선점(30초) → 메일 발송
+    // 이미 가입된 이메일이면 거부, 쿨다운 선점(SETNX, 30초) 후 6자리 코드 생성 → Redis 저장(5분 TTL) → 메일 발송
     public void sendVerificationCode(String email) {
         if (memberRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
-        emailCooldownGuard.check(COOLDOWN_PURPOSE, email);
+        emailCooldownGuard.acquire(COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
 
         String code = generateCode();
         redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, Duration.ofMinutes(CODE_TTL_MINUTES));
-        emailCooldownGuard.mark(COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
         mailService.sendHtmlEmail(email, "[Wellbuying] 이메일 인증 코드", buildVerificationContent(code));
     }
 
@@ -70,20 +74,19 @@ public class EmailVerificationService {
     }
 
     // 휴면 회원만 재활성화 코드를 받을 수 있음 - 존재하지 않으면 거부, 배치 미실행으로 아직 ACTIVE인 휴면 대상은 이 시점에 DORMANT로 동기화하여 허용
-    // 쿨다운 체크(예외 가능)를 validateCanReactivate()(마지막에만 예외, 그 전에 markDormant() 가능) 앞에 두어
-    // AuthService.login()과 같은 롤백 문제가 재발하지 않도록 함 - 이 메서드는 noRollbackFor 없이도 안전
+    // validateCanReactivate()를 acquire()보다 앞에 두어 재활성화 대상이 아닌 요청에 쿨다운을 낭비하지 않도록 함.
+    // 메일 발송은 AFTER_COMMIT 이벤트로 분리 - SMTP 실패로 트랜잭션이 롤백돼도 이미 커밋된 Redis 상태와의 불일치가 생기지 않음
     @Transactional
     public void sendReactivationCode(String email) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        emailCooldownGuard.check(REACTIVATION_COOLDOWN_PURPOSE, email);
         member.validateCanReactivate();
+        emailCooldownGuard.acquire(REACTIVATION_COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
 
         String code = generateCode();
         redisTemplate.opsForValue()
                 .set(REACTIVATION_CODE_KEY_PREFIX + email, code, Duration.ofMinutes(CODE_TTL_MINUTES));
-        emailCooldownGuard.mark(REACTIVATION_COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
-        mailService.sendHtmlEmail(email, "[Wellbuying] 휴면 계정 재활성화 인증 코드", buildVerificationContent(code));
+        eventPublisher.publishEvent(new ReactivationCodeIssuedEvent(email, buildVerificationContent(code)));
     }
 
     // 재활성화 코드 검증 - 가입 흐름과 달리 검증과 재활성화가 한 호출(AuthService.reactivate())에서 처리되므로 별도 verified 플래그 없이 코드만 소비

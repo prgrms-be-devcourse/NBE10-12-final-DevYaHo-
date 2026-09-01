@@ -1,6 +1,7 @@
 package com.wellbuying.domain.member.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -13,6 +14,7 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
+import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
 import com.wellbuying.domain.member.mail.MailService;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -47,6 +50,9 @@ class EmailVerificationServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private EmailVerificationService emailVerificationService;
 
@@ -60,7 +66,7 @@ class EmailVerificationServiceTest {
 
         verify(valueOperations).set(eq("email:verification:test@example.com"), anyString(),
                 eq(Duration.ofMinutes(5)));
-        verify(emailCooldownGuard).mark(eq("verification"), eq("test@example.com"), eq(30L));
+        verify(emailCooldownGuard).acquire(eq("verification"), eq("test@example.com"), eq(30L));
         verify(mailService).sendHtmlEmail(eq("test@example.com"), anyString(), anyString());
     }
 
@@ -81,7 +87,7 @@ class EmailVerificationServiceTest {
     void 쿨다운_중에_재발송을_요청하면_예외가_발생한다() {
         when(memberRepository.existsByEmail("cooldown@example.com")).thenReturn(false);
         doThrow(new BusinessException(ErrorCode.EMAIL_VERIFICATION_COOLDOWN))
-                .when(emailCooldownGuard).check("verification", "cooldown@example.com");
+                .when(emailCooldownGuard).acquire("verification", "cooldown@example.com", 30L);
 
         assertThatThrownBy(() -> emailVerificationService.sendVerificationCode("cooldown@example.com"))
                 .isInstanceOf(BusinessException.class)
@@ -149,8 +155,8 @@ class EmailVerificationServiceTest {
 
         verify(valueOperations).set(eq("email:reactivation:dormant@example.com"), anyString(),
                 eq(Duration.ofMinutes(5)));
-        verify(emailCooldownGuard).mark(eq("reactivation"), eq("dormant@example.com"), eq(30L));
-        verify(mailService).sendHtmlEmail(eq("dormant@example.com"), anyString(), anyString());
+        verify(emailCooldownGuard).acquire(eq("reactivation"), eq("dormant@example.com"), eq(30L));
+        verify(eventPublisher).publishEvent(any(ReactivationCodeIssuedEvent.class));
     }
 
     // 존재하지 않는 이메일로 재활성화 코드 요청 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
@@ -162,10 +168,10 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
-    // 휴면 상태가 아닌 회원이 재활성화 코드를 요청하면 MEMBER_NOT_DORMANT 예외가 발생하는지 검증
+    // 휴면 상태가 아닌 회원이 재활성화 코드를 요청하면 MEMBER_NOT_DORMANT 예외가 발생하고, 쿨다운도 소모되지 않는지 검증
     @Test
     void 휴면이_아닌_회원의_재활성화_코드_요청은_실패한다() {
         Member member = Member.signUp("active@example.com", "encoded-password", "홍길동");
@@ -175,7 +181,8 @@ class EmailVerificationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);
-        verify(mailService, never()).sendHtmlEmail(anyString(), anyString(), anyString());
+        verify(emailCooldownGuard, never()).acquire(anyString(), anyString(), eq(30L));
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // 배치 미실행으로 status는 ACTIVE지만 6개월 이상 미접속한 휴면 대상 회원이 재활성화 코드를 요청하면 DORMANT로 동기화되고 코드가 발송되는지 검증
@@ -189,7 +196,7 @@ class EmailVerificationServiceTest {
         emailVerificationService.sendReactivationCode("eligible@example.com");
 
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
-        verify(mailService).sendHtmlEmail(eq("eligible@example.com"), anyString(), anyString());
+        verify(eventPublisher).publishEvent(any(ReactivationCodeIssuedEvent.class));
     }
 
     // 저장된 코드와 일치하는 코드로 재활성화 코드를 검증하면 코드가 삭제되는지 검증
