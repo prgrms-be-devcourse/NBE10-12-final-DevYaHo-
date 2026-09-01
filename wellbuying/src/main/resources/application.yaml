@@ -85,5 +85,7 @@ admin-seed:
 toss:
   base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
   secret-key: ${TOSS_SECRET_KEY:CHANGE_ME_local_dev_toss_test_secret_key}
-  # 빌링키 저장 위치가 확정될 때까지 쓰는 임시 테스트 키 (ConfiguredBillingKeyProvider 참고)
-  test-billing-key: ${TOSS_TEST_BILLING_KEY:}
+
+billing-key:
+  # 빌링키 암복호화용 마스터 키 (Base64 인코딩된 32바이트). 비어 있으면 부팅이 실패한다
+  master-key: ${BILLING_KEY_MASTER_KEY:}
