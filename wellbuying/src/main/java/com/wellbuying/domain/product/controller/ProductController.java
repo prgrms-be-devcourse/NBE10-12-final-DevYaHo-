@@ -7,8 +7,8 @@ import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.search.ProductSearchRequest;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
-import com.wellbuying.domain.product.search.SearchSortType;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -23,6 +23,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -89,12 +90,7 @@ public class ProductController {
 
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
     @GetMapping("/search")
-    public Slice<ProductSearchResponse> searchProducts(
-            @RequestParam String keyword,
-            @RequestParam(defaultValue = "RELEVANCE") SearchSortType sort,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
-        return productSearchService.search(keyword, sort, page, size);
+    public Slice<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
+        return productSearchService.search(request.keyword(), request.sort(), request.page(), request.size());
     }
 }

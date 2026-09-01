@@ -1,5 +1,6 @@
 package com.wellbuying.domain.product.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -80,5 +81,65 @@ class ProductControllerTest {
         mockMvc.perform(get("/api/products/search").param("keyword", "비타민"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].productName").value("비타민C"));
+    }
+
+    // 빈 문자열 keyword는 @NotBlank 위반 → 400
+    @Test
+    void searchProducts_빈_키워드로_검색하면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", ""))
+                .andExpect(status().isBadRequest());
+    }
+
+    // size가 100 초과이면 @Max(100) 위반 → 400
+    @Test
+    void searchProducts_size가_100_초과이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "101"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // page가 -1이면 @Min(0) 위반 → 400, 응답 메시지에 "page" 포함
+    @Test
+    void searchProducts_page가_음수이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.message").value(containsString("page")));
+    }
+
+    // size가 0이면 @Min(1) 위반 → 400, 응답 메시지에 "size" 포함
+    @Test
+    void searchProducts_size가_0이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.message").value(containsString("size")));
+    }
+
+    // 공백만 있는 keyword는 @NotBlank 위반 → 400, 응답 메시지에 "keyword" 포함
+    @Test
+    void searchProducts_공백_키워드로_검색하면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.message").value(containsString("keyword")));
+    }
+
+    // keyword, page 둘 다 유효하지 않으면 두 파라미터의 에러 메시지가 모두 응답에 포함되는지 검증
+    // (여러 위반 항목을 결합하는 이번 변경의 핵심 동작을 검증)
+    @Test
+    void searchProducts_여러_파라미터가_유효하지_않으면_모든_에러_메시지를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", " ").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("keyword")))
+                .andExpect(jsonPath("$.message").value(containsString("page")));
+    }
+
+    // 잘못된 sort 값은 enum 변환 실패 → MethodArgumentNotValidException → 400
+    @Test
+    void searchProducts_잘못된_sort_타입이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search")
+                        .param("keyword", "비타민")
+                        .param("sort", "INVALID_TYPE"))
+                .andExpect(status().isBadRequest());
     }
 }
