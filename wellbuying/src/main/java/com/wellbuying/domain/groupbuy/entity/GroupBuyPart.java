@@ -35,6 +35,18 @@ public class GroupBuyPart {
     @Column(name = "applied_price")
     private Integer appliedPrice;
 
+    // 참여 시점의 배송지 스냅샷 - 별도 주소록을 참조하지 않고 참여 건에 직접 저장해, 이후 회원이
+    // 주소를 바꿔도 이미 참여한 건의 배송지는 그대로 유지된다. 실제 참여 API에서는 필수값이지만,
+    // confirm(groupBuyId, memberId, quantity) 오버로드로 만드는 기존 테스트 픽스처와의 호환을 위해 엔티티 자체는 nullable로 둔다
+    @Column
+    private String address;
+
+    @Column(name = "address_detail")
+    private String addressDetail;
+
+    @Column
+    private String zipcode;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "group_buy_part_status")
@@ -47,17 +59,28 @@ public class GroupBuyPart {
     protected GroupBuyPart() {
     }
 
-    private GroupBuyPart(Long groupBuyId, Long memberId, int quantity, GroupBuyPartStatus status) {
+    private GroupBuyPart(Long groupBuyId, Long memberId, int quantity, GroupBuyPartStatus status, String address,
+            String addressDetail, String zipcode) {
         this.groupBuyId = groupBuyId;
         this.memberId = memberId;
         this.quantity = quantity;
         this.status = status;
+        this.address = address;
+        this.addressDetail = addressDetail;
+        this.zipcode = zipcode;
+    }
+
+    // 배송지 없이 참여 건을 만드는 오버로드 - 배송지와 무관한 시나리오를 검증하는 기존 테스트 픽스처용
+    public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity) {
+        return confirm(groupBuyId, memberId, quantity, null, null, null);
     }
 
     // 참여 신청 생성 - Redis 원자적 카운터 증가에 성공한 직후 CONFIRMED 상태로 즉시 생성 (결제 단계가 아직 없어 PENDING을 거치지 않음)
     // 가격은 아직 미정(appliedPrice=null) - 공동구매가 성사될 때 applyFinalPrice()로 한 번만 확정된다
-    public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity) {
-        return new GroupBuyPart(groupBuyId, memberId, quantity, GroupBuyPartStatus.CONFIRMED);
+    public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity, String address,
+            String addressDetail, String zipcode) {
+        return new GroupBuyPart(groupBuyId, memberId, quantity, GroupBuyPartStatus.CONFIRMED, address, addressDetail,
+                zipcode);
     }
 
     // 참여 취소
@@ -89,6 +112,18 @@ public class GroupBuyPart {
     // 공동구매가 아직 성사되지 않았다면 null
     public Integer getAppliedPrice() {
         return appliedPrice;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public String getAddressDetail() {
+        return addressDetail;
+    }
+
+    public String getZipcode() {
+        return zipcode;
     }
 
     public GroupBuyPartStatus getStatus() {

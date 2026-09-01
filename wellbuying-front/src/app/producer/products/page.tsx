@@ -12,8 +12,15 @@ import type { ProductMineResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 
 const STATUS_LABEL: Record<ProductMineResponse["status"], string> = {
-  ON_SALE: "판매중",
-  SOLD_OUT: "품절",
+  PENDING: "승인 대기",
+  APPROVED: "판매중",
+  REJECTED: "반려됨",
+};
+
+const STATUS_TONE: Record<ProductMineResponse["status"], string> = {
+  PENDING: "bg-wb-canvas text-wb-secondary",
+  APPROVED: "bg-wb-light-green/60 text-wb-green",
+  REJECTED: "bg-red-600/12 text-red-600",
 };
 
 export default function ProducerProductsPage() {
@@ -74,13 +81,7 @@ export default function ProducerProductsPage() {
           {items.map((product) => (
             <div key={product.id} className="space-y-2 rounded-2xl border border-wb-line bg-wb-surface p-5">
               <div className="flex items-center gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                    product.status === "ON_SALE"
-                      ? "bg-wb-light-green/60 text-wb-green"
-                      : "bg-wb-canvas text-wb-secondary"
-                  }`}
-                >
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_TONE[product.status]}`}>
                   {STATUS_LABEL[product.status]}
                 </span>
                 <span className="text-xs text-wb-secondary">{formatDateTime(product.createdAt)}</span>
