@@ -26,6 +26,9 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:wellbuying-payment}
+      auto-offset-reset: earliest
   task:
     scheduling:
       pool:
@@ -98,3 +101,12 @@ seller-info:
   encryption:
     # AES-256(32바이트) 키를 Base64로 인코딩한 값. 운영에서는 반드시 SELLER_INFO_ENC_KEY 환경변수로 주입할 것
     key: ${SELLER_INFO_ENC_KEY:Q0hBTkdFX01FX2xvY2FsX2Rldl8zMl9ieXRlX2tleSE=}
+
+toss:
+  base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
+  secret-key: ${TOSS_SECRET_KEY:CHANGE_ME_local_dev_toss_test_secret_key}
+
+billing-key:
+  # 빌링키 암복호화용 마스터 키. AES-256(32바이트) 키를 Base64로 인코딩한 값이며,
+  # 운영에서는 반드시 BILLING_KEY_MASTER_KEY 환경변수로 주입할 것 (seller-info.encryption.key와 같은 방식)
+  master-key: ${BILLING_KEY_MASTER_KEY:Q0hBTkdFX01FX2xvY2FsX2Rldl9iaWxsaW5na2V5XyE=}
