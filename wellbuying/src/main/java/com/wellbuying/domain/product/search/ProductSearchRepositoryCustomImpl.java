@@ -1,7 +1,7 @@
 package com.wellbuying.domain.product.search;
 
 import com.wellbuying.global.dto.CursorPageResponse;
-import com.wellbuying.global.dto.CursorParser;
+import com.wellbuying.global.dto.Cursor;
 import java.util.List;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.SortOptions;
@@ -33,9 +33,9 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
                 .withPageable(PageRequest.of(0, size + 1));
 
         if (cursor != null) {
-            String[] parts = CursorParser.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
-            double score = CursorParser.parseDouble(parts[0]);
-            long id = CursorParser.parseLong(parts[1]);
+            Cursor c = Cursor.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
+            double score = c.getDouble(0);
+            long id = c.getLong(1);
             builder = builder.withSearchAfter(List.of(score, id));
         }
 
@@ -55,7 +55,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
             List<Object> sortValues = searchHits.get(size - 1).getSortValues();
             FieldValue scoreVal = (FieldValue) sortValues.get(0);
             FieldValue idVal = (FieldValue) sortValues.get(1);
-            nextCursor = CursorParser.encode(SearchSortType.RELEVANCE.name(),
+            nextCursor = Cursor.encode(SearchSortType.RELEVANCE.name(),
                     scoreVal._toJsonString(), idVal._toJsonString());
         }
 

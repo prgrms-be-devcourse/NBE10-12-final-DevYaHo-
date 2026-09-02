@@ -14,7 +14,7 @@ import com.wellbuying.domain.product.entity.QProductCount;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.global.dto.CursorPageResponse;
-import com.wellbuying.global.dto.CursorParser;
+import com.wellbuying.global.dto.Cursor;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -95,9 +95,9 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
     private String buildCursor(ProductSummaryResponse last, ProductSortType sort) {
         return switch (sort) {
-            case POPULAR -> CursorParser.encode(sort.name(), last.viewCount(), last.id());
-            case PRICE_ASC, PRICE_DESC -> CursorParser.encode(sort.name(), last.startPrice(), last.id());
-            default -> CursorParser.encode(sort.name(), last.id()); // LATEST
+            case POPULAR -> Cursor.encode(sort.name(), last.viewCount(), last.id());
+            case PRICE_ASC, PRICE_DESC -> Cursor.encode(sort.name(), last.startPrice(), last.id());
+            default -> Cursor.encode(sort.name(), last.id()); // LATEST
         };
     }
 
@@ -106,28 +106,28 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         ProductSortType resolved = sort != null ? sort : ProductSortType.LATEST;
         return switch (resolved) {
             case LATEST -> {
-                String[] p = CursorParser.decode(resolved.name(), cursor, 1);
-                long id = CursorParser.parseLong(p[0]);
+                Cursor c = Cursor.decode(resolved.name(), cursor, 1);
+                long id = c.getLong(0);
                 yield product.id.lt(id);
             }
             case POPULAR -> {
-                String[] p = CursorParser.decode(resolved.name(), cursor, 2);
-                long viewCount = CursorParser.parseLong(p[0]);
-                long id = CursorParser.parseLong(p[1]);
+                Cursor c = Cursor.decode(resolved.name(), cursor, 2);
+                long viewCount = c.getLong(0);
+                long id = c.getLong(1);
                 yield coalesceViewCount().lt(viewCount)
                         .or(coalesceViewCount().eq(viewCount).and(product.id.lt(id)));
             }
             case PRICE_ASC -> {
-                String[] p = CursorParser.decode(resolved.name(), cursor, 2);
-                int price = CursorParser.parseInt(p[0]);
-                long id = CursorParser.parseLong(p[1]);
+                Cursor c = Cursor.decode(resolved.name(), cursor, 2);
+                int price = c.getInt(0);
+                long id = c.getLong(1);
                 yield product.startPrice.gt(price)
                         .or(product.startPrice.eq(price).and(product.id.lt(id)));
             }
             case PRICE_DESC -> {
-                String[] p = CursorParser.decode(resolved.name(), cursor, 2);
-                int price = CursorParser.parseInt(p[0]);
-                long id = CursorParser.parseLong(p[1]);
+                Cursor c = Cursor.decode(resolved.name(), cursor, 2);
+                int price = c.getInt(0);
+                long id = c.getLong(1);
                 yield product.startPrice.lt(price)
                         .or(product.startPrice.eq(price).and(product.id.lt(id)));
             }
