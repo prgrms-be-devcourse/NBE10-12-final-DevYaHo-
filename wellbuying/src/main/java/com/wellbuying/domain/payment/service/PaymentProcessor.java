@@ -70,25 +70,24 @@ public class PaymentProcessor {
 
         Optional<BillingCredential> credential = billingKeyProvider.findBillingKey(message.memberId());
         if (credential.isEmpty()) {
-            paymentTransactionService.markFailed(preparation.paymentId());
+            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId());
             publishFailed(message, preparation.paymentId(), "등록된 빌링키가 없음");
             return;
         }
 
         PgApproveResult result;
         try {
-            result = paymentGateway.approve(toApproveCommand(message, credential.get()));
+            result = paymentGateway.approve(toApproveCommand(message, credential.get(), preparation.orderId()));
         } catch (PgApprovalException e) {
             log.warn("PG 승인 실패 - eventId={}, paymentId={}", message.eventId(), preparation.paymentId(), e);
-            paymentTransactionService.markFailed(preparation.paymentId());
+            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId());
             publishFailed(message, preparation.paymentId(), e.getMessage());
             return;
         }
 
         Order order;
         try {
-            order = paymentTransactionService.completeApproval(preparation.paymentId(), result,
-                    preparation.shippingAddress());
+            order = paymentTransactionService.completeApproval(preparation.paymentId(), preparation.orderId(), result);
         } catch (OrderCreationException e) {
             // 여기서부터는 실제 결제가 끝난 뒤다 - 되돌리지 않고 기록만 남겨 사람이 처리한다 (보상 트랜잭션 미채택)
             recordApprovedButNotPersisted(PaymentFailureType.ORDER_CREATE_FAILED, message, preparation, result, e);
@@ -103,13 +102,15 @@ public class PaymentProcessor {
                 PaymentCompletedEvent.of(order, message.groupBuyId(), message.producerId(), result.pgTransactionId()));
     }
 
-    private PgApproveCommand toApproveCommand(GroupBuyCompletedMessage message, BillingCredential credential) {
+    private PgApproveCommand toApproveCommand(GroupBuyCompletedMessage message, BillingCredential credential,
+            String orderId) {
         return new PgApproveCommand(
                 credential.billingKey(),
                 // 발급 때 쓴 값을 그대로 보내야 한다 - 승인 시점에 새로 만들면 토스가 다른 고객으로 보고 거부한다
                 credential.customerKey(),
-                // 토스 orderId는 영문/숫자/-/_ 만 허용하므로 eventId(콜론 포함)를 그대로 쓰지 않는다
-                "gb-" + message.partId(),
+                // TX1에서 만든 주문의 PK를 그대로 쓴다 - 규격(6~64자, 영문/숫자/-/_)을 항상 만족하고,
+                // 재시도해도 같은 값이 나가므로 멱등키와 요청 본문이 어긋나지 않는다
+                orderId,
                 "공동구매 결제",
                 message.totalAmount(),
                 message.eventId());

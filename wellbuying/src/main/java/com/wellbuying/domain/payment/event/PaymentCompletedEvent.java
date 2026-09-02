@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 public record PaymentCompletedEvent(
         String eventType,
         Long paymentId,
-        Long orderId,
+        String orderId,
         Long groupBuyId,
         Long groupBuyParticipantId,
         Long memberId,
@@ -22,7 +22,7 @@ public record PaymentCompletedEvent(
         return new PaymentCompletedEvent(
                 PaymentEventType.PAYMENT_COMPLETED.code(),
                 order.getPaymentId(),
-                order.getId(),
+                order.getOrderId(),
                 groupBuyId,
                 order.getGroupBuyParticipantId(),
                 order.getMemberId(),

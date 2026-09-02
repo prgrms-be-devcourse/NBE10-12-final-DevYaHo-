@@ -40,6 +40,7 @@ class PaymentProcessorTest {
     private static final String EVENT_ID = "GroupBuyCompleted:77";
     private static final String ADDRESS = "서울시 강남구 1 (06000)";
     private static final String PG_TRANSACTION_ID = "pay_abc";
+    private static final String ORDER_ID = "gb-11111111-2222-3333-4444-555555555555";
 
     @Mock
     private PaymentTransactionService paymentTransactionService;
@@ -76,7 +77,7 @@ class PaymentProcessorTest {
         when(paymentConsumedEventRepository.existsByEventId(EVENT_ID)).thenReturn(false);
         when(paymentGateway.provider()).thenReturn("TOSS");
         when(paymentTransactionService.prepare(message, "TOSS"))
-                .thenReturn(PaymentPreparation.ready(PAYMENT_ID, ADDRESS));
+                .thenReturn(PaymentPreparation.ready(PAYMENT_ID, ORDER_ID));
     }
 
     private PgApproveResult givenApproved() {
@@ -88,12 +89,12 @@ class PaymentProcessorTest {
     }
 
     @Test
-    @DisplayName("정상 흐름 - 승인 후 주문이 생성되고 결제 완료 이벤트가 발행된다")
+    @DisplayName("정상 흐름 - 승인 후 미리 만들어 둔 주문이 PAID로 바뀌고 결제 완료 이벤트가 발행된다")
     void 정상_흐름() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        Order order = Order.paid(PAYMENT_ID, PART_ID, MEMBER_ID, ADDRESS, 10000);
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, result, ADDRESS)).thenReturn(order);
+        Order order = Order.pending(PAYMENT_ID, PART_ID, MEMBER_ID, ADDRESS, 10000);
+        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result)).thenReturn(order);
 
         paymentProcessor.process(message);
 
@@ -149,7 +150,7 @@ class PaymentProcessorTest {
         paymentProcessor.process(message);
 
         verify(paymentGateway, never()).approve(any());
-        verify(paymentTransactionService).markFailed(PAYMENT_ID);
+        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID);
         verify(paymentEventPublisher).publishFailed(any(PaymentFailedEvent.class));
     }
 
@@ -164,19 +165,19 @@ class PaymentProcessorTest {
 
         paymentProcessor.process(message);
 
-        verify(paymentTransactionService).markFailed(PAYMENT_ID);
+        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID);
         verify(paymentEventPublisher).publishFailed(any(PaymentFailedEvent.class));
         // 승인이 안 됐으므로 수동 처리 대상이 아니다
         verifyNoInteractions(paymentFailureRecorder);
     }
 
     @Test
-    @DisplayName("승인 후 주문 생성이 깨지면 ORDER_CREATE_FAILED로 기록하고 완료 이벤트를 발행하지 않는다")
-    void 승인_후_주문_생성_실패() {
+    @DisplayName("승인 후 주문 반영이 깨지면 ORDER_CREATE_FAILED로 기록하고 완료 이벤트를 발행하지 않는다")
+    void 승인_후_주문_반영_실패() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, result, ADDRESS))
-                .thenThrow(new OrderCreationException("주문 생성 실패", new RuntimeException()));
+        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result))
+                .thenThrow(new OrderCreationException("승인 전에 만들어 둔 주문을 찾지 못함"));
 
         paymentProcessor.process(message);
 
@@ -190,7 +191,7 @@ class PaymentProcessorTest {
     void 승인_후_커밋_실패() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, result, ADDRESS))
+        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result))
                 .thenThrow(new DataIntegrityViolationException("commit failed"));
 
         paymentProcessor.process(message);
