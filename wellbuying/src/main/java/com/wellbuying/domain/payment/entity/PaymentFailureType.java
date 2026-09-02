@@ -5,6 +5,6 @@ public enum PaymentFailureType {
 
     // Payment를 APPROVED로 전이시키는 트랜잭션이 커밋되지 못함
     APPROVE_RESULT_PERSIST_FAILED,
-    // Payment는 APPROVED가 됐으나 Order 생성에서 실패
+    // Payment는 APPROVED가 됐으나 Order 반영(PENDING → PAID)에서 실패
     ORDER_CREATE_FAILED
 }

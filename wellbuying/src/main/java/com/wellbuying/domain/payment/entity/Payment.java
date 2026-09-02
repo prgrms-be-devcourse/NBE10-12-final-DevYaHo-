@@ -15,7 +15,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 // 공동구매 참여 1건에 대한 결제. 성사 이벤트를 받으면 먼저 READY로 만들어두고, PG 승인 결과에 따라
-// APPROVED / FAILED로 전이한다 (Order는 승인에 성공한 뒤에야 생성된다 - ORDERS가 PAYMENT를 참조하므로)
+// APPROVED / FAILED로 전이한다 (Order는 같은 트랜잭션에서 PENDING으로 함께 만들어져 결과에 따라 전이한다)
 @Entity
 @Table(name = "payment")
 public class Payment {
