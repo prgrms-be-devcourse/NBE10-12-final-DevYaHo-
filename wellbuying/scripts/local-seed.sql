@@ -40,9 +40,9 @@ INSERT INTO seller_info (member_id, bank_code, bank_name, account_number, accoun
 SELECT id, '004', '국민은행', '12345678901234', '김생산', '웰바잉농장', 'APPROVED', 'GOLD', 'MONTHLY', (now() AT TIME ZONE 'Asia/Seoul') - INTERVAL '30 days'
 FROM members WHERE email = 'seller@wellbuying.local';
 
--- ── 구매자 기본 배송지 ────────────────────────────────
-INSERT INTO buyer_address (member_id, buyer_address, buyer_address_detail, buyer_zipcode, is_default)
-SELECT id, '서울특별시 강남구 테헤란로 123', '4층 401호', '06234', true
+-- ── 구매자 배송지 주소록 ──────────────────────────────
+INSERT INTO buyer_address (member_id, address, address_detail, zipcode)
+SELECT id, '서울특별시 강남구 테헤란로 123', '4층 401호', '06234'
 FROM members WHERE email = 'buyer@wellbuying.local';
 
 -- ── 카테고리 ─────────────────────────────────────────
@@ -84,10 +84,10 @@ FROM group_buy gb
 CROSS JOIN (VALUES (1, 0, 0), (2, 20, 2000), (3, 50, 4000)) AS t(tier_order, threshold, discount);
 
 -- ── 구매자의 참여 1건 (진행중 공구에 참여한 상태) ──────
-INSERT INTO group_buy_part (group_buy_id, member_id, quantity, applied_price, status, address, address_detail, zipcode)
-SELECT gb.id, m.id, 2, 18000, 'PENDING', '서울특별시 강남구 테헤란로 123', '4층 401호', '06234'
-FROM group_buy gb, members m
-WHERE gb.title = '해남 꿀고구마 공동구매 3차' AND m.email = 'buyer@wellbuying.local';
+INSERT INTO group_buy_part (group_buy_id, member_id, quantity, applied_price, status, buyer_address_id)
+SELECT gb.id, m.id, 2, 18000, 'PENDING', ba.id
+FROM group_buy gb, members m, buyer_address ba
+WHERE gb.title = '해남 꿀고구마 공동구매 3차' AND m.email = 'buyer@wellbuying.local' AND ba.member_id = m.id;
 
 COMMIT;
 

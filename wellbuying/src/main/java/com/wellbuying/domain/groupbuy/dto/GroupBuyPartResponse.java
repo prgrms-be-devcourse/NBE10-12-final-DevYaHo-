@@ -12,9 +12,7 @@ public record GroupBuyPartResponse(
         int quantity,
         Integer appliedPrice,
         GroupBuyPartStatus status,
-        String address,
-        String addressDetail,
-        String zipcode,
+        Long buyerAddressId,
         LocalDateTime createdAt
 ) {
 
@@ -25,9 +23,7 @@ public record GroupBuyPartResponse(
                 part.getQuantity(),
                 part.getAppliedPrice(),
                 part.getStatus(),
-                part.getAddress(),
-                part.getAddressDetail(),
-                part.getZipcode(),
+                part.getBuyerAddressId(),
                 part.getCreatedAt());
     }
 }

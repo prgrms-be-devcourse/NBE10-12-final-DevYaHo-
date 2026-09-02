@@ -14,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.address.entity.BuyerAddress;
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
@@ -77,6 +79,9 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private BuyerAddressRepository buyerAddressRepository;
+
     // 승인/역할 상승 API가 아직 없어, 테스트에서만 회원의 role을 SELLER로 직접 세팅한다
     private Member saveSeller(String email) {
         Member member = memberRepository.save(Member.signUp(email, passwordEncoder.encode("Pass1234!"), "생산자"));
@@ -86,6 +91,12 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
 
     private Member saveBuyer(String email) {
         return memberRepository.save(Member.signUp(email, passwordEncoder.encode("Pass1234!"), "구매자"));
+    }
+
+    // 참여 신청은 이제 텍스트가 아니라 회원 주소록(buyer_address)의 id를 참조하므로, 참여 전에 미리 하나 등록해둔다
+    private BuyerAddress saveBuyerAddress(Long memberId) {
+        return buyerAddressRepository.save(
+                BuyerAddress.create(memberId, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
     }
 
     private UsernamePasswordAuthenticationToken authOf(Member member) {
@@ -319,12 +330,12 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         Member seller = saveSeller("groupbuy-part-success-seller@example.com");
         Member buyer = saveBuyer("groupbuy-part-success-buyer@example.com");
         GroupBuy groupBuy = saveOngoingGroupBuy(seller.getId(), 100, 10_000);
+        BuyerAddress buyerAddress = saveBuyerAddress(buyer.getId());
 
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", "
-                                + "\"addressDetail\": \"4층\", \"zipcode\": \"06234\"}"))
+                        .content("{\"quantity\": 50, \"buyerAddressId\": " + buyerAddress.getId() + "}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.quantity").value(50))
                 .andExpect(jsonPath("$.appliedPrice").value(nullValue()))
@@ -332,18 +343,14 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                 .andDo(document("groupbuy/part-create-success",
                         requestFields(
                                 fieldWithPath("quantity").description("참여 수량"),
-                                fieldWithPath("address").description("배송지 주소"),
-                                fieldWithPath("addressDetail").description("배송지 상세주소").optional(),
-                                fieldWithPath("zipcode").description("우편번호")),
+                                fieldWithPath("buyerAddressId").description("배송지로 쓸 회원 주소록(buyer_address) 항목 ID")),
                         responseFields(
                                 fieldWithPath("id").description("참여 ID"),
                                 fieldWithPath("groupBuyId").description("공동구매 ID"),
                                 fieldWithPath("quantity").description("참여 수량"),
                                 fieldWithPath("appliedPrice").description("확정 단가 (공동구매 성사 전에는 null)").optional(),
                                 fieldWithPath("status").description("참여 상태"),
-                                fieldWithPath("address").description("배송지 주소"),
-                                fieldWithPath("addressDetail").description("배송지 상세주소").optional(),
-                                fieldWithPath("zipcode").description("우편번호"),
+                                fieldWithPath("buyerAddressId").description("참여에 쓰인 회원 주소록 항목 ID"),
                                 fieldWithPath("createdAt").description("참여 일시"))));
 
         mockMvc.perform(get("/api/groupBuys/{id}/part/me", groupBuy.getId())
@@ -368,12 +375,14 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         groupBuyPriceRepository.save(GroupBuyPrice.of(groupBuy.getId(), 1, 1, 15_000));
         groupBuyPriceRepository.save(GroupBuyPrice.of(groupBuy.getId(), 2, 100, 10_000));
         groupBuyCounterRepository.initialize(groupBuy.getId(), Duration.ofMinutes(10));
+        BuyerAddress earlyBuyerAddress = saveBuyerAddress(earlyBuyer.getId());
+        BuyerAddress lastBuyerAddress = saveBuyerAddress(lastBuyer.getId());
 
         // 50개 시점(15,000원 구간)에 먼저 참여
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(earlyBuyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
+                        .content("{\"quantity\": 50, \"buyerAddressId\": " + earlyBuyerAddress.getId() + "}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.appliedPrice").value(nullValue()));
 
@@ -381,7 +390,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(lastBuyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
+                        .content("{\"quantity\": 50, \"buyerAddressId\": " + lastBuyerAddress.getId() + "}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.appliedPrice").value(10_000));
 
@@ -401,11 +410,12 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         Member seller = saveSeller("groupbuy-soldout-seller@example.com");
         Member buyer = saveBuyer("groupbuy-soldout-buyer@example.com");
         GroupBuy groupBuy = saveOngoingGroupBuy(seller.getId(), 10, 100);
+        BuyerAddress buyerAddress = saveBuyerAddress(buyer.getId());
 
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 200, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
+                        .content("{\"quantity\": 200, \"buyerAddressId\": " + buyerAddress.getId() + "}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_409_SOLD_OUT"))
                 .andDo(document("groupbuy/part-create-sold-out",
@@ -514,7 +524,8 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(buyer)))
                         .contentType("application/json")
-                        .content("{\"quantity\": 50, \"address\": \"서울특별시 강남구 테헤란로 123\", \"zipcode\": \"06234\"}"))
+                        // 판매정지 상태는 배송지 검증보다 먼저 걸러지므로, 실존하지 않는 buyerAddressId를 써도 무방하다
+                        .content("{\"quantity\": 50, \"buyerAddressId\": 1}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_409_SUSPENDED"));
     }
