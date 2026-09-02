@@ -19,6 +19,6 @@ public class ProductSearchService {
 
     public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size) {
         sort.validateSupported();
-        return productSearchRepository.search(keyword, sort, cursor, size);
+        return productSearchRepository.search(keyword, cursor, size);
     }
 }

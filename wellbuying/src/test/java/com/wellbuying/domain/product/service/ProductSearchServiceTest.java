@@ -26,11 +26,11 @@ class ProductSearchServiceTest {
         ProductSearchService service = new ProductSearchService(productSearchRepository);
         ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L);
         CursorPageResponse<ProductSearchResponse> mockPage = new CursorPageResponse<>(List.of(response), null, false);
-        when(productSearchRepository.search("비타민", SearchSortType.RELEVANCE, null, 20)).thenReturn(mockPage);
+        when(productSearchRepository.search("비타민", null, 20)).thenReturn(mockPage);
 
         CursorPageResponse<ProductSearchResponse> result = service.search("비타민", SearchSortType.RELEVANCE, null, 20);
 
         assertThat(result.content()).containsExactly(response);
-        verify(productSearchRepository).search("비타민", SearchSortType.RELEVANCE, null, 20);
+        verify(productSearchRepository).search("비타민", null, 20);
     }
 }

@@ -1,6 +1,7 @@
 package com.wellbuying.domain.product.search;
 
 import com.wellbuying.global.dto.CursorPageResponse;
+import com.wellbuying.global.dto.CursorParser;
 import java.util.List;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.SortOptions;
@@ -22,7 +23,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     @Override
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size) {
         NativeQueryBuilder builder = new NativeQueryBuilder()
                 .withQuery(buildQuery(keyword))
                 .withSort(List.of(
@@ -32,9 +33,9 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
                 .withPageable(PageRequest.of(0, size + 1));
 
         if (cursor != null) {
-            String[] parts = cursor.split("_", 2);
-            double score = Double.parseDouble(parts[0]);
-            long id = Long.parseLong(parts[1]);
+            String[] parts = CursorParser.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
+            double score = CursorParser.parseDouble(parts[0]);
+            long id = CursorParser.parseLong(parts[1]);
             builder = builder.withSearchAfter(List.of(score, id));
         }
 
@@ -54,7 +55,8 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
             List<Object> sortValues = searchHits.get(size - 1).getSortValues();
             FieldValue scoreVal = (FieldValue) sortValues.get(0);
             FieldValue idVal = (FieldValue) sortValues.get(1);
-            nextCursor = scoreVal._toJsonString() + "_" + idVal._toJsonString();
+            nextCursor = CursorParser.encode(SearchSortType.RELEVANCE.name(),
+                    scoreVal._toJsonString(), idVal._toJsonString());
         }
 
         return new CursorPageResponse<>(content, nextCursor, hasNext);
