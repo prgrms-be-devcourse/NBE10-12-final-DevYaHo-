@@ -81,6 +81,8 @@ jobs:
           OAUTH_SUCCESS_REDIRECT_URI: ${{ secrets.OAUTH_SUCCESS_REDIRECT_URI }}
           OAUTH_FAILURE_REDIRECT_URI: ${{ secrets.OAUTH_FAILURE_REDIRECT_URI }}
           SELLER_INFO_ENC_KEY: ${{ secrets.SELLER_INFO_ENC_KEY }}
+          TOSS_SECRET_KEY: ${{ secrets.TOSS_SECRET_KEY }}
+          BILLING_KEY_MASTER_KEY: ${{ secrets.BILLING_KEY_MASTER_KEY }}
         run: |
           echo "SPRING_PROFILES_ACTIVE=prod" > .env
           echo "DB_HOST=$(printf '%s' "$DB_HOST" | tr -d '\r\n')" >> .env
@@ -104,6 +106,8 @@ jobs:
           echo "OAUTH_SUCCESS_REDIRECT_URI=$(printf '%s' "$OAUTH_SUCCESS_REDIRECT_URI" | tr -d '\r\n')" >> .env
           echo "OAUTH_FAILURE_REDIRECT_URI=$(printf '%s' "$OAUTH_FAILURE_REDIRECT_URI" | tr -d '\r\n')" >> .env
           echo "SELLER_INFO_ENC_KEY=$(printf '%s' "$SELLER_INFO_ENC_KEY" | tr -d '\r\n')" >> .env
+          echo "TOSS_SECRET_KEY=$(printf '%s' "$TOSS_SECRET_KEY" | tr -d '\r\n')" >> .env
+          echo "BILLING_KEY_MASTER_KEY=$(printf '%s' "$BILLING_KEY_MASTER_KEY" | tr -d '\r\n')" >> .env
 
       - name: ghcr.io 로그인
         uses: docker/login-action@v3
