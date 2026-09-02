@@ -9,8 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.domain.Slice;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 
 // 로컬 OpenSearch(localhost:9200)에 실제 문서를 인덱싱하여 검색 쿼리를 검증한다.
@@ -49,49 +49,59 @@ class ProductSearchRepositoryCustomImplTest {
 
     @Test
     void search_키워드가_productName에_포함된_APPROVED_상품을_반환한다() {
-        Slice<ProductSearchResponse> result =
-                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, 0, 20);
+        // "유기농 비타민C"는 성능테스트 데이터에 없는 조합 — 관련도 오염 방지
+        CursorPageResponse<ProductSearchResponse> result =
+                productSearchRepository.search("유기농 비타민C", SearchSortType.RELEVANCE, null, 20);
 
-        List<String> names = result.getContent().stream().map(ProductSearchResponse::productName).toList();
+        List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).contains("유기농 비타민C 1000mg");
     }
 
     @Test
     void search_키워드가_description에만_있어도_반환된다() {
-        Slice<ProductSearchResponse> result =
-                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, 0, 20);
+        CursorPageResponse<ProductSearchResponse> result =
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, null, 20);
 
-        List<String> names = result.getContent().stream().map(ProductSearchResponse::productName).toList();
+        List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         // 오메가3 상품은 productName에 '비타민'이 없지만 description에 '비타민D'가 있어 매칭돼야 한다
         assertThat(names).contains("프리미엄 오메가3");
     }
 
     @Test
     void search_PENDING_상품은_결과에서_제외된다() {
-        Slice<ProductSearchResponse> result =
-                productSearchRepository.search("콜라겐", SearchSortType.RELEVANCE, 0, 20);
+        CursorPageResponse<ProductSearchResponse> result =
+                productSearchRepository.search("콜라겐", SearchSortType.RELEVANCE, null, 20);
 
-        List<String> names = result.getContent().stream().map(ProductSearchResponse::productName).toList();
+        List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).doesNotContain("콜라겐 파우더");
     }
 
     @Test
     void search_REJECTED_상품은_결과에서_제외된다() {
-        Slice<ProductSearchResponse> result =
-                productSearchRepository.search("마그네슘", SearchSortType.RELEVANCE, 0, 20);
+        CursorPageResponse<ProductSearchResponse> result =
+                productSearchRepository.search("마그네슘", SearchSortType.RELEVANCE, null, 20);
 
-        List<String> names = result.getContent().stream().map(ProductSearchResponse::productName).toList();
+        List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).doesNotContain("마그네슘 400mg");
     }
 
+    // size+1개 준비 → 1차 hasNext=true + nextCursor 수령 → 2차 요청 → 결과 겹침 없음 확인
     @Test
-    void search_페이지크기보다_결과가_많으면_hasNext가_true다() {
+    void search_커서로_다음_페이지를_조회하면_결과가_겹치지_않는다() {
         // 비타민 키워드로 APPROVED 문서 2건이 매칭되므로 size=1이면 hasNext=true
-        Slice<ProductSearchResponse> result =
-                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, 0, 1);
+        CursorPageResponse<ProductSearchResponse> first =
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, null, 1);
 
-        assertThat(result.hasNext()).isTrue();
-        assertThat(result.getContent()).hasSize(1);
+        assertThat(first.hasNext()).isTrue();
+        assertThat(first.content()).hasSize(1);
+        assertThat(first.nextCursor()).isNotNull();
+
+        CursorPageResponse<ProductSearchResponse> second =
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, first.nextCursor(), 1);
+
+        assertThat(second.content()).isNotEmpty();
+        assertThat(second.content().get(0).productName())
+                .isNotEqualTo(first.content().get(0).productName());
     }
 
     private ProductSearchDocument doc(long id, String name, String description, String status) {

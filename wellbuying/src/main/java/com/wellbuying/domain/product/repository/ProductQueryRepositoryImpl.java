@@ -4,6 +4,7 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.entity.ProductSortType;
@@ -12,6 +13,7 @@ import com.wellbuying.domain.product.entity.QProduct;
 import com.wellbuying.domain.product.entity.QProductCount;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -28,30 +30,37 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         this.queryFactory = queryFactory;
     }
 
-    // 판매 중인 상품을 대상으로 카테고리/가격 필터와 정렬을 적용해 목록을 조회, count 쿼리 없이 다음 페이지 존재 여부만 확인
+    // 판매 중인 상품을 대상으로 카테고리/가격 필터와 정렬을 적용해 커서 기반 목록 조회
     @Override
-    public Slice<ProductSummaryResponse> search(ProductSearchCondition condition, Pageable pageable) {
+    public CursorPageResponse<ProductSummaryResponse> search(ProductSearchCondition condition, String cursor, int size) {
         List<ProductSummaryResponse> content = queryFactory
                 .select(Projections.constructor(ProductSummaryResponse.class,
                         product.id,
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
-                        Expressions.numberTemplate(Long.class, "coalesce({0}, 0)", productCount.viewCount)))
+                        coalesceViewCount()))
                 .from(product)
                 .leftJoin(productCount).on(productCount.productId.eq(product.id))
                 .where(
                         product.status.eq(ProductStatus.APPROVED),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
-                        priceLoe(condition.maxPrice())
+                        priceLoe(condition.maxPrice()),
+                        cursorCondition(cursor, condition.sort())
                 )
-                .orderBy(sortOrder(condition.sort()))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)
+                .orderBy(sortOrders(condition.sort()))
+                .limit(size + 1L)
                 .fetch();
 
-        return toSlice(pageable, content);
+        boolean hasNext = content.size() > size;
+        if (hasNext) {
+            content.remove(content.size() - 1);
+        }
+
+        ProductSortType sort = condition.sort() != null ? condition.sort() : ProductSortType.LATEST;
+        String nextCursor = hasNext ? buildCursor(content.get(content.size() - 1), sort) : null;
+        return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
     // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
@@ -83,31 +92,79 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         return new SliceImpl<>(results, pageable, hasNext);
     }
 
-    // 카테고리 필터 조건 생성, categoryId가 없으면 조건에서 제외
+    private String buildCursor(ProductSummaryResponse last, ProductSortType sort) {
+        return switch (sort) {
+            case POPULAR -> last.viewCount() + "_" + last.id();
+            case PRICE_ASC, PRICE_DESC -> last.startPrice() + "_" + last.id();
+            default -> String.valueOf(last.id()); // LATEST
+        };
+    }
+
+    private BooleanExpression cursorCondition(String cursor, ProductSortType sort) {
+        if (cursor == null) return null;
+        ProductSortType resolved = sort != null ? sort : ProductSortType.LATEST;
+        return switch (resolved) {
+            case LATEST -> {
+                long id = Long.parseLong(cursor);
+                yield product.id.lt(id);
+            }
+            case POPULAR -> {
+                String[] p = cursor.split("_", 2);
+                long viewCount = Long.parseLong(p[0]);
+                long id = Long.parseLong(p[1]);
+                yield coalesceViewCount().lt(viewCount)
+                        .or(coalesceViewCount().eq(viewCount).and(product.id.lt(id)));
+            }
+            case PRICE_ASC -> {
+                String[] p = cursor.split("_", 2);
+                int price = Integer.parseInt(p[0]);
+                long id = Long.parseLong(p[1]);
+                yield product.startPrice.gt(price)
+                        .or(product.startPrice.eq(price).and(product.id.lt(id)));
+            }
+            case PRICE_DESC -> {
+                String[] p = cursor.split("_", 2);
+                int price = Integer.parseInt(p[0]);
+                long id = Long.parseLong(p[1]);
+                yield product.startPrice.lt(price)
+                        .or(product.startPrice.eq(price).and(product.id.lt(id)));
+            }
+        };
+    }
+
+    // 정렬 기준별 OrderSpecifier 배열 반환 — 비-id 정렬은 id를 tiebreaker로 추가
+    private OrderSpecifier<?>[] sortOrders(ProductSortType sortType) {
+        ProductSortType resolved = sortType != null ? sortType : ProductSortType.LATEST;
+        return switch (resolved) {
+            case POPULAR -> new OrderSpecifier<?>[] {
+                    coalesceViewCount().desc(),
+                    product.id.desc()
+            };
+            case PRICE_ASC -> new OrderSpecifier<?>[] {
+                    product.startPrice.asc(),
+                    product.id.desc()
+            };
+            case PRICE_DESC -> new OrderSpecifier<?>[] {
+                    product.startPrice.desc(),
+                    product.id.desc()
+            };
+            case LATEST -> new OrderSpecifier<?>[] { product.id.desc() };
+        };
+    }
+
     private BooleanExpression categoryEq(Long categoryId) {
         return categoryId != null ? product.categoryId.eq(categoryId) : null;
     }
 
-    // 최소 가격 필터 조건 생성, minPrice가 없으면 조건에서 제외
+    private static NumberExpression<Long> coalesceViewCount() {
+        return Expressions.numberTemplate(Long.class, "coalesce({0}, 0)", productCount.viewCount);
+    }
+
     private BooleanExpression priceGoe(Integer minPrice) {
         return minPrice != null ? product.startPrice.goe(minPrice) : null;
     }
 
-    // 최대 가격 필터 조건 생성, maxPrice가 없으면 조건에서 제외
     private BooleanExpression priceLoe(Integer maxPrice) {
         return maxPrice != null ? product.startPrice.loe(maxPrice) : null;
-    }
-
-    // 정렬 기준 결정, sort 값이 없으면 최신순(id 내림차순)을 기본 적용
-    private OrderSpecifier<?> sortOrder(ProductSortType sortType) {
-        if (sortType == null) {
-            return product.id.desc();
-        }
-        return switch (sortType) {
-            case POPULAR -> productCount.viewCount.desc().nullsLast();
-            case PRICE_ASC -> product.startPrice.asc();
-            case PRICE_DESC -> product.startPrice.desc();
-            case LATEST -> product.id.desc();
-        };
     }
 }
