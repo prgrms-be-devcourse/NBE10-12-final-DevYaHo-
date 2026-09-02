@@ -4,8 +4,13 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 
-public record Cursor(String sortType, String[] values) {
+public record Cursor(String sortType, List<String> values) {
+
+    public Cursor {
+        values = List.copyOf(values);
+    }
 
     public static String encode(String sortTypeName, Object... values) {
         if (sortTypeName == null || sortTypeName.isBlank()) {
@@ -43,29 +48,29 @@ public record Cursor(String sortType, String[] values) {
         String body = decoded.substring(colonIdx + 1);
         String[] parts = body.split("_", expectedParts + 1);
         if (parts.length != expectedParts) throw new BusinessException(ErrorCode.INVALID_CURSOR);
-        return new Cursor(expectedSortType, parts);
+        return new Cursor(expectedSortType, List.of(parts));
     }
 
     public long getLong(int index) {
         try {
-            return Long.parseLong(values[index]);
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            return Long.parseLong(values.get(index));
+        } catch (NumberFormatException e) {
             throw new BusinessException(ErrorCode.INVALID_CURSOR);
         }
     }
 
     public int getInt(int index) {
         try {
-            return Integer.parseInt(values[index]);
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            return Integer.parseInt(values.get(index));
+        } catch (NumberFormatException e) {
             throw new BusinessException(ErrorCode.INVALID_CURSOR);
         }
     }
 
     public double getDouble(int index) {
         try {
-            return Double.parseDouble(values[index]);
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            return Double.parseDouble(values.get(index));
+        } catch (NumberFormatException e) {
             throw new BusinessException(ErrorCode.INVALID_CURSOR);
         }
     }
