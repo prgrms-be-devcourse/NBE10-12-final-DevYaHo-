@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { notFound, useParams } from "next/navigation";
+import { PaymentMethodModal } from "@/components/consumer/PaymentMethodModal";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
@@ -26,6 +27,7 @@ import type {
 import { formatDateTime, formatRemaining, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
+import { clearPendingParticipation, takePendingParticipation } from "@/lib/payments/pendingParticipation";
 
 // 공동구매(groupBuyId) 자체가 없을 때만 404 페이지로 보내야 한다. 상태/내 참여/상품 조회의 404는
 // 별개 자원의 문제이므로 여기서 일반 에러로 바꿔, 존재하는 공동구매를 "찾을 수 없음"으로 잘못 표시하지 않는다.
@@ -57,6 +59,7 @@ export default function DealDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation">("story");
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   const reload = useCallback(async () => {
     const [detailRes, statusRes, myPartRes] = await Promise.all([
@@ -99,6 +102,19 @@ export default function DealDetailPage() {
     };
   }, [groupBuyId, reload]);
 
+  // 카드 등록을 마치고 돌아온 경우다. 결제창으로 페이지를 떠나기 전에 보관해 둔 입력값을 되살리고
+  // 결제 정보 창을 다시 열어, 사용자가 수량·배송지를 다시 채우지 않고 참여를 이어가게 한다.
+  useEffect(() => {
+    if (!Number.isFinite(groupBuyId)) return;
+    const pending = takePendingParticipation();
+    if (!pending || pending.groupBuyId !== groupBuyId) return;
+    setQuantity(pending.quantity);
+    setAddress(pending.address);
+    setAddressDetail(pending.addressDetail);
+    setZipcode(pending.zipcode);
+    setPaymentOpen(true);
+  }, [groupBuyId]);
+
   async function handleParticipate() {
     setActionError(null);
     setActionMessage(null);
@@ -110,9 +126,13 @@ export default function DealDetailPage() {
         addressDetail: addressDetail || undefined,
         zipcode,
       });
+      clearPendingParticipation();
+      setPaymentOpen(false);
       await reload();
       setActionMessage("참여가 완료됐어요.");
     } catch (e) {
+      // 실패 사유는 상세 화면의 배너로 보여주므로, 그 배너를 가리지 않도록 창을 닫는다
+      setPaymentOpen(false);
       setActionError(e instanceof ApiError ? e.message : "참여 처리 중 오류가 발생했어요.");
     } finally {
       setSubmitting(false);
@@ -369,7 +389,16 @@ export default function DealDetailPage() {
                     value={addressDetail}
                     onChange={(e) => setAddressDetail(e.target.value)}
                   />
-                  <Button className="w-full" disabled={!canParticipate} loading={submitting} onClick={handleParticipate}>
+                  <Button
+                    className="w-full"
+                    disabled={!canParticipate}
+                    loading={submitting}
+                    onClick={() => {
+                      setActionError(null);
+                      setActionMessage(null);
+                      setPaymentOpen(true);
+                    }}
+                  >
                     {status.status !== "ONGOING" ? "참여할 수 없어요" : "참여하기"}
                   </Button>
                 </div>
@@ -385,6 +414,16 @@ export default function DealDetailPage() {
           </div>
         </aside>
       </div>
+
+      <PaymentMethodModal
+        open={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        title={detail.title}
+        unitPrice={currentPrice}
+        pending={{ groupBuyId, quantity, address, addressDetail, zipcode }}
+        submitting={submitting}
+        onConfirm={handleParticipate}
+      />
     </div>
   );
 }
