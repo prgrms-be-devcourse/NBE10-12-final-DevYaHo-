@@ -2,22 +2,18 @@ package com.wellbuying.domain.product.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.AbstractIntegrationTest;
+import com.wellbuying.global.dto.CursorPageResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.wellbuying.global.dto.CursorPageResponse;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 
-// 로컬 OpenSearch(localhost:9200)에 실제 문서를 인덱싱하여 검색 쿼리를 검증한다.
-// 실행 전 OpenSearch가 기동 중이어야 하며 Nori 플러그인이 설치되어 있어야 한다.
-@Tag("integration")
-@SpringBootTest
-class ProductSearchRepositoryCustomImplTest {
+// Testcontainers OpenSearch(Nori 플러그인 포함 커스텀 이미지)를 AbstractIntegrationTest에서 기동해 사용한다.
+class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
 
     @Autowired
     private ProductSearchRepository productSearchRepository;

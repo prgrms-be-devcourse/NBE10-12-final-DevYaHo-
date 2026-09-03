@@ -3,6 +3,7 @@ package com.wellbuying.domain.product.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.product.dto.CategoryTreeResponse;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
@@ -12,13 +13,11 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
 @Transactional
-class CategoryServiceTest {
+class CategoryServiceTest extends AbstractIntegrationTest {
 
     @Autowired
     private CategoryService categoryService;
