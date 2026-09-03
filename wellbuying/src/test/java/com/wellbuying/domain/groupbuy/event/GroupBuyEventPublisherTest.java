@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyEventOutbox;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
@@ -21,7 +22,9 @@ class GroupBuyEventPublisherTest {
     @Test
     void publishCanceled은_이벤트타입과_직렬화된_페이로드를_담은_아웃박스_행을_한_건_저장한다() {
         GroupBuyEventOutboxRepository outboxRepository = org.mockito.Mockito.mock(GroupBuyEventOutboxRepository.class);
-        GroupBuyEventPublisher publisher = new GroupBuyEventPublisher(outboxRepository, new ObjectMapper());
+        BuyerAddressRepository buyerAddressRepository = org.mockito.Mockito.mock(BuyerAddressRepository.class);
+        GroupBuyEventPublisher publisher = new GroupBuyEventPublisher(outboxRepository, buyerAddressRepository,
+                new ObjectMapper());
         GroupBuy groupBuy = groupBuyWithId(1L);
 
         publisher.publishCanceled(groupBuy);
@@ -40,7 +43,9 @@ class GroupBuyEventPublisherTest {
     @Test
     void publishCompleted은_확정_참여자_수만큼_이벤트를_saveAll로_한_번에_저장한다() {
         GroupBuyEventOutboxRepository outboxRepository = org.mockito.Mockito.mock(GroupBuyEventOutboxRepository.class);
-        GroupBuyEventPublisher publisher = new GroupBuyEventPublisher(outboxRepository, new ObjectMapper());
+        BuyerAddressRepository buyerAddressRepository = org.mockito.Mockito.mock(BuyerAddressRepository.class);
+        GroupBuyEventPublisher publisher = new GroupBuyEventPublisher(outboxRepository, buyerAddressRepository,
+                new ObjectMapper());
         GroupBuy groupBuy = groupBuyWithId(1L);
         GroupBuyPart part1 = GroupBuyPart.confirm(1L, 100L, 5);
         part1.applyFinalPrice(12_000);

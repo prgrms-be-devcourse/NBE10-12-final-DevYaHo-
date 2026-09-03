@@ -1,5 +1,7 @@
 package com.wellbuying.global.config;
 
+import com.wellbuying.domain.address.entity.BuyerAddress;
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest.PriceTierRequest;
@@ -59,6 +61,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
     private final ProductCategoryRepository productCategoryRepository;
     private final GroupBuyEventOutboxRepository groupBuyEventOutboxRepository;
     private final NotificationRepository notificationRepository;
+    private final BuyerAddressRepository buyerAddressRepository;
     private final TransactionTemplate transactionTemplate;
 
     public GroupBuySeedRunner(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
@@ -68,6 +71,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             ProductRepository productRepository, ProductCategoryRepository productCategoryRepository,
             GroupBuyEventOutboxRepository groupBuyEventOutboxRepository,
             NotificationRepository notificationRepository,
+            BuyerAddressRepository buyerAddressRepository,
             PlatformTransactionManager transactionManager) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -79,6 +83,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
         this.groupBuyParticipationService = groupBuyParticipationService;
         this.groupBuyEventOutboxRepository = groupBuyEventOutboxRepository;
         this.notificationRepository = notificationRepository;
+        this.buyerAddressRepository = buyerAddressRepository;
         this.productRepository = productRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -94,8 +99,11 @@ public class GroupBuySeedRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         Long producerId = ensureMember(PRODUCER_EMAIL, "시드 생산자", true);
         List<Long> buyerIds = new ArrayList<>();
+        List<Long> buyerAddressIds = new ArrayList<>();
         for (String email : BUYER_EMAILS) {
-            buyerIds.add(ensureMember(email, "시드 구매자", false));
+            Long buyerId = ensureMember(email, "시드 구매자", false);
+            buyerIds.add(buyerId);
+            buyerAddressIds.add(ensureBuyerAddress(buyerId));
         }
 
         List<Long> createdIds = transactionTemplate.execute(status -> {
@@ -103,9 +111,19 @@ public class GroupBuySeedRunner implements ApplicationRunner {
             List<SeedProduct> seedProducts = createSeedProducts(producerId);
             return createSeedGroupBuys(producerId, seedProducts);
         });
-        seedParticipation(createdIds, buyerIds);
+        seedParticipation(createdIds, buyerIds, buyerAddressIds);
 
         log.info("GroupBuySeedRunner: seeded {} group buys for producer {}", createdIds.size(), producerId);
+    }
+
+    // 재기동마다 시드 구매자의 주소록에 중복 행이 쌓이지 않도록, 이미 있으면 그대로 재사용한다
+    private Long ensureBuyerAddress(Long memberId) {
+        return buyerAddressRepository.findByMemberIdOrderByIdDesc(memberId).stream()
+                .findFirst()
+                .map(BuyerAddress::getId)
+                .orElseGet(() -> buyerAddressRepository
+                        .save(BuyerAddress.create(memberId, "서울특별시 강남구 테헤란로 123", "4층", "06234"))
+                        .getId());
     }
 
     private Long ensureMember(String email, String name, boolean asSeller) {
@@ -202,7 +220,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
 
     // 앞의 6개(즉시 ONGOING 전환 대상)에만 소량의 참여를 만들어 자연스러운 currentQuantity/참여자 수를 부여한다.
     // 과장된 대규모 참여자 수는 재현하지 않는다(정직하게 적은 인원).
-    private void seedParticipation(List<Long> groupBuyIds, List<Long> buyerIds) {
+    private void seedParticipation(List<Long> groupBuyIds, List<Long> buyerIds, List<Long> buyerAddressIds) {
         int[][] plan = {
                 {0, 0, 4}, {0, 1, 3},
                 {1, 0, 6},
@@ -212,10 +230,11 @@ public class GroupBuySeedRunner implements ApplicationRunner {
         for (int[] entry : plan) {
             Long groupBuyId = groupBuyIds.get(entry[0]);
             Long buyerId = buyerIds.get(entry[1]);
+            Long buyerAddressId = buyerAddressIds.get(entry[1]);
             int quantity = entry[2];
             try {
                 groupBuyParticipationService.participate(buyerId, groupBuyId,
-                        new GroupBuyPartCreateRequest(quantity, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
+                        new GroupBuyPartCreateRequest(quantity, buyerAddressId));
             } catch (RuntimeException e) {
                 log.warn("GroupBuySeedRunner: failed to seed participation for groupBuy {} - {}", groupBuyId,
                         e.getMessage());

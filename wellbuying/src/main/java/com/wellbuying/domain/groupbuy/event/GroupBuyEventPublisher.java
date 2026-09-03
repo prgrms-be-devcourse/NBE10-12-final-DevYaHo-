@@ -1,10 +1,16 @@
 package com.wellbuying.domain.groupbuy.event;
 
+import com.wellbuying.domain.address.entity.BuyerAddress;
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyEventOutbox;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyEventOutboxRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
@@ -16,19 +22,33 @@ import tools.jackson.databind.ObjectMapper;
 public class GroupBuyEventPublisher {
 
     private final GroupBuyEventOutboxRepository outboxRepository;
+    private final BuyerAddressRepository buyerAddressRepository;
     private final ObjectMapper objectMapper;
 
-    public GroupBuyEventPublisher(GroupBuyEventOutboxRepository outboxRepository, ObjectMapper objectMapper) {
+    public GroupBuyEventPublisher(GroupBuyEventOutboxRepository outboxRepository,
+            BuyerAddressRepository buyerAddressRepository, ObjectMapper objectMapper) {
         this.outboxRepository = outboxRepository;
+        this.buyerAddressRepository = buyerAddressRepository;
         this.objectMapper = objectMapper;
     }
 
     // 공동구매 성사 - 확정된 참여자 각각에 대해 이벤트를 개별 기록 (결제 도메인이 참여자 단위로 후속 처리를 하도록).
-    // 참여자 수만큼 save()를 개별 호출하면 그만큼 개별 INSERT 왕복이 발생하므로 saveAll()로 한 번에 묶는다
+    // 참여자 수만큼 save()를 개별 호출하면 그만큼 개별 INSERT 왕복이 발생하므로 saveAll()로 한 번에 묶는다.
+    // 참여 건은 buyer_address_id로 주소록을 참조만 하므로, 이벤트에 실을 주소 텍스트는 여기서 한 번에 조회해 채운다
+    // (참여자마다 개별 조회하면 N+1이 나므로 distinct id로 모아 findAllById 한 번으로 끝낸다)
     public void publishCompleted(GroupBuy groupBuy, List<GroupBuyPart> confirmedParts) {
+        Map<Long, BuyerAddress> buyerAddressesById = buyerAddressRepository
+                .findAllById(confirmedParts.stream()
+                        .map(GroupBuyPart::getBuyerAddressId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(BuyerAddress::getId, Function.identity()));
+
         List<GroupBuyEventOutbox> events = confirmedParts.stream()
                 .map(part -> toOutbox(groupBuy.getId(), GroupBuyEventType.GROUP_BUY_COMPLETED.code(),
-                        GroupBuyCompletedEvent.of(groupBuy, part)))
+                        GroupBuyCompletedEvent.of(groupBuy, part, buyerAddressesById.get(part.getBuyerAddressId()))))
                 .toList();
         outboxRepository.saveAll(events);
     }
