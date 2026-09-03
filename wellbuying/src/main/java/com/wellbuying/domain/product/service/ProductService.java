@@ -10,8 +10,10 @@ import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductCount;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
@@ -30,14 +32,17 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
+    private final ProductCountRepository productCountRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
+                          ProductCountRepository productCountRepository,
                           ApplicationEventPublisher eventPublisher) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
+        this.productCountRepository = productCountRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -85,6 +90,7 @@ public class ProductService {
         Product product = Product.register(sellerId, request.categoryId(), request.productName(),
                 request.description(), request.startPrice(), request.thumbnailUrl());
         Long productId = productRepository.save(product).getId();
+        productCountRepository.save(ProductCount.init(productId));
         eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
         return productId;
     }
