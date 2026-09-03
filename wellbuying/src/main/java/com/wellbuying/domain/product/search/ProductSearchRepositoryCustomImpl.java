@@ -1,10 +1,13 @@
 package com.wellbuying.domain.product.search;
 
+import com.wellbuying.global.dto.CursorPageResponse;
+import com.wellbuying.global.dto.Cursor;
 import java.util.List;
+import org.opensearch.client.opensearch._types.FieldValue;
+import org.opensearch.client.opensearch._types.SortOptions;
+import org.opensearch.client.opensearch._types.SortOrder;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -20,26 +23,51 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     @Override
-    public Slice<ProductSearchResponse> search(String keyword, SearchSortType sort, int page, int size) {
-        Query searchQuery = buildQuery(keyword);
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size) {
+        NativeQueryBuilder builder = new NativeQueryBuilder()
+                .withQuery(buildQuery(keyword))
+                .withSort(List.of(
+                        SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
+                        SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc)))
+                ))
+                .withPageable(PageRequest.of(0, size + 1));
 
-        NativeQuery nativeQuery = new NativeQueryBuilder()
-                .withQuery(searchQuery)
-                .withPageable(PageRequest.of(page, size))
-                .withMaxResults(size + 1)
-                .build();
+        if (cursor != null) {
+            Cursor c = Cursor.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
+            double score = c.getDouble(0);
+            long id = c.getLong(1);
+            builder = builder.withSearchAfter(List.of(score, id));
+        }
 
-        SearchHits<ProductSearchDocument> hits = operations.search(nativeQuery, ProductSearchDocument.class);
+        SearchHits<ProductSearchDocument> hits = operations.search(builder.build(), ProductSearchDocument.class);
 
-        boolean hasNext = hits.getSearchHits().size() > size;
+        List<SearchHit<ProductSearchDocument>> searchHits = hits.getSearchHits();
+        boolean hasNext = searchHits.size() > size;
 
-        List<ProductSearchResponse> content = hits.stream()
+        List<ProductSearchResponse> content = searchHits.stream()
                 .limit(size)
                 .map(SearchHit::getContent)
                 .map(ProductSearchResponse::from)
                 .toList();
 
-        return new SliceImpl<>(content, PageRequest.of(page, size), hasNext);
+        String nextCursor = null;
+        if (hasNext) {
+            List<Object> sortValues = searchHits.get(size - 1).getSortValues();
+            FieldValue scoreVal = (FieldValue) sortValues.get(0);
+            FieldValue idVal = (FieldValue) sortValues.get(1);
+            String scoreStr;
+            if (scoreVal.isDouble()) {
+                scoreStr = String.valueOf(scoreVal.doubleValue());
+            } else if (scoreVal.isLong()) {
+                scoreStr = String.valueOf(scoreVal.longValue());
+            } else {
+                throw new IllegalStateException("Unexpected FieldValue kind for score: " + scoreVal._kind());
+            }
+            String idStr = String.valueOf(idVal.longValue());
+            nextCursor = Cursor.encode(SearchSortType.RELEVANCE.name(), scoreStr, idStr);
+        }
+
+        return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
     // productName/description에 대한 형태소 분석 기반 multi_match + status:APPROVED 필터

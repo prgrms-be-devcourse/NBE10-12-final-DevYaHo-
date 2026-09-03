@@ -3,20 +3,19 @@ package com.wellbuying.domain.product.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
-import java.util.List;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.entity.ProductCount;
 import com.wellbuying.domain.product.entity.ProductSortType;
+import com.wellbuying.global.dto.CursorPageResponse;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
@@ -64,9 +63,9 @@ class ProductQueryRepositoryTest {
         productRepository.save(phone);
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        assertThat(result.getContent()).extracting("productName")
+        assertThat(result.content()).extracting("productName")
                 .contains("노트북A")
                 .doesNotContain("휴대폰A");
     }
@@ -84,10 +83,10 @@ class ProductQueryRepositoryTest {
         expensiveOutOfRange.approve();
         productRepository.save(expensiveOutOfRange);
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, 10000, 100000, ProductSortType.LATEST);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, 10000, 100000, ProductSortType.LATEST);
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        assertThat(result.getContent()).extracting("productName")
+        assertThat(result.content()).extracting("productName")
                 .contains("범위안상품")
                 .doesNotContain("범위밖저가", "범위밖고가");
     }
@@ -103,10 +102,10 @@ class ProductQueryRepositoryTest {
         rejected.reject();
         productRepository.save(rejected);
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.LATEST);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        assertThat(result.getContent()).extracting("productName")
+        assertThat(result.content()).extracting("productName")
                 .contains("승인된상품")
                 .doesNotContain("대기중상품", "거절된상품");
     }
@@ -123,10 +122,10 @@ class ProductQueryRepositoryTest {
         productCountRepository.save(withViewCount(lowView.getId(), 5L));
         productCountRepository.save(withViewCount(highView.getId(), 500L));
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.POPULAR);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        assertThat(result.getContent().get(0).productName()).isEqualTo("인기많은상품");
+        assertThat(result.content().get(0).productName()).isEqualTo("인기많은상품");
     }
 
     // 인기순(POPULAR) 정렬 시 ProductCount가 없어 viewCount가 NULL인 상품은 맨 뒤로 밀린다
@@ -141,10 +140,10 @@ class ProductQueryRepositoryTest {
         productCountRepository.save(withViewCount(withCount.getId(), 10L));
         // noCount는 ProductCount 저장 안 함 → LEFT JOIN 후 viewCount = NULL
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.POPULAR);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        List<String> names = result.getContent().stream().map(ProductSummaryResponse::productName).toList();
+        List<String> names = result.content().stream().map(ProductSummaryResponse::productName).toList();
         assertThat(names.indexOf("조회수있는상품")).isLessThan(names.indexOf("조회수없는상품"));
     }
 
@@ -158,26 +157,67 @@ class ProductQueryRepositoryTest {
         cheap.approve();
         productRepository.save(cheap);
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.PRICE_ASC);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 20));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.PRICE_ASC);
+        CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
 
-        assertThat(result.getContent().get(0).productName()).isEqualTo("저렴한상품");
+        assertThat(result.content().get(0).productName()).isEqualTo("저렴한상품");
     }
 
-    // 요청한 페이지 크기보다 데이터가 많으면 hasNext가 true다
+    // size+1개 준비 → 1차 요청 hasNext=true + nextCursor 수령 → 2차 요청 → 결과 겹침 없음 확인
     @Test
-    void search_페이지크기보다_데이터가_많으면_hasNext가_true다() {
-        for (int i = 0; i < 5; i++) {
+    void search_커서로_다음_페이지를_조회하면_결과가_겹치지_않는다() {
+        for (int i = 0; i < 4; i++) {
             Product p = Product.register(TEST_SELLER_ID, testCategoryId, "상품" + i, "설명", 10000, "url");
             p.approve();
             productRepository.save(p);
         }
 
-        ProductSearchCondition condition = new ProductSearchCondition(null, null, null, ProductSortType.LATEST);
-        Slice<ProductSummaryResponse> result = productRepository.search(condition, PageRequest.of(0, 3));
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
+        CursorPageResponse<ProductSummaryResponse> first = productRepository.search(condition, null, 3);
 
-        assertThat(result.hasNext()).isTrue();
-        assertThat(result.getContent()).hasSize(3);
+        assertThat(first.hasNext()).isTrue();
+        assertThat(first.content()).hasSize(3);
+
+        CursorPageResponse<ProductSummaryResponse> second = productRepository.search(condition, first.nextCursor(), 3);
+        assertThat(second.content()).isNotEmpty();
+
+        List<String> firstNames = first.content().stream().map(ProductSummaryResponse::productName).toList();
+        List<String> secondNames = second.content().stream().map(ProductSummaryResponse::productName).toList();
+        assertThat(firstNames).doesNotContainAnyElementsOf(secondNames);
+    }
+
+    // POPULAR 정렬 2차 조회에서 viewCount=NULL 상품이 누락되지 않아야 한다
+    @Test
+    void search_POPULAR_2차_조회에서_viewCount_NULL_상품이_포함된다() {
+        // viewCount 있는 상품 3개 (size=2 → 1차에 2개, 2차에 1개 이상 기대)
+        Product p1 = Product.register(TEST_SELLER_ID, testCategoryId, "유뷰상품1", "설명", 10000, "url");
+        p1.approve();
+        p1 = productRepository.save(p1);
+        productCountRepository.save(withViewCount(p1.getId(), 9L));
+
+        Product p2 = Product.register(TEST_SELLER_ID, testCategoryId, "유뷰상품2", "설명", 10000, "url");
+        p2.approve();
+        p2 = productRepository.save(p2);
+        productCountRepository.save(withViewCount(p2.getId(), 8L));
+
+        Product p3 = Product.register(TEST_SELLER_ID, testCategoryId, "유뷰상품3", "설명", 10000, "url");
+        p3.approve();
+        p3 = productRepository.save(p3);
+        productCountRepository.save(withViewCount(p3.getId(), 7L));
+
+        // ProductCount 미등록 → LEFT JOIN 후 viewCount = NULL → POPULAR 정렬 맨 뒤
+        Product nullView = Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url");
+        nullView.approve();
+        productRepository.save(nullView);
+
+        ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
+        CursorPageResponse<ProductSummaryResponse> first = productRepository.search(condition, null, 2);
+
+        assertThat(first.hasNext()).isTrue();
+        assertThat(first.content()).extracting("productName").doesNotContain("조회수없는상품");
+
+        CursorPageResponse<ProductSummaryResponse> second = productRepository.search(condition, first.nextCursor(), 10);
+        assertThat(second.content()).extracting("productName").contains("조회수없는상품");
     }
 
     private ProductCount withViewCount(Long productId, long viewCount) {

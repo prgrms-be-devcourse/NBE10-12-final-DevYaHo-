@@ -10,8 +10,7 @@ public record ProductSearchRequest(
 
         SearchSortType sort,
 
-        @Min(0)
-        Integer page,
+        String cursor,
 
         @Min(1) @Max(100)
         Integer size
@@ -22,9 +21,6 @@ public record ProductSearchRequest(
         }
         if (keyword != null) {
             keyword = keyword.trim();
-        }
-        if (page == null) {
-            page = 0;
         }
         if (size == null) {
             size = 20;

@@ -2,6 +2,8 @@ package com.wellbuying.domain.groupbuy.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.address.entity.BuyerAddress;
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
@@ -28,15 +30,18 @@ public class GroupBuyParticipationService {
     private final GroupBuyPartRepository groupBuyPartRepository;
     private final GroupBuyCounterRepository groupBuyCounterRepository;
     private final GroupBuyEventPublisher groupBuyEventPublisher;
+    private final BuyerAddressRepository buyerAddressRepository;
 
     public GroupBuyParticipationService(GroupBuyRepository groupBuyRepository,
             GroupBuyPriceRepository groupBuyPriceRepository, GroupBuyPartRepository groupBuyPartRepository,
-            GroupBuyCounterRepository groupBuyCounterRepository, GroupBuyEventPublisher groupBuyEventPublisher) {
+            GroupBuyCounterRepository groupBuyCounterRepository, GroupBuyEventPublisher groupBuyEventPublisher,
+            BuyerAddressRepository buyerAddressRepository) {
         this.groupBuyRepository = groupBuyRepository;
         this.groupBuyPriceRepository = groupBuyPriceRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
         this.groupBuyCounterRepository = groupBuyCounterRepository;
         this.groupBuyEventPublisher = groupBuyEventPublisher;
+        this.buyerAddressRepository = buyerAddressRepository;
     }
 
     // 참여 신청 - Redis 원자적 카운터로 재고 체크+증가를 먼저 처리한 뒤, 성공한 경우에만 DB에 CONFIRMED로 반영한다
@@ -54,6 +59,13 @@ public class GroupBuyParticipationService {
             throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
         }
 
+        // Redis 카운터를 건드리기 전에 배송지 소유권을 먼저 검증한다 - 검증에 실패하면 카운터를 되돌릴 필요 자체가 없다
+        BuyerAddress buyerAddress = buyerAddressRepository.findById(request.buyerAddressId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUYER_ADDRESS_NOT_FOUND));
+        if (!buyerAddress.getMemberId().equals(memberId)) {
+            throw new BusinessException(ErrorCode.BUYER_ADDRESS_FORBIDDEN);
+        }
+
         int quantity = request.quantity();
         long newTotal = groupBuyCounterRepository.tryIncrease(groupBuyId, quantity, groupBuy.getMaxQuantity());
         if (newTotal < 0) {
@@ -65,7 +77,7 @@ public class GroupBuyParticipationService {
             // 실패하면 애초에 가격이 필요 없으므로 여기서 계산하는 건 낭비다. 예상가는 프론트가
             // GET /price(구간표) + GET /status(현재 수량)로 직접 계산해 보여준다
             GroupBuyPart part = groupBuyPartRepository.save(GroupBuyPart.confirm(groupBuyId, memberId, quantity,
-                    request.address(), request.addressDetail(), request.zipcode()));
+                    buyerAddress.getId()));
 
             // 자바 메모리에서 읽은 값에 더해 통째로 덮어쓰는 방식이 아니라, DB에서 직접 원자적으로 증가시킨다
             // (동시에 여러 참여가 몰려도 lost update가 없다). 이 호출 이후 영속성 컨텍스트가 비워지므로

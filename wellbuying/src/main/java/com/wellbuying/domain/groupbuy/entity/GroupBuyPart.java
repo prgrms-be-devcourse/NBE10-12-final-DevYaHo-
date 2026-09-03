@@ -35,17 +35,11 @@ public class GroupBuyPart {
     @Column(name = "applied_price")
     private Integer appliedPrice;
 
-    // 참여 시점의 배송지 스냅샷 - 별도 주소록을 참조하지 않고 참여 건에 직접 저장해, 이후 회원이
-    // 주소를 바꿔도 이미 참여한 건의 배송지는 그대로 유지된다. 실제 참여 API에서는 필수값이지만,
-    // confirm(groupBuyId, memberId, quantity) 오버로드로 만드는 기존 테스트 픽스처와의 호환을 위해 엔티티 자체는 nullable로 둔다
-    @Column
-    private String address;
-
-    @Column(name = "address_detail")
-    private String addressDetail;
-
-    @Column
-    private String zipcode;
+    // 참여 시점에 고른 배송지 - 회원 주소록(buyer_address)을 참조할 뿐 텍스트를 복사해두지 않는다.
+    // 실제 참여 API에서는 필수값이지만, confirm(groupBuyId, memberId, quantity) 오버로드로 만드는
+    // 기존 테스트 픽스처와의 호환을 위해 엔티티 자체는 nullable로 둔다
+    @Column(name = "buyer_address_id")
+    private Long buyerAddressId;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
@@ -59,28 +53,24 @@ public class GroupBuyPart {
     protected GroupBuyPart() {
     }
 
-    private GroupBuyPart(Long groupBuyId, Long memberId, int quantity, GroupBuyPartStatus status, String address,
-            String addressDetail, String zipcode) {
+    private GroupBuyPart(Long groupBuyId, Long memberId, int quantity, GroupBuyPartStatus status,
+            Long buyerAddressId) {
         this.groupBuyId = groupBuyId;
         this.memberId = memberId;
         this.quantity = quantity;
         this.status = status;
-        this.address = address;
-        this.addressDetail = addressDetail;
-        this.zipcode = zipcode;
+        this.buyerAddressId = buyerAddressId;
     }
 
     // 배송지 없이 참여 건을 만드는 오버로드 - 배송지와 무관한 시나리오를 검증하는 기존 테스트 픽스처용
     public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity) {
-        return confirm(groupBuyId, memberId, quantity, null, null, null);
+        return confirm(groupBuyId, memberId, quantity, null);
     }
 
     // 참여 신청 생성 - Redis 원자적 카운터 증가에 성공한 직후 CONFIRMED 상태로 즉시 생성 (결제 단계가 아직 없어 PENDING을 거치지 않음)
     // 가격은 아직 미정(appliedPrice=null) - 공동구매가 성사될 때 applyFinalPrice()로 한 번만 확정된다
-    public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity, String address,
-            String addressDetail, String zipcode) {
-        return new GroupBuyPart(groupBuyId, memberId, quantity, GroupBuyPartStatus.CONFIRMED, address, addressDetail,
-                zipcode);
+    public static GroupBuyPart confirm(Long groupBuyId, Long memberId, int quantity, Long buyerAddressId) {
+        return new GroupBuyPart(groupBuyId, memberId, quantity, GroupBuyPartStatus.CONFIRMED, buyerAddressId);
     }
 
     // 참여 취소
@@ -114,16 +104,8 @@ public class GroupBuyPart {
         return appliedPrice;
     }
 
-    public String getAddress() {
-        return address;
-    }
-
-    public String getAddressDetail() {
-        return addressDetail;
-    }
-
-    public String getZipcode() {
-        return zipcode;
+    public Long getBuyerAddressId() {
+        return buyerAddressId;
     }
 
     public GroupBuyPartStatus getStatus() {

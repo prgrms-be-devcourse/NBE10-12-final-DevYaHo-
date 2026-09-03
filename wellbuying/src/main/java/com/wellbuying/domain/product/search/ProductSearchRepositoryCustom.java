@@ -1,8 +1,8 @@
 package com.wellbuying.domain.product.search;
 
-import org.springframework.data.domain.Slice;
+import com.wellbuying.global.dto.CursorPageResponse;
 
 public interface ProductSearchRepositoryCustom {
 
-    Slice<ProductSearchResponse> search(String keyword, SearchSortType sort, int page, int size);
+    CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size);
 }

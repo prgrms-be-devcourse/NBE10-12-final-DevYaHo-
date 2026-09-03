@@ -55,12 +55,15 @@ public enum ErrorCode {
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_NOT_FOUND", "존재하지 않는 결제입니다."),
     BILLING_KEY_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_BILLING_KEY_NOT_FOUND", "등록된 결제 수단이 없습니다."),
     BILLING_KEY_ISSUE_FAILED(HttpStatus.BAD_GATEWAY, "PAYMENT_502_BILLING_KEY_ISSUE_FAILED", "카드 등록에 실패했습니다. 다시 시도해주세요."),
+    INVALID_CURSOR(HttpStatus.BAD_REQUEST, "COMMON_400_INVALID_CURSOR", "유효하지 않은 커서입니다."),
     SEARCH_SORT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "SEARCH_400_SORT_NOT_SUPPORTED", "지원하지 않는 정렬 방식입니다."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_404_NOT_FOUND", "존재하지 않는 알림입니다."),
     COMMON_403_FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_403_FORBIDDEN", "접근 권한이 없습니다."),
     COMMON_404_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_404_NOT_FOUND", "요청하신 리소스를 찾을 수 없습니다."),
     COMMON_405_METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "COMMON_405_METHOD_NOT_ALLOWED", "허용되지 않은 요청 방식입니다."),
     COMMON_500_INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_500_INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다.");
+    BUYER_ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "ADDRESS_404_NOT_FOUND", "존재하지 않는 배송지입니다."),
+    BUYER_ADDRESS_FORBIDDEN(HttpStatus.FORBIDDEN, "ADDRESS_403_FORBIDDEN", "해당 배송지에 대한 권한이 없습니다.");
 
     private final HttpStatus status;
     private final String code;

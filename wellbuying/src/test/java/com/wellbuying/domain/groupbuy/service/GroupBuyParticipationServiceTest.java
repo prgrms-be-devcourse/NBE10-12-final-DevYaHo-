@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.address.entity.BuyerAddress;
+import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
@@ -50,8 +52,19 @@ class GroupBuyParticipationServiceTest {
     @Mock
     private GroupBuyEventPublisher groupBuyEventPublisher;
 
+    @Mock
+    private BuyerAddressRepository buyerAddressRepository;
+
     @InjectMocks
     private GroupBuyParticipationService groupBuyParticipationService;
+
+    // 배송지 소유권 검증(findById 후 memberId 비교)을 통과시키기 위한 더미 주소록 항목.
+    // id는 리플렉션으로 채운다 - BuyerAddress.create()는 저장 전이라 id가 없기 때문
+    private BuyerAddress buyerAddressOf(Long id, Long memberId) {
+        BuyerAddress buyerAddress = BuyerAddress.create(memberId, "서울특별시 강남구 테헤란로 123", "4층", "06234");
+        org.springframework.test.util.ReflectionTestUtils.setField(buyerAddress, "id", id);
+        return buyerAddress;
+    }
 
     private GroupBuy ongoingGroupBuy(int minQuantity, int maxQuantity) {
         GroupBuy groupBuy = GroupBuy.create(10L, 1L, "제목",
@@ -81,9 +94,10 @@ class GroupBuyParticipationServiceTest {
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
+                new GroupBuyPartCreateRequest(50, 1L));
 
         assertThat(response.quantity()).isEqualTo(50);
         assertThat(response.appliedPrice()).isNull();
@@ -108,9 +122,10 @@ class GroupBuyParticipationServiceTest {
         confirmedPart.applyFinalPrice(15_000);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(confirmedPart));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
 
         groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(100, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
+                new GroupBuyPartCreateRequest(100, 1L));
 
         assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
         assertThat(confirmedPart.getAppliedPrice()).isEqualTo(15_000);
@@ -148,9 +163,10 @@ class GroupBuyParticipationServiceTest {
         earlyParticipant.applyFinalPrice(10_000);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenAnswer(invocation -> List.of(earlyParticipant, savedPartHolder[0]));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234"));
+                new GroupBuyPartCreateRequest(50, 1L));
 
         assertThat(response.appliedPrice()).isEqualTo(10_000);
         assertThat(earlyParticipant.getAppliedPrice()).isEqualTo(10_000);
@@ -163,9 +179,10 @@ class GroupBuyParticipationServiceTest {
         GroupBuy groupBuy = ongoingGroupBuy(100, 100);
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 100)).thenReturn(-1L);
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
 
         assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50, "서울특별시 강남구 테헤란로 123", "4층", "06234")))
+                new GroupBuyPartCreateRequest(50, 1L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_SOLD_OUT);
@@ -181,7 +198,7 @@ class GroupBuyParticipationServiceTest {
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(readyGroupBuy));
 
         assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(10, "서울특별시 강남구 테헤란로 123", "4층", "06234")))
+                new GroupBuyPartCreateRequest(10, 1L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_NOT_ONGOING);
