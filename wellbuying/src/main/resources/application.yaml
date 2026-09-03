@@ -82,6 +82,12 @@ management:
       exposure:
         # 필요한 것만 노출 - 기본값(health만)에 prometheus 추가, 그 외 endpoint(env, beans 등)는 계속 비노출
         include: health,prometheus
+  health:
+    # spring-data-opensearch-starter가 transitive로 끌어오는 spring-boot-elasticsearch 모듈 때문에
+    # 실제로는 쓰지 않는 spring.elasticsearch.uris(기본값 localhost:9200) 대상 헬스체크가 자동 등록되어
+    # opensearch.uris 설정과 무관하게 항상 DOWN으로 잡히는 문제 방지
+    elasticsearch:
+      enabled: false
   metrics:
     tags:
       application: ${spring.application.name}
