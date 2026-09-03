@@ -29,6 +29,45 @@ services:
       timeout: 5s
       retries: 5
 
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: wellbuying-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+      - wellbuying-kafka-data:/var/lib/kafka/data
+
+  opensearch:
+    build:
+      context: ./docker/opensearch
+    container_name: wellbuying-opensearch
+    mem_limit: 1800m
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true # 로컬 개발 전용 (운영 환경 적용 금지)
+      - OPENSEARCH_JAVA_OPTS=-Xms900m -Xmx900m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - wellbuying-opensearch-data:/usr/share/opensearch/data
+
 volumes:
   wellbuying-postgres-data:
   wellbuying-redis-data:
+  wellbuying-kafka-data:
+  wellbuying-opensearch-data:

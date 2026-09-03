@@ -3,24 +3,37 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --wb-canvas: #f7f7f5;
+  --wb-surface: #ffffff;
+  --wb-tag-surface: #f0f1ee;
+  --wb-ink: #171717;
+  --wb-secondary: #6b7280;
+  --wb-line: #e5e5e0;
+  --wb-green: #1a5438;
+  --wb-light-green: #d6e3c7;
+  --wb-orange: #db6e29;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-wb-canvas: var(--wb-canvas);
+  --color-wb-surface: var(--wb-surface);
+  --color-wb-tag-surface: var(--wb-tag-surface);
+  --color-wb-ink: var(--wb-ink);
+  --color-wb-secondary: var(--wb-secondary);
+  --color-wb-line: var(--wb-line);
+  --color-wb-green: var(--wb-green);
+  --color-wb-light-green: var(--wb-light-green);
+  --color-wb-orange: var(--wb-orange);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* 시스템 다크모드 설정과 무관하게 항상 라이트 테마로 고정 */
 
 body {
-  background: var(--background);
+  background: var(--wb-canvas);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

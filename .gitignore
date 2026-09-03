@@ -46,3 +46,13 @@ out/
 ### docs ###
 docs/
 capcature/
+### env ###
+.env
+.env.*
+!.env.example
+
+
+### Antigravity ###
+code_reviews
+
+commit_diff.patch

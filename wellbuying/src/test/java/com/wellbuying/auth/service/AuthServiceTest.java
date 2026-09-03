@@ -7,24 +7,36 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
+import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
+import com.wellbuying.auth.oauth.OAuthExchangePayload;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.token.RefreshTokenRepository;
 import com.wellbuying.auth.token.RefreshTokenValue;
 import com.wellbuying.auth.token.TokenHasher;
 import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.member.domain.Member;
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
-import com.wellbuying.member.domain.Role;
-import com.wellbuying.member.repository.MemberRepository;
+import com.wellbuying.domain.member.entity.Role;
+import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.member.service.EmailVerificationService;
 import io.jsonwebtoken.Claims;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -32,7 +44,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -53,7 +67,16 @@ class AuthServiceTest {
     private TokenHasher tokenHasher;
 
     @Mock
+    private OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
+
+    @Mock
     private Claims claims;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private EmailVerificationService emailVerificationService;
 
     @InjectMocks
     private AuthService authService;
@@ -131,6 +154,81 @@ class AuthServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SOCIAL_ONLY_ACCOUNT);
         verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    // 이미 DORMANT 상태인 회원이 로그인을 시도하면 토큰 발급 없이 MEMBER_DORMANT 예외가 발생하는지 검증
+    @Test
+    void DORMANT_상태의_회원은_로그인시_예외가_발생한다() {
+        Member member = Member.signUp("dormant@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+        when(memberRepository.findByEmailAndDeletedAtIsNull("dormant@example.com")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("Pass1234!", "encoded-password")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("dormant@example.com", "Pass1234!"), null))
+                .isInstanceOf(DormantMemberException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+        verify(tokenProvider, never()).createAccessToken(anyLong(), any(), anyString());
+    }
+
+    // 배치가 아직 처리하지 못한 휴면 대상(status=ACTIVE, 마지막 로그인 6개월 경과) 회원은 로그인 시도 시 그 자리에서 DORMANT로 전환되고 차단되는지 검증
+    @Test
+    void 휴면_전환_대상_회원은_로그인시_DORMANT로_전환되며_예외가_발생한다() {
+        Member member = Member.signUp("eligible@example.com", "encoded-password", "홍길동");
+        ReflectionTestUtils.setField(member, "lastLoginAt", LocalDateTime.now().minusMonths(7));
+        when(memberRepository.findByEmailAndDeletedAtIsNull("eligible@example.com")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("Pass1234!", "encoded-password")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("eligible@example.com", "Pass1234!"), null))
+                .isInstanceOf(DormantMemberException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_DORMANT);
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.DORMANT);
+    }
+
+    // 재활성화 코드 검증 성공 시 회원이 ACTIVE로 전환되고 로그인 토큰까지 발급되는지 검증
+    @Test
+    void 재활성화_코드_검증에_성공하면_ACTIVE로_전환되고_로그인토큰을_발급한다() {
+        Member member = Member.signUp("dormant@example.com", "encoded-password", "홍길동");
+        member.markDormant();
+        when(memberRepository.findByEmailAndDeletedAtIsNull("dormant@example.com")).thenReturn(Optional.of(member));
+        when(tokenProvider.createAccessToken(any(), eq(Role.BUYER), eq("device-1"))).thenReturn("access-token");
+        when(tokenProvider.createRefreshToken(any(), eq("device-1"))).thenReturn("refresh-token");
+        when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
+        when(tokenHasher.hash("refresh-token")).thenReturn("hashed-refresh-token");
+
+        LoginResponse response = authService.reactivate("dormant@example.com", "482913", "device-1");
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.deviceId()).isEqualTo("device-1");
+        assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        verify(emailVerificationService).verifyReactivationCode("dormant@example.com", "482913");
+    }
+
+    // 인증코드 검증에 실패하면 재활성화가 진행되지 않는지 검증 (EmailVerificationService가 던지는 예외를 그대로 전파)
+    @Test
+    void 재활성화_코드가_유효하지_않으면_예외가_발생한다() {
+        doThrow(new BusinessException(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID))
+                .when(emailVerificationService).verifyReactivationCode("dormant@example.com", "000000");
+
+        assertThatThrownBy(() -> authService.reactivate("dormant@example.com", "000000", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
+        verify(memberRepository, never()).findByEmailAndDeletedAtIsNull(anyString());
+    }
+
+    // 코드는 유효하지만 이미 ACTIVE로 돌아온 회원이면 MEMBER_NOT_DORMANT 예외가 발생하는지 검증
+    @Test
+    void 이미_ACTIVE인_회원의_재활성화_요청은_실패한다() {
+        Member member = Member.signUp("active@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("active@example.com")).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> authService.reactivate("active@example.com", "482913", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_DORMANT);
+        verify(tokenProvider, never()).createAccessToken(anyLong(), any(), anyString());
     }
 
     // 유효한 refresh token으로 재발급 요청 시 새 access/refresh 토큰을 발급하고 rotate를 호출하는지 검증
@@ -220,6 +318,84 @@ class AuthServiceTest {
         authService.logoutAll(1L);
 
         verify(refreshTokenRepository).deleteAll(1L);
+    }
+
+    // 소셜 로그인 성공 시에는 토큰을 발급하지 않고 memberId/role만 1회용 교환 코드에 저장하는지 검증
+    @Test
+    void 소셜_로그인_성공시_토큰_발급없이_memberId와_role만_교환코드에_저장한다() {
+        String code = authService.issueOAuthExchangeCode(1L, Role.BUYER);
+
+        assertThat(code).isNotBlank();
+        verify(oAuthExchangeCodeRepository).save(eq(code), eq(new OAuthExchangePayload(1L, Role.BUYER)));
+        verifyNoInteractions(tokenProvider, refreshTokenRepository);
+    }
+
+    // 유효한 교환 코드로 요청하면 저장된 memberId/role로 토큰을 발급하고, 요청에 실린 deviceId를 그대로 재사용하는지 검증
+    @Test
+    void 유효한_교환코드로_기존_deviceId를_재사용해_토큰을_발급한다() {
+        when(oAuthExchangeCodeRepository.consume("valid-code"))
+                .thenReturn(Optional.of(new OAuthExchangePayload(1L, Role.BUYER)));
+        when(tokenProvider.createAccessToken(eq(1L), eq(Role.BUYER), eq("device-1"))).thenReturn("access-token");
+        when(tokenProvider.createRefreshToken(eq(1L), eq("device-1"))).thenReturn("refresh-token");
+        when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
+        when(tokenHasher.hash("refresh-token")).thenReturn("hashed-refresh-token");
+
+        LoginResponse response = authService.exchangeOAuthCode("valid-code", "device-1");
+
+        assertThat(response.deviceId()).isEqualTo("device-1");
+        verify(refreshTokenRepository).save(eq(1L), eq("device-1"), argThatHasHash("hashed-refresh-token"));
+    }
+
+    // 요청에 deviceId가 없으면 서버가 새로 발급하는지 검증
+    @Test
+    void 유효한_교환코드에_deviceId가_없으면_새로_발급한다() {
+        when(oAuthExchangeCodeRepository.consume("valid-code"))
+                .thenReturn(Optional.of(new OAuthExchangePayload(1L, Role.BUYER)));
+        when(tokenProvider.createAccessToken(eq(1L), eq(Role.BUYER), anyString())).thenReturn("access-token");
+        when(tokenProvider.createRefreshToken(eq(1L), anyString())).thenReturn("refresh-token");
+        when(tokenProvider.getAccessTokenExpirationSeconds()).thenReturn(1800L);
+        when(tokenHasher.hash("refresh-token")).thenReturn("hashed-refresh-token");
+
+        LoginResponse response = authService.exchangeOAuthCode("valid-code", null);
+
+        assertThat(response.deviceId()).isNotBlank();
+        assertThat(UUID.fromString(response.deviceId())).isNotNull();
+    }
+
+    // 존재하지 않거나 이미 사용된 교환 코드로 요청하면 OAUTH_EXCHANGE_CODE_INVALID 예외가 발생하는지 검증
+    @Test
+    void 유효하지_않은_교환코드면_예외가_발생한다() {
+        when(oAuthExchangeCodeRepository.consume("invalid-code")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.exchangeOAuthCode("invalid-code", "device-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_EXCHANGE_CODE_INVALID);
+    }
+
+    // 기기 목록 조회 시 토큰 해시는 응답에서 제외하고 lastUsedAt 내림차순으로 정렬해 반환하는지 검증
+    @Test
+    void 기기_목록을_lastUsedAt_내림차순으로_조회한다() {
+        Map<String, RefreshTokenValue> stored = new LinkedHashMap<>();
+        stored.put("device-1", RefreshTokenValue.issued("hash-1", 100L));
+        stored.put("device-2", RefreshTokenValue.issued("hash-2", 200L));
+        when(refreshTokenRepository.findAll(1L)).thenReturn(stored);
+
+        List<DeviceSessionResponse> response = authService.getDevices(1L);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).deviceId()).isEqualTo("device-2");
+        assertThat(response.get(1).deviceId()).isEqualTo("device-1");
+    }
+
+    // 로그인 세션이 없으면 빈 목록을 반환하는지 검증
+    @Test
+    void 로그인된_기기가_없으면_빈_목록을_반환한다() {
+        when(refreshTokenRepository.findAll(1L)).thenReturn(Map.of());
+
+        List<DeviceSessionResponse> response = authService.getDevices(1L);
+
+        assertThat(response).isEmpty();
     }
 
     private RefreshTokenValue argThatHasHash(String hash) {
