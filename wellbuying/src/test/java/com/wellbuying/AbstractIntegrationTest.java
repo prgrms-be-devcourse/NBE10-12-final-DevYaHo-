@@ -1,6 +1,8 @@
 package com.wellbuying;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -37,10 +39,15 @@ public abstract class AbstractIntegrationTest {
 
     // gradlew test는 항상 wellbuying/를 작업 디렉터리로 실행하지만, IDE에서 단건 실행 시 작업 디렉터리가 달라지는 경우를 대비한 안전장치
     private static Path resolveDockerPath() {
-        Path direct = Path.of("docker/opensearch");
-        if (direct.toFile().exists()) {
-            return direct;
-        }
-        return Path.of("wellbuying/docker/opensearch");
+        List<Path> candidatePaths = List.of(
+                Path.of("docker/opensearch"),
+                Path.of("wellbuying/docker/opensearch")
+        );
+
+        return candidatePaths.stream()
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "OpenSearch Dockerfile 디렉터리를 찾을 수 없습니다. 현재 작업 경로: " + Path.of("").toAbsolutePath()));
     }
 }
