@@ -2,16 +2,15 @@ package com.wellbuying.domain.member.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.SocialAccount;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.transaction.annotation.Transactional;
 
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class SocialAccountRepositoryTest {
+@Transactional
+class SocialAccountRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private SocialAccountRepository socialAccountRepository;
