@@ -10,8 +10,9 @@
 #
 # redis(6379)/kafka(9092)/opensearch(9200) 포트를 호스트에 노출하는 이유:
 # 별도 OCI 인스턴스의 Prometheus(monitor.wellbuying.xyz)가 모니터링 대상으로 접근하기 위함.
-# 실제 접근 제한은 이 스크립트가 아니라 EC2 보안그룹에서 처리 —
-# 위 3개 포트 + 8080(백엔드)은 반드시 OCI 인스턴스 IP만 인바운드 허용하도록 설정할 것.
+# 접근 제한은 EC2 보안그룹이 아니라 Tailscale(사설망)로 처리 — 위 3개 포트 + 8080(백엔드)은
+# 보안그룹에 공개 인바운드를 열지 않고, OCI가 같은 tailnet에 조인해 Tailscale IP로만 접근.
+# (Tailscale 설치/조인은 이 스크립트 범위 밖 — 별도 진행)
 set -euo pipefail
 
 docker network create wellbuying-net || true
@@ -83,3 +84,62 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=3 \
   wellbuying-opensearch:local
+
+# ── redis_exporter (Prometheus용) ────────────────────────
+# redis(6379)는 raw 프로토콜 포트라 Prometheus가 직접 못 읽어서 별도 익스포터 필요
+# 9121 포트는 OCI Prometheus가 Tailscale로 스크레이핑 (§ 11 참고, 인터넷에는 미공개)
+docker stop redis-exporter || true
+docker rm redis-exporter || true
+docker pull oliver006/redis_exporter:latest
+docker run -d \
+  --name redis-exporter \
+  --network wellbuying-net \
+  --restart unless-stopped \
+  --memory 64m \
+  -e TZ=Asia/Seoul \
+  -p 9121:9121 \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  oliver006/redis_exporter:latest \
+  --redis.addr=redis:6379
+
+# ── kafka-exporter (Prometheus용) ────────────────────────
+# kafka(9092)는 raw 프로토콜 포트라 Prometheus가 직접 못 읽어서 별도 익스포터 필요
+# 9308 포트는 OCI Prometheus가 Tailscale로 스크레이핑 (§ 11 참고, 인터넷에는 미공개)
+docker stop kafka-exporter || true
+docker rm kafka-exporter || true
+docker pull danielqsj/kafka-exporter:latest
+docker run -d \
+  --name kafka-exporter \
+  --network wellbuying-net \
+  --restart unless-stopped \
+  --memory 64m \
+  -e TZ=Asia/Seoul \
+  -p 9308:9308 \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  danielqsj/kafka-exporter:latest \
+  --kafka.server=kafka:9092
+
+# ── node_exporter (Prometheus용, EC2 호스트 자체 지표) ────
+# CPU/메모리/디스크 등 EC2 호스트 레벨 지표 — 호스트의 /proc, /sys를 읽어야 해서 host 네트워크로 실행
+# 9100 포트는 OCI Prometheus가 Tailscale로 스크레이핑 (§ 11 참고, 인터넷에는 미공개)
+docker stop node-exporter || true
+docker rm node-exporter || true
+docker pull prom/node-exporter:latest
+docker run -d \
+  --name node-exporter \
+  --restart unless-stopped \
+  --memory 64m \
+  --pid host \
+  --net host \
+  -v /proc:/host/proc:ro \
+  -v /sys:/host/sys:ro \
+  -v /:/rootfs:ro \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  prom/node-exporter:latest \
+  --path.procfs=/host/proc \
+  --path.sysfs=/host/sys \
+  --path.rootfs=/rootfs \
+  --web.listen-address=:9100
