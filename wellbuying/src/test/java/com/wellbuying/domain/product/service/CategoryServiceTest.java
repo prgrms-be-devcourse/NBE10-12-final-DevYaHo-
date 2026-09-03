@@ -7,17 +7,14 @@ import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.product.dto.CategoryTreeResponse;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
-import com.wellbuying.global.config.NoOpCacheTestConfig;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
-@Import(NoOpCacheTestConfig.class)
 class CategoryServiceTest extends AbstractIntegrationTest {
 
     @Autowired
