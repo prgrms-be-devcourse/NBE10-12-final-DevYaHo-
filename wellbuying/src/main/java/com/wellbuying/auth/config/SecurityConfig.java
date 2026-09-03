@@ -45,7 +45,10 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             // 원래 요청의 인가 판단(403 등)이 끝난 뒤의 /error forward이므로 permitAll이어도 안전 - GlobalErrorController가 원래 상태코드를 그대로 응답
-            "/error"
+            "/error",
+            // Prometheus(OCI)가 JWT 없이 스크레이핑 - 접근 제한은 Tailscale 사설망(네트워크 레벨)이 담당, 인터넷에는 미공개
+            "/actuator/health",
+            "/actuator/prometheus"
     };
 
     // 공동구매 조회(GET)는 로그인 없이도 둘러볼 수 있어야 하므로 별도로 permitAll 처리 - 생성/수정/참여 등 쓰기 작업은 인증 필요
