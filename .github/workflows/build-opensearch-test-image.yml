@@ -10,8 +10,10 @@ on:
   push:
     branches:
       - main
+      - issue-106 # TODO: ghcr.io 최초 이미지 부트스트랩용 임시 트리거 - 이미지 push 확인 후 제거
     paths:
       - "wellbuying/docker/opensearch/**"
+      - ".github/workflows/build-opensearch-test-image.yml" # 부트스트랩 커밋 자체를 트리거로 잡기 위함(임시)
   workflow_dispatch:
 
 permissions:
