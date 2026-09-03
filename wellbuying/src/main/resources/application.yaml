@@ -2,6 +2,9 @@ server:
   # nginx(리버스 프록시) 뒤에서 X-Forwarded-Proto 등을 반영해 {baseUrl}이 https로 올바르게 계산되도록 함
   # 미설정 시 OAuth2 redirect_uri가 http://로 계산되어 구글 콘솔에 등록한 https URI와 불일치(redirect_uri_mismatch) 발생
   forward-headers-strategy: framework
+  tomcat:
+    threads:
+      max: 300
 
 spring:
   profiles:
@@ -14,6 +17,9 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
   flyway:
     enabled: true
     locations: classpath:db/migration
