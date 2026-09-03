@@ -2,6 +2,7 @@ package com.wellbuying.domain.product.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.Product;
@@ -15,12 +16,10 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
 @Transactional
-class ProductQueryRepositoryTest {
+class ProductQueryRepositoryTest extends AbstractIntegrationTest {
 
     private static final Long TEST_SELLER_ID = 9999L;
 
