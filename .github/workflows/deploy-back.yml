@@ -46,6 +46,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # AbstractIntegrationTest가 ghcr.io의 프리빌드 OpenSearch 테스트 이미지를 pull하므로 로그인 필요
+      - name: ghcr.io 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Gradle 테스트 실행
         run: ./gradlew test --no-daemon
 

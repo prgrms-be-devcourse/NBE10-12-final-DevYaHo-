@@ -1,16 +1,16 @@
 package com.wellbuying;
 
 import com.wellbuying.global.config.NoOpCacheTestConfig;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
+import java.util.stream.Stream;
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.images.builder.ImageFromDockerfile;
+import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.DockerImageName;
 
 // 싱글턴 컨테이너 패턴: static 필드로 직접 start()해서 JVM 실행 동안 모든 서브클래스가 컨테이너 하나를 공유(afterAll에서 stop되지 않음)
@@ -20,16 +20,20 @@ public abstract class AbstractIntegrationTest {
 
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    // docker/opensearch/Dockerfile로 빌드한 커스텀 이미지(Nori 한글 분석기 포함)를 사용 - 공식 이미지는 Nori가 없어 한글 검색 테스트가 깨진다
-    private static final ImageFromDockerfile OPENSEARCH_IMAGE = new ImageFromDockerfile("wellbuying-opensearch-test", false)
-            .withFileFromPath(".", resolveDockerPath());
+    private static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:8-alpine"))
+            .withExposedPorts(6379);
 
+    private static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka-native:3.8.0"));
+
+    // CI에서 매 테스트마다 Nori 플러그인 이미지를 직접 빌드하면 Docker Hub pull이 실패할 수 있어,
+    // .github/workflows/build-opensearch-test-image.yml로 미리 빌드해 ghcr.io에 올려둔 고정 태그를 사용한다
     private static final OpenSearchContainer<?> OPENSEARCH = new OpenSearchContainer<>(
-            DockerImageName.parse(OPENSEARCH_IMAGE.get()).asCompatibleSubstituteFor("opensearchproject/opensearch"));
+            DockerImageName.parse("ghcr.io/prgrms-be-devcourse/wellbuying-opensearch-test:2.19.1-nori")
+                    .asCompatibleSubstituteFor("opensearchproject/opensearch"));
 
     static {
-        POSTGRES.start();
-        OPENSEARCH.start();
+        // 병렬로 기동: 한쪽이 실패해도 다른 컨테이너의 기동을 막지 않는다
+        Startables.deepStart(Stream.of(POSTGRES, REDIS, KAFKA, OPENSEARCH)).join();
     }
 
     @DynamicPropertySource
@@ -37,20 +41,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", REDIS::getFirstMappedPort);
+        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("opensearch.uris", OPENSEARCH::getHttpHostAddress);
-    }
-
-    // gradlew test는 항상 wellbuying/를 작업 디렉터리로 실행하지만, IDE에서 단건 실행 시 작업 디렉터리가 달라지는 경우를 대비한 안전장치
-    private static Path resolveDockerPath() {
-        List<Path> candidatePaths = List.of(
-                Path.of("docker/opensearch"),
-                Path.of("wellbuying/docker/opensearch")
-        );
-
-        return candidatePaths.stream()
-                .filter(Files::exists)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "OpenSearch Dockerfile 디렉터리를 찾을 수 없습니다. 현재 작업 경로: " + Path.of("").toAbsolutePath()));
     }
 }
