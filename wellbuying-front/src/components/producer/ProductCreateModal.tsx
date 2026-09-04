@@ -10,15 +10,11 @@ import { createProduct } from "@/lib/api/product";
 import { ApiError } from "@/lib/api/http";
 import type { CategoryTreeResponse } from "@/lib/api/types";
 
-// 카테고리 트리를 들여쓰기가 있는 평평한 목록으로 펼침 - select 옵션으로 계층을 표현하기 위함
-function flattenCategories(
-  categories: CategoryTreeResponse[],
-  depth = 0,
-): { id: number; label: string }[] {
-  return categories.flatMap((category) => [
-    { id: category.id, label: `${"　".repeat(depth)}${category.categoryName}` },
-    ...flattenCategories(category.children, depth + 1),
-  ]);
+// 지금은 최상위 카테고리만 선택할 수 있게 한다(백엔드 시드도 최상위만 존재).
+// 나중에 2단계 연동 드롭다운으로 확장할 때는 선택된 최상위의 children으로
+// 두 번째 select를 그리면 된다 - 그래서 응답 트리 전체를 state에 그대로 들고 있는다.
+function toTopLevelOptions(tree: CategoryTreeResponse[]): { id: number; label: string }[] {
+  return tree.map((category) => ({ id: category.id, label: category.categoryName }));
 }
 
 export function ProductCreateModal({
@@ -30,7 +26,7 @@ export function ProductCreateModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [categories, setCategories] = useState<{ id: number; label: string }[]>([]);
+  const [categoryTree, setCategoryTree] = useState<CategoryTreeResponse[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [productName, setProductName] = useState("");
@@ -40,6 +36,9 @@ export function ProductCreateModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 최상위 카테고리만 select 옵션으로 노출 (2단계 확장 시 여기서 하위 select 추가)
+  const categories = toTopLevelOptions(categoryTree);
+
   useEffect(() => {
     if (!open) return;
     let ignore = false;
@@ -48,13 +47,12 @@ export function ProductCreateModal({
       setCategoriesLoading(true);
       try {
         const tree = await listCategories();
-        const flat = flattenCategories(tree);
         if (!ignore) {
-          setCategories(flat);
-          setCategoryId((current) => current ?? flat[0]?.id ?? null);
+          setCategoryTree(tree);
+          setCategoryId((current) => current ?? tree[0]?.id ?? null);
         }
       } catch {
-        if (!ignore) setCategories([]);
+        if (!ignore) setCategoryTree([]);
       } finally {
         if (!ignore) setCategoriesLoading(false);
       }
