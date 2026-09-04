@@ -84,10 +84,7 @@ spring:
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
 
-server:
-  tomcat:
-    threads:
-      max: 300
+
 
 opensearch:
   uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}

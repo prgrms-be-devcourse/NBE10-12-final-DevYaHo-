@@ -27,4 +27,10 @@ public class VerificationMailEventListener {
     public void handleVerificationCodeIssued(VerificationCodeIssuedEvent event) {
         mailService.sendHtmlEmail(event.email(), "[Wellbuying] 이메일 인증 코드", event.content());
     }
+
+    // sendPasswordReissueCode()는 현재 트랜잭션 없이 호출되므로 fallbackExecution = true로 즉시 발송 - handleVerificationCodeIssued와 동일한 이유
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void handlePasswordReissueCodeIssued(PasswordReissueCodeIssuedEvent event) {
+        mailService.sendHtmlEmail(event.email(), "[Wellbuying] 비밀번호 재발급 인증 코드", event.content());
+    }
 }

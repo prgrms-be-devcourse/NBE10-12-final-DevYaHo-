@@ -231,6 +231,49 @@ class AuthServiceTest {
         verify(tokenProvider, never()).createAccessToken(anyLong(), any(), anyString());
     }
 
+    // 비밀번호 재설정에 성공하면 새 비밀번호로 교체되고 전체 기기 세션이 무효화되는지 검증
+    @Test
+    void 비밀번호_재설정에_성공하면_비밀번호가_교체되고_전체_세션이_무효화된다() {
+        Member member = Member.signUp("reissue@example.com", "old-encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("reissue@example.com")).thenReturn(Optional.of(member));
+        when(passwordEncoder.encode("NewPass1234!")).thenReturn("new-encoded-password");
+
+        authService.resetPassword("reissue@example.com", "NewPass1234!");
+
+        assertThat(member.getPassword()).isEqualTo("new-encoded-password");
+        verify(emailVerificationService).assertPasswordReissueVerified("reissue@example.com");
+        verify(refreshTokenRepository).deleteAll(member.getId());
+    }
+
+    // 새 비밀번호가 기존 비밀번호와 동일하면 PASSWORD_SAME_AS_OLD 예외가 발생하고 비밀번호도 바뀌지 않는지 검증
+    @Test
+    void 기존_비밀번호와_동일하면_비밀번호_재설정이_실패한다() {
+        Member member = Member.signUp("reissue-same@example.com", "old-encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("reissue-same@example.com")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("OldPass1234!", "old-encoded-password")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.resetPassword("reissue-same@example.com", "OldPass1234!"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PASSWORD_SAME_AS_OLD);
+        assertThat(member.getPassword()).isEqualTo("old-encoded-password");
+        verify(refreshTokenRepository, never()).deleteAll(anyLong());
+    }
+
+    // 검증(verify) 단계를 거치지 않으면 비밀번호 재설정이 거부되고 비밀번호도 바뀌지 않는지 검증
+    @Test
+    void 검증을_거치지_않으면_비밀번호_재설정이_실패한다() {
+        doThrow(new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED))
+                .when(emailVerificationService).assertPasswordReissueVerified("reissue@example.com");
+
+        assertThatThrownBy(() -> authService.resetPassword("reissue@example.com", "NewPass1234!"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+        verify(memberRepository, never()).findByEmailAndDeletedAtIsNull(anyString());
+        verify(refreshTokenRepository, never()).deleteAll(anyLong());
+    }
+
     // 유효한 refresh token으로 재발급 요청 시 새 access/refresh 토큰을 발급하고 rotate를 호출하는지 검증
     @Test
     void 유효한_refresh_token으로_재발급하면_새_토큰을_발급하고_rotate를_호출한다() {
