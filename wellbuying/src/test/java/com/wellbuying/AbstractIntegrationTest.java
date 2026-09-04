@@ -1,8 +1,10 @@
 package com.wellbuying;
 
+import com.wellbuying.global.config.NoOpCacheTestConfig;
 import java.util.stream.Stream;
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -13,6 +15,7 @@ import org.testcontainers.utility.DockerImageName;
 
 // 싱글턴 컨테이너 패턴: static 필드로 직접 start()해서 JVM 실행 동안 모든 서브클래스가 컨테이너 하나를 공유(afterAll에서 stop되지 않음)
 @SpringBootTest
+@Import(NoOpCacheTestConfig.class)
 public abstract class AbstractIntegrationTest {
 
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");

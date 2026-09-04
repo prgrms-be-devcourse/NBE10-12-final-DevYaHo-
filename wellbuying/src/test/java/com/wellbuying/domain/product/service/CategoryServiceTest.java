@@ -10,10 +10,8 @@ import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -25,29 +23,8 @@ class CategoryServiceTest extends AbstractIntegrationTest {
     @Autowired
     private ProductCategoryRepository categoryRepository;
 
-    @Autowired
-    private CacheManager cacheManager;
-
     @PersistenceContext
     private EntityManager entityManager;
-
-    @Autowired
-    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
-
-    // getCategoryTree()에 캐시가 걸려있어서, 이전 테스트의 결과가 남아있으면 이번 테스트가 최신 DB 상태 대신
-    // 캐시된 값을 받게 됨 - 매 테스트 시작/종료 시점에 캐시를 확실하게 비워서 테스트끼리 서로 영향을 주지 않게 함
-    @BeforeEach
-    @org.junit.jupiter.api.AfterEach
-    void clearCache() {
-        var cache = cacheManager.getCache("categoryTree");
-        if (cache != null) {
-            cache.clear();
-        }
-        var keys = redisTemplate.keys("categoryTree*");
-        if (keys != null && !keys.isEmpty()) {
-            redisTemplate.delete(keys);
-        }
-    }
 
     // 최상위 카테고리 아래에 하위 카테고리가 자식으로 묶여서 트리가 조립된다
     @Test
