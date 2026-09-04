@@ -286,6 +286,127 @@ class AuthControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
+    // 비밀번호 재발급 코드 발송 → 검증 → 재설정까지 전체 플로우 성공 시, 비밀번호가 교체되고 이전 세션이 모두 무효화되며 새 비밀번호로 로그인되는지 검증
+    @Test
+    void 비밀번호_재발급_전체_플로우에_성공한다() throws Exception {
+        Member member = signUpMember("password-reissue@example.com");
+        login("password-reissue@example.com", "device-1");
+
+        String sendRequestBody = """
+                { "email": "password-reissue@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isOk())
+                .andDo(document("auth/password-reissue-send-success",
+                        requestFields(fieldWithPath("email").description("재발급 대상 이메일"))));
+
+        String code = redisTemplate.opsForValue().get("email:password-reissue:password-reissue@example.com");
+        String verifyRequestBody = """
+                { "email": "password-reissue@example.com", "code": "%s" }
+                """.formatted(code);
+        mockMvc.perform(post("/api/auth/password-reissue/verify")
+                        .contentType("application/json")
+                        .content(verifyRequestBody))
+                .andExpect(status().isOk())
+                .andDo(document("auth/password-reissue-verify-success",
+                        requestFields(
+                                fieldWithPath("email").description("재발급 대상 이메일"),
+                                fieldWithPath("code").description("이메일로 발송된 인증 코드"))));
+
+        String resetRequestBody = """
+                { "email": "password-reissue@example.com", "newPassword": "NewPass1234!" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/reset")
+                        .contentType("application/json")
+                        .content(resetRequestBody))
+                .andExpect(status().isNoContent())
+                .andDo(document("auth/password-reissue-reset-success",
+                        requestFields(
+                                fieldWithPath("email").description("재발급 대상 이메일"),
+                                fieldWithPath("newPassword").description("새 비밀번호"))));
+
+        assertThat(redisTemplate.hasKey("ReT:" + member.getId())).isFalse();
+
+        String loginRequestBody = """
+                { "email": "password-reissue@example.com", "password": "NewPass1234!" }
+                """;
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content(loginRequestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    // 잘못된 코드로 검증을 시도하면 401과 MEMBER_401_EMAIL_CODE_INVALID 에러 코드를 반환하는지 검증
+    @Test
+    void 잘못된_코드로_비밀번호_재발급_검증을_시도하면_실패한다() throws Exception {
+        memberRepository.save(
+                Member.signUp("password-reissue-wrong-code@example.com", passwordEncoder.encode("OldPass1234!"), "홍길동"));
+
+        String sendRequestBody = """
+                { "email": "password-reissue-wrong-code@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isOk());
+
+        String verifyRequestBody = """
+                { "email": "password-reissue-wrong-code@example.com", "code": "000000" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/verify")
+                        .contentType("application/json")
+                        .content(verifyRequestBody))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("MEMBER_401_EMAIL_CODE_INVALID"))
+                .andDo(document("auth/password-reissue-verify-invalid-code",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // verify 단계를 거치지 않고 곧바로 재설정을 시도하면 403과 MEMBER_403_EMAIL_NOT_VERIFIED 에러 코드를 반환하는지 검증
+    @Test
+    void 검증_없이_비밀번호_재설정을_시도하면_실패한다() throws Exception {
+        memberRepository.save(
+                Member.signUp("password-reissue-not-verified@example.com", passwordEncoder.encode("OldPass1234!"),
+                        "홍길동"));
+
+        String resetRequestBody = """
+                { "email": "password-reissue-not-verified@example.com", "newPassword": "NewPass1234!" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/reset")
+                        .contentType("application/json")
+                        .content(resetRequestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MEMBER_403_EMAIL_NOT_VERIFIED"))
+                .andDo(document("auth/password-reissue-reset-not-verified",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 소셜 전용 계정(비밀번호 없음)은 재발급 코드 발송이 거부되는지 검증
+    @Test
+    void 소셜_전용_계정은_비밀번호_재발급_코드_발송에_실패한다() throws Exception {
+        memberRepository.save(Member.socialOnly("password-reissue-social@example.com", "홍길동"));
+
+        String sendRequestBody = """
+                { "email": "password-reissue-social@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("AUTH_403_SOCIAL_ONLY"))
+                .andDo(document("auth/password-reissue-send-social-only",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
     // 유효한 refresh token으로 재발급 요청 시 200과 함께 기존과 다른 새 access/refresh 토큰이 발급되는지 검증
     @Test
     void refresh_token으로_토큰_재발급에_성공한다() throws Exception {

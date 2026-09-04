@@ -66,6 +66,16 @@ class MemberTest {
         assertThat(member.getPhoneNumber()).isEqualTo("010-1111-2222");
     }
 
+    // changePassword() 호출 시 비밀번호가 새로 전달한 인코딩 값으로 교체되는지 검증
+    @Test
+    void changePassword로_비밀번호가_교체된다() {
+        Member member = Member.signUp("test@example.com", "old-encoded-password", "홍길동");
+
+        member.changePassword("new-encoded-password");
+
+        assertThat(member.getPassword()).isEqualTo("new-encoded-password");
+    }
+
     // withdraw() 호출 시 개인정보가 익명화되고 status가 WITHDRAWN, deletedAt이 세팅되는지 검증
     @Test
     void withdraw호출시_개인정보가_익명화되고_상태가_WITHDRAWN이_된다() {

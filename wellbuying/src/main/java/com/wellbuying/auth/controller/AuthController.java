@@ -4,6 +4,9 @@ import com.wellbuying.auth.dto.DeviceSessionResponse;
 import com.wellbuying.auth.dto.LoginRequest;
 import com.wellbuying.auth.dto.LoginResponse;
 import com.wellbuying.auth.dto.OAuthExchangeRequest;
+import com.wellbuying.auth.dto.PasswordReissueResetRequest;
+import com.wellbuying.auth.dto.PasswordReissueSendRequest;
+import com.wellbuying.auth.dto.PasswordReissueVerifyRequest;
 import com.wellbuying.auth.dto.ReactivationRequest;
 import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
@@ -61,6 +64,30 @@ public class AuthController {
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
         LoginResponse response = authService.reactivate(request.email(), request.code(), deviceId);
         return ResponseEntity.ok(response);
+    }
+
+    // 비밀번호 재발급 인증 코드 발송 API - 비로그인 상태에서도 이메일만으로 요청 가능 (소셜 전용 계정은 403)
+    @Operation(summary = "비밀번호 재발급 인증 코드 발송")
+    @PostMapping("/api/auth/password-reissue/send")
+    public ResponseEntity<Void> sendPasswordReissueCode(@Valid @RequestBody PasswordReissueSendRequest request) {
+        emailVerificationService.sendPasswordReissueCode(request.email());
+        return ResponseEntity.ok().build();
+    }
+
+    // 비밀번호 재발급 인증 코드 검증 API - 성공 시 verified 플래그만 남기고, 실제 비밀번호 교체는 reset API에서 별도로 처리
+    @Operation(summary = "비밀번호 재발급 인증 코드 검증")
+    @PostMapping("/api/auth/password-reissue/verify")
+    public ResponseEntity<Void> verifyPasswordReissueCode(@Valid @RequestBody PasswordReissueVerifyRequest request) {
+        emailVerificationService.verifyPasswordReissueCode(request.email(), request.code());
+        return ResponseEntity.ok().build();
+    }
+
+    // 비밀번호 재설정 API - verify 단계의 verified 플래그를 확인한 뒤 비밀번호를 교체하고 전체 기기 세션을 무효화
+    @Operation(summary = "비밀번호 재설정 - verified 플래그 확인 후 비밀번호 교체 및 전체 로그아웃")
+    @PostMapping("/api/auth/password-reissue/reset")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody PasswordReissueResetRequest request) {
+        authService.resetPassword(request.email(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     // 토큰 재발급 API - body의 refresh token을 검증/rotate해 access/refresh 토큰을 새로 발급 (Bearer 인증 아님, permitAll)
