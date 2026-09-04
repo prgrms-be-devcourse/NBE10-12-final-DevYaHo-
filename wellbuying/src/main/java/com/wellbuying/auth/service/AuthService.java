@@ -103,6 +103,9 @@ public class AuthService {
         emailVerificationService.assertPasswordReissueVerified(email);
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (passwordEncoder.matches(newPassword, member.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD);
+        }
         member.changePassword(passwordEncoder.encode(newPassword));
         logoutAll(member.getId());
     }

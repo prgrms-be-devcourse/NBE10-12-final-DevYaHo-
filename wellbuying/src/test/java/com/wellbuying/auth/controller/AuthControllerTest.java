@@ -388,6 +388,59 @@ class AuthControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
+    // 검증까지 마쳤더라도 새 비밀번호가 기존 비밀번호와 동일하면 400과 AUTH_400_PASSWORD_SAME_AS_OLD 에러 코드를 반환하는지 검증
+    @Test
+    void 기존_비밀번호와_동일한_비밀번호로_재설정을_시도하면_실패한다() throws Exception {
+        signUpMember("password-reissue-same@example.com");
+
+        String sendRequestBody = """
+                { "email": "password-reissue-same@example.com" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/send")
+                        .contentType("application/json")
+                        .content(sendRequestBody))
+                .andExpect(status().isOk());
+
+        String code = redisTemplate.opsForValue().get("email:password-reissue:password-reissue-same@example.com");
+        String verifyRequestBody = """
+                { "email": "password-reissue-same@example.com", "code": "%s" }
+                """.formatted(code);
+        mockMvc.perform(post("/api/auth/password-reissue/verify")
+                        .contentType("application/json")
+                        .content(verifyRequestBody))
+                .andExpect(status().isOk());
+
+        String resetRequestBody = """
+                { "email": "password-reissue-same@example.com", "newPassword": "Pass1234!" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/reset")
+                        .contentType("application/json")
+                        .content(resetRequestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUTH_400_PASSWORD_SAME_AS_OLD"))
+                .andDo(document("auth/password-reissue-reset-same-as-old",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 새 비밀번호가 복잡도 요건(숫자/영문자/특수문자 각 1개 이상, 8자 이상)을 충족하지 않으면 400과 COMMON_400_INVALID_INPUT 에러 코드를 반환하는지 검증
+    @Test
+    void 비밀번호_복잡도_요건을_충족하지_않으면_재설정이_실패한다() throws Exception {
+        String resetRequestBody = """
+                { "email": "password-reissue-weak@example.com", "newPassword": "password1234" }
+                """;
+        mockMvc.perform(post("/api/auth/password-reissue/reset")
+                        .contentType("application/json")
+                        .content(resetRequestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"))
+                .andDo(document("auth/password-reissue-reset-weak-password",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
     // 소셜 전용 계정(비밀번호 없음)은 재발급 코드 발송이 거부되는지 검증
     @Test
     void 소셜_전용_계정은_비밀번호_재발급_코드_발송에_실패한다() throws Exception {

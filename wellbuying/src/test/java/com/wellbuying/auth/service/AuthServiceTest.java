@@ -245,6 +245,21 @@ class AuthServiceTest {
         verify(refreshTokenRepository).deleteAll(member.getId());
     }
 
+    // 새 비밀번호가 기존 비밀번호와 동일하면 PASSWORD_SAME_AS_OLD 예외가 발생하고 비밀번호도 바뀌지 않는지 검증
+    @Test
+    void 기존_비밀번호와_동일하면_비밀번호_재설정이_실패한다() {
+        Member member = Member.signUp("reissue-same@example.com", "old-encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("reissue-same@example.com")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("OldPass1234!", "old-encoded-password")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.resetPassword("reissue-same@example.com", "OldPass1234!"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PASSWORD_SAME_AS_OLD);
+        assertThat(member.getPassword()).isEqualTo("old-encoded-password");
+        verify(refreshTokenRepository, never()).deleteAll(anyLong());
+    }
+
     // 검증(verify) 단계를 거치지 않으면 비밀번호 재설정이 거부되고 비밀번호도 바뀌지 않는지 검증
     @Test
     void 검증을_거치지_않으면_비밀번호_재설정이_실패한다() {
