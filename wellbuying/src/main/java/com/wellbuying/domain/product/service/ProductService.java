@@ -15,10 +15,10 @@ import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
-import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
+import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
+import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import org.springframework.context.ApplicationEventPublisher;
 import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,17 +33,17 @@ public class ProductService {
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final ProductCountRepository productCountRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final ProductSearchEventOutboxRepository outboxRepository;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
                           ProductCountRepository productCountRepository,
-                          ApplicationEventPublisher eventPublisher) {
+                          ProductSearchEventOutboxRepository outboxRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.productCountRepository = productCountRepository;
-        this.eventPublisher = eventPublisher;
+        this.outboxRepository = outboxRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -91,7 +91,6 @@ public class ProductService {
                 request.description(), request.startPrice(), request.thumbnailUrl());
         Long productId = productRepository.save(product).getId();
         productCountRepository.save(ProductCount.init(productId));
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
         return productId;
     }
 
@@ -111,14 +110,13 @@ public class ProductService {
     @Transactional
     public void approve(Long productId) {
         findProduct(productId).approve();
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+        outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
     }
 
     // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
     public void reject(Long productId) {
         findProduct(productId).reject();
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
     }
 
     private Product findProduct(Long productId) {
