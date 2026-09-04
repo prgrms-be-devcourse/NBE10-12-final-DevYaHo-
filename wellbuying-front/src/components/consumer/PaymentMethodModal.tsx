@@ -21,6 +21,7 @@ export function PaymentMethodModal({
   title,
   unitPrice,
   pending,
+  addressLabel,
   submitting,
   onConfirm,
 }: {
@@ -29,6 +30,7 @@ export function PaymentMethodModal({
   title: string;
   unitPrice: number | null;
   pending: PendingParticipation;
+  addressLabel: string | null;
   submitting: boolean;
   onConfirm: () => void;
 }) {
@@ -117,12 +119,12 @@ export function PaymentMethodModal({
           </div>
         </div>
 
-        <div className="space-y-1 text-xs text-wb-secondary">
-          <p className="font-semibold text-wb-ink">배송지</p>
-          <p>
-            [{pending.zipcode}] {pending.address} {pending.addressDetail}
-          </p>
-        </div>
+        {addressLabel && (
+          <div className="space-y-1 text-xs text-wb-secondary">
+            <p className="font-semibold text-wb-ink">배송지</p>
+            <p>{addressLabel}</p>
+          </div>
+        )}
 
         <div className="space-y-3 border-t border-wb-line pt-4">
           <p className="text-sm font-semibold">결제 수단</p>
