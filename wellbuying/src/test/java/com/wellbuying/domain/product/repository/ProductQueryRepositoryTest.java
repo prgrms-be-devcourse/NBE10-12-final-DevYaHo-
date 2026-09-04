@@ -56,10 +56,12 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         Long otherCategoryId = categoryRepository.save(ProductCategory.create(null, "다른카테고리")).getId();
         Product laptop = Product.register(TEST_SELLER_ID, testCategoryId, "노트북A", "설명", 1000000, "url");
         laptop.approve();
-        productRepository.save(laptop);
+        laptop = productRepository.save(laptop);
+        productCountRepository.save(ProductCount.init(laptop.getId()));
         Product phone = Product.register(TEST_SELLER_ID, otherCategoryId, "휴대폰A", "설명", 800000, "url");
         phone.approve();
-        productRepository.save(phone);
+        phone = productRepository.save(phone);
+        productCountRepository.save(ProductCount.init(phone.getId()));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
         CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
@@ -74,13 +76,16 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
     void search_가격범위를_지정하면_범위밖_상품은_제외된다() {
         Product cheapOutOfRange = Product.register(TEST_SELLER_ID, testCategoryId, "범위밖저가", "설명", 5000, "url");
         cheapOutOfRange.approve();
-        productRepository.save(cheapOutOfRange);
+        cheapOutOfRange = productRepository.save(cheapOutOfRange);
+        productCountRepository.save(ProductCount.init(cheapOutOfRange.getId()));
         Product inRange = Product.register(TEST_SELLER_ID, testCategoryId, "범위안상품", "설명", 50000, "url");
         inRange.approve();
-        productRepository.save(inRange);
+        inRange = productRepository.save(inRange);
+        productCountRepository.save(ProductCount.init(inRange.getId()));
         Product expensiveOutOfRange = Product.register(TEST_SELLER_ID, testCategoryId, "범위밖고가", "설명", 500000, "url");
         expensiveOutOfRange.approve();
-        productRepository.save(expensiveOutOfRange);
+        expensiveOutOfRange = productRepository.save(expensiveOutOfRange);
+        productCountRepository.save(ProductCount.init(expensiveOutOfRange.getId()));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, 10000, 100000, ProductSortType.LATEST);
         CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
@@ -95,11 +100,14 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
     void search_승인대기_또는_거절된_상품은_목록에서_제외된다() {
         Product approved = Product.register(TEST_SELLER_ID, testCategoryId, "승인된상품", "설명", 10000, "url");
         approved.approve();
-        productRepository.save(approved);
-        productRepository.save(Product.register(TEST_SELLER_ID, testCategoryId, "대기중상품", "설명", 10000, "url"));
+        approved = productRepository.save(approved);
+        productCountRepository.save(ProductCount.init(approved.getId()));
+        Product pending = productRepository.save(Product.register(TEST_SELLER_ID, testCategoryId, "대기중상품", "설명", 10000, "url"));
+        productCountRepository.save(ProductCount.init(pending.getId()));
         Product rejected = Product.register(TEST_SELLER_ID, testCategoryId, "거절된상품", "설명", 10000, "url");
         rejected.reject();
-        productRepository.save(rejected);
+        rejected = productRepository.save(rejected);
+        productCountRepository.save(ProductCount.init(rejected.getId()));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
         CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
@@ -115,10 +123,10 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         Product lowView = Product.register(TEST_SELLER_ID, testCategoryId, "인기적은상품", "설명", 10000, "url");
         lowView.approve();
         lowView = productRepository.save(lowView);
+        productCountRepository.save(withViewCount(lowView.getId(), 5L));
         Product highView = Product.register(TEST_SELLER_ID, testCategoryId, "인기많은상품", "설명", 10000, "url");
         highView.approve();
         highView = productRepository.save(highView);
-        productCountRepository.save(withViewCount(lowView.getId(), 5L));
         productCountRepository.save(withViewCount(highView.getId(), 500L));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
@@ -127,17 +135,17 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         assertThat(result.content().get(0).productName()).isEqualTo("인기많은상품");
     }
 
-    // 인기순(POPULAR) 정렬 시 ProductCount가 없어 viewCount가 NULL인 상품은 맨 뒤로 밀린다
+    // 인기순(POPULAR) 정렬 시 viewCount=0인 상품은 viewCount가 높은 상품보다 뒤에 나온다
     @Test
-    void search_인기순_정렬시_조회수_없는_상품은_맨_뒤로_간다() {
-        Product noCount = Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url");
-        noCount.approve();
-        noCount = productRepository.save(noCount);
-        Product withCount = Product.register(TEST_SELLER_ID, testCategoryId, "조회수있는상품", "설명", 10000, "url");
-        withCount.approve();
-        withCount = productRepository.save(withCount);
-        productCountRepository.save(withViewCount(withCount.getId(), 10L));
-        // noCount는 ProductCount 저장 안 함 → LEFT JOIN 후 viewCount = NULL
+    void search_인기순_정렬시_조회수_낮은_상품은_뒤로_간다() {
+        Product zeroView = Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url");
+        zeroView.approve();
+        zeroView = productRepository.save(zeroView);
+        productCountRepository.save(ProductCount.init(zeroView.getId())); // viewCount = 0
+        Product highView = Product.register(TEST_SELLER_ID, testCategoryId, "조회수있는상품", "설명", 10000, "url");
+        highView.approve();
+        highView = productRepository.save(highView);
+        productCountRepository.save(withViewCount(highView.getId(), 10L));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
         CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
@@ -151,10 +159,12 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
     void search_가격오름차순_정렬시_저렴한상품이_먼저나온다() {
         Product expensive = Product.register(TEST_SELLER_ID, testCategoryId, "비싼상품", "설명", 90000, "url");
         expensive.approve();
-        productRepository.save(expensive);
+        expensive = productRepository.save(expensive);
+        productCountRepository.save(ProductCount.init(expensive.getId()));
         Product cheap = Product.register(TEST_SELLER_ID, testCategoryId, "저렴한상품", "설명", 10000, "url");
         cheap.approve();
-        productRepository.save(cheap);
+        cheap = productRepository.save(cheap);
+        productCountRepository.save(ProductCount.init(cheap.getId()));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.PRICE_ASC);
         CursorPageResponse<ProductSummaryResponse> result = productRepository.search(condition, null, 20);
@@ -168,7 +178,8 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         for (int i = 0; i < 4; i++) {
             Product p = Product.register(TEST_SELLER_ID, testCategoryId, "상품" + i, "설명", 10000, "url");
             p.approve();
-            productRepository.save(p);
+            p = productRepository.save(p);
+            productCountRepository.save(ProductCount.init(p.getId()));
         }
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.LATEST);
@@ -185,9 +196,9 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         assertThat(firstNames).doesNotContainAnyElementsOf(secondNames);
     }
 
-    // POPULAR 정렬 2차 조회에서 viewCount=NULL 상품이 누락되지 않아야 한다
+    // POPULAR 정렬 2차 조회에서 viewCount=0 상품이 누락되지 않아야 한다
     @Test
-    void search_POPULAR_2차_조회에서_viewCount_NULL_상품이_포함된다() {
+    void search_POPULAR_2차_조회에서_viewCount_낮은_상품이_포함된다() {
         // viewCount 있는 상품 3개 (size=2 → 1차에 2개, 2차에 1개 이상 기대)
         Product p1 = Product.register(TEST_SELLER_ID, testCategoryId, "유뷰상품1", "설명", 10000, "url");
         p1.approve();
@@ -204,10 +215,11 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         p3 = productRepository.save(p3);
         productCountRepository.save(withViewCount(p3.getId(), 7L));
 
-        // ProductCount 미등록 → LEFT JOIN 후 viewCount = NULL → POPULAR 정렬 맨 뒤
-        Product nullView = Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url");
-        nullView.approve();
-        productRepository.save(nullView);
+        // viewCount=0 → POPULAR 정렬 맨 뒤 (모든 상품은 ProductCount 보장)
+        Product zeroView = Product.register(TEST_SELLER_ID, testCategoryId, "조회수없는상품", "설명", 10000, "url");
+        zeroView.approve();
+        zeroView = productRepository.save(zeroView);
+        productCountRepository.save(ProductCount.init(zeroView.getId()));
 
         ProductSearchCondition condition = new ProductSearchCondition(testCategoryId, null, null, ProductSortType.POPULAR);
         CursorPageResponse<ProductSummaryResponse> first = productRepository.search(condition, null, 2);
