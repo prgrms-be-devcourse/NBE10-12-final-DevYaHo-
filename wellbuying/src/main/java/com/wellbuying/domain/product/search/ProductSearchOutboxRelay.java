@@ -4,7 +4,6 @@ import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
@@ -77,11 +76,10 @@ public class ProductSearchOutboxRelay {
             productSearchRepository.deleteById(event.getProductId());
             return;
         }
-        Optional<Product> product = productRepository.findByIdAndDeletedAtIsNull(event.getProductId());
-        if (product.isPresent()) {
-            productSearchRepository.save(ProductSearchDocument.of(product.get()));
-        } else {
-            productSearchRepository.deleteById(event.getProductId());
-        }
+        productRepository.findByIdAndDeletedAtIsNull(event.getProductId())
+                .ifPresentOrElse(
+                        p -> productSearchRepository.save(ProductSearchDocument.of(p)),
+                        () -> productSearchRepository.deleteById(event.getProductId())
+                );
     }
 }
