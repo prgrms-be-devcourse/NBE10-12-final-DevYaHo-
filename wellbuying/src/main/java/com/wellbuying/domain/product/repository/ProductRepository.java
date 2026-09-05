@@ -14,6 +14,6 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
 
     List<Product> findBySellerIdOrderByIdDesc(Long sellerId);
 
-    // 관리자 상품 심사 목록 조회용 - 상태별 조회
-    Page<Product> findByStatus(ProductStatus status, Pageable pageable);
+    // 관리자 상품 심사 목록 조회용 - 상태별 조회 (소프트 삭제된 상품 제외)
+    Page<Product> findByStatusAndDeletedAtIsNull(ProductStatus status, Pageable pageable);
 }
