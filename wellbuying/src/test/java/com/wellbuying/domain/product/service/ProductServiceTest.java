@@ -171,7 +171,6 @@ class ProductServiceTest {
     void updateProduct_다른_판매자의_상품이면_예외를_던진다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
         Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
-        when(productCategoryRepository.existsById(10L)).thenReturn(true);
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         ProductUpdateRequest request = new ProductUpdateRequest(10L, "수정된상품", "수정설명", 9000, "new-url");
 

@@ -122,10 +122,10 @@ public class ProductService {
 
     @Transactional
     public void updateProduct(Long sellerId, Long productId, ProductUpdateRequest request) {
+        Product product = getOwnedOrThrow(sellerId, productId);
         if (!productCategoryRepository.existsById(request.categoryId())) {
             throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
-        Product product = getOwnedOrThrow(sellerId, productId);
         product.update(request.categoryId(), request.productName(), request.description(),
                 request.startPrice(), request.thumbnailUrl());
         if (product.getStatus() == ProductStatus.APPROVED) {
