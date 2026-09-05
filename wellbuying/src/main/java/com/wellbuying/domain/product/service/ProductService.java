@@ -5,6 +5,7 @@ import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
@@ -55,7 +56,7 @@ public class ProductService {
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
     @Transactional(readOnly = true)
     public ProductDetailResponse getDetail(Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         return ProductDetailResponse.of(product);
     }
@@ -63,7 +64,7 @@ public class ProductService {
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
     @Transactional(readOnly = true)
     public Product getOwnedOrThrow(Long sellerId, Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         if (!product.getSellerId().equals(sellerId)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
@@ -119,8 +120,31 @@ public class ProductService {
         findProduct(productId).reject();
     }
 
+    @Transactional
+    public void updateProduct(Long sellerId, Long productId, ProductUpdateRequest request) {
+        if (!productCategoryRepository.existsById(request.categoryId())) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        Product product = getOwnedOrThrow(sellerId, productId);
+        product.update(request.categoryId(), request.productName(), request.description(),
+                request.startPrice(), request.thumbnailUrl());
+        if (product.getStatus() == ProductStatus.APPROVED) {
+            outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
+        }
+    }
+
+    @Transactional
+    public void deleteProduct(Long sellerId, Long productId) {
+        Product product = getOwnedOrThrow(sellerId, productId);
+        boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        product.delete();
+        if (wasIndexed) {
+            outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+    }
+
     private Product findProduct(Long productId) {
-        return productRepository.findById(productId)
+        return productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 }

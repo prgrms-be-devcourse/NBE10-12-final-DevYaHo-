@@ -11,6 +11,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
@@ -79,7 +80,7 @@ class ProductServiceTest {
         when(product.getStartPrice()).thenReturn(3000);
         when(product.getThumbnailUrl()).thenReturn("url");
         when(product.isApproved()).thenReturn(true);
-        when(productRepository.findById(10L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(product));
 
         ProductDetailResponse result = productService.getDetail(10L);
 
@@ -90,7 +91,7 @@ class ProductServiceTest {
     @Test
     void getDetail_존재하지_않으면_예외를_던진다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
-        when(productRepository.findById(99L)).thenReturn(Optional.empty());
+        when(productRepository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.getDetail(99L)).isInstanceOf(BusinessException.class);
     }
@@ -118,7 +119,7 @@ class ProductServiceTest {
     void approve_PENDING_상품을_승인한다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
         Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
 
         productService.approve(1L);
 
@@ -133,7 +134,7 @@ class ProductServiceTest {
     @Test
     void approve_존재하지_않는_상품이면_예외를_던진다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
-        when(productRepository.findById(1L)).thenReturn(Optional.empty());
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.approve(1L))
                 .isInstanceOf(BusinessException.class)
@@ -145,7 +146,7 @@ class ProductServiceTest {
     void reject_PENDING_상품을_거절한다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
         Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
 
         productService.reject(1L);
 
@@ -159,9 +160,77 @@ class ProductServiceTest {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
         Product product = Product.register(1L, 1L, "상품", "설명", 10000, "url");
         product.approve();
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
 
         assertThatThrownBy(() -> productService.approve(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_ALREADY_PROCESSED);
+    }
+
+    @Test
+    void updateProduct_PENDING_상품이면_outbox를_기록하지_않는다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        when(productCategoryRepository.existsById(10L)).thenReturn(true);
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        ProductUpdateRequest request = new ProductUpdateRequest(10L, "수정된상품", "수정설명", 9000, "new-url");
+
+        productService.updateProduct(1L, 1L, request);
+
+        verify(outboxRepository, never()).save(any());
+    }
+
+    @Test
+    void updateProduct_APPROVED_상품이면_outbox에_UPSERT를_기록한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        product.approve();
+        when(productCategoryRepository.existsById(10L)).thenReturn(true);
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        ProductUpdateRequest request = new ProductUpdateRequest(10L, "수정된상품", "수정설명", 9000, "new-url");
+
+        productService.updateProduct(1L, 1L, request);
+
+        ArgumentCaptor<ProductSearchEventOutbox> captor = ArgumentCaptor.forClass(ProductSearchEventOutbox.class);
+        verify(outboxRepository).save(captor.capture());
+        assertThat(captor.getValue().getProductId()).isEqualTo(1L);
+        assertThat(captor.getValue().getEventType()).isEqualTo("UPSERT");
+    }
+
+    @Test
+    void deleteProduct_PENDING_상품이면_outbox를_기록하지_않는다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+
+        productService.deleteProduct(1L, 1L);
+
+        verify(outboxRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteProduct_APPROVED_상품이면_outbox에_DELETE를_기록한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        product.approve();
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+
+        productService.deleteProduct(1L, 1L);
+
+        ArgumentCaptor<ProductSearchEventOutbox> captor = ArgumentCaptor.forClass(ProductSearchEventOutbox.class);
+        verify(outboxRepository).save(captor.capture());
+        assertThat(captor.getValue().getProductId()).isEqualTo(1L);
+        assertThat(captor.getValue().getEventType()).isEqualTo("DELETE");
+    }
+
+    @Test
+    void deleteProduct_이미_삭제된_상품이면_예외를_던진다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        product.delete();
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> productService.deleteProduct(1L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_ALREADY_PROCESSED);
     }
