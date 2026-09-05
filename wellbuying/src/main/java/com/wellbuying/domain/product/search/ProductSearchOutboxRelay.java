@@ -77,7 +77,7 @@ public class ProductSearchOutboxRelay {
             productSearchRepository.deleteById(event.getProductId());
             return;
         }
-        Optional<Product> product = productRepository.findById(event.getProductId());
+        Optional<Product> product = productRepository.findByIdAndDeletedAtIsNull(event.getProductId());
         if (product.isPresent()) {
             productSearchRepository.save(ProductSearchDocument.of(product.get()));
         } else {
