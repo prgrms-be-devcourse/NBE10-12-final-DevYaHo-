@@ -168,6 +168,19 @@ class ProductServiceTest {
     }
 
     @Test
+    void updateProduct_다른_판매자의_상품이면_예외를_던진다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        when(productCategoryRepository.existsById(10L)).thenReturn(true);
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        ProductUpdateRequest request = new ProductUpdateRequest(10L, "수정된상품", "수정설명", 9000, "new-url");
+
+        assertThatThrownBy(() -> productService.updateProduct(999L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
     void updateProduct_PENDING_상품이면_outbox를_기록하지_않는다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
         Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
@@ -195,6 +208,17 @@ class ProductServiceTest {
         verify(outboxRepository).save(captor.capture());
         assertThat(captor.getValue().getProductId()).isEqualTo(1L);
         assertThat(captor.getValue().getEventType()).isEqualTo("UPSERT");
+    }
+
+    @Test
+    void deleteProduct_다른_판매자의_상품이면_예외를_던진다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
+        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> productService.deleteProduct(999L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
     }
 
     @Test
