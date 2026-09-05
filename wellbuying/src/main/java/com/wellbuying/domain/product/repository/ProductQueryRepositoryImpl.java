@@ -43,6 +43,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .join(productCount).on(productCount.productId.eq(product.id))
                 .where(
                         product.status.eq(ProductStatus.APPROVED),
+                        product.deletedAt.isNull(),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
                         priceLoe(condition.maxPrice()),
@@ -74,7 +75,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.status,
                         product.createdAt))
                 .from(product)
-                .where(product.sellerId.eq(sellerId))
+                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull())
                 .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize() + 1L)
