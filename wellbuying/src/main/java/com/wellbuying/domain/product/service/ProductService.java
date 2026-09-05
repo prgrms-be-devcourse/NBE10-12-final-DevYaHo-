@@ -95,7 +95,7 @@ public class ProductService {
         return productId;
     }
 
-    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관) 조회
+    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관, 삭제된 상품은 제외) 조회
     @Transactional(readOnly = true)
     public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
         return productRepository.findBySeller(sellerId, pageable);
@@ -104,7 +104,7 @@ public class ProductService {
     // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회
     @Transactional(readOnly = true)
     public Page<ProductAdminResponse> findByStatus(ProductStatus status, Pageable pageable) {
-        return productRepository.findByStatus(status, pageable).map(ProductAdminResponse::of);
+        return productRepository.findByStatusAndDeletedAtIsNull(status, pageable).map(ProductAdminResponse::of);
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
