@@ -73,4 +73,45 @@ class ProductTest {
         assertThatThrownBy(() -> Product.register(null, 1L, "테스트 상품", "설명", 10000, "url"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void delete_승인된_상품을_삭제하면_삭제_상태가_된다() {
+        Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
+        product.approve();
+
+        product.delete();
+
+        assertThat(product.isDeleted()).isTrue();
+    }
+
+    @Test
+    void delete_이미_삭제된_상품이면_예외가_발생한다() {
+        Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
+        product.delete();
+
+        assertThatThrownBy(product::delete)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRODUCT_ALREADY_PROCESSED);
+    }
+
+    @Test
+    void isDeleted_삭제하기_전에는_false를_반환한다() {
+        Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
+
+        assertThat(product.isDeleted()).isFalse();
+    }
+
+    @Test
+    void update_상품정보를_수정하면_필드가_변경된다() {
+        Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
+
+        product.update(2L, "수정된상품", "수정설명", 9000, "new-url");
+
+        assertThat(product.getCategoryId()).isEqualTo(2L);
+        assertThat(product.getProductName()).isEqualTo("수정된상품");
+        assertThat(product.getDescription()).isEqualTo("수정설명");
+        assertThat(product.getStartPrice()).isEqualTo(9000);
+        assertThat(product.getThumbnailUrl()).isEqualTo("new-url");
+    }
 }

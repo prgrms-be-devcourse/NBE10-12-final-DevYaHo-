@@ -224,14 +224,12 @@ class ProductServiceTest {
     }
 
     @Test
-    void deleteProduct_이미_삭제된_상품이면_예외를_던진다() {
+    void deleteProduct_상품이_존재하지_않거나_이미_삭제된_경우_예외를_던진다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository);
-        Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
-        product.delete();
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.deleteProduct(1L, 1L))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_ALREADY_PROCESSED);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
     }
 }
