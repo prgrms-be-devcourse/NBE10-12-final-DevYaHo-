@@ -50,6 +50,9 @@ public class Product {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     protected Product() {
     }
 
@@ -95,6 +98,28 @@ public class Product {
         this.status = ProductStatus.REJECTED;
     }
 
+    // 판매자가 상품 소프트 삭제 - 이미 삭제된 상품이면 예외
+    public void delete() {
+        if (this.deletedAt != null) {
+            throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
+        }
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    // 판매자가 상품 정보 수정
+    public void update(Long categoryId, String productName, String description,
+                       Integer startPrice, String thumbnailUrl) {
+        this.categoryId = categoryId;
+        this.productName = productName;
+        this.description = description;
+        this.startPrice = startPrice;
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
     public Long getId() {
         return id;
     }
@@ -133,5 +158,9 @@ public class Product {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
     }
 }
