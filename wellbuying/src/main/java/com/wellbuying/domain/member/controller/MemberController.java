@@ -5,6 +5,8 @@ import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.auth.service.OAuthAccountService;
 import com.wellbuying.domain.member.dto.EmailVerificationRequest;
 import com.wellbuying.domain.member.dto.MemberResponse;
+import com.wellbuying.domain.member.dto.ProfileImageUploadUrlRequest;
+import com.wellbuying.domain.member.dto.ProfileImageUploadUrlResponse;
 import com.wellbuying.domain.member.dto.SignupRequest;
 import com.wellbuying.domain.member.dto.SignupResponse;
 import com.wellbuying.domain.member.dto.SocialAccountsResponse;
@@ -13,6 +15,7 @@ import com.wellbuying.domain.member.dto.UpdateMemberRequest;
 import com.wellbuying.domain.member.dto.VerifyEmailRequest;
 import com.wellbuying.domain.member.service.EmailVerificationService;
 import com.wellbuying.domain.member.service.MemberService;
+import com.wellbuying.domain.member.service.ProfileImageUploadService;
 import com.wellbuying.global.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -41,13 +44,16 @@ public class MemberController {
     private final EmailVerificationService emailVerificationService;
     private final AuthService authService;
     private final OAuthAccountService oAuthAccountService;
+    private final ProfileImageUploadService profileImageUploadService;
 
     public MemberController(MemberService memberService, EmailVerificationService emailVerificationService,
-            AuthService authService, OAuthAccountService oAuthAccountService) {
+            AuthService authService, OAuthAccountService oAuthAccountService,
+            ProfileImageUploadService profileImageUploadService) {
         this.memberService = memberService;
         this.emailVerificationService = emailVerificationService;
         this.authService = authService;
         this.oAuthAccountService = oAuthAccountService;
+        this.profileImageUploadService = profileImageUploadService;
     }
 
     // 이메일 인증 코드 발송 API - 가입되지 않은 이메일이면 6자리 코드를 생성해 메일 발송하고 200 응답
@@ -91,6 +97,18 @@ public class MemberController {
     public ResponseEntity<MemberResponse> updateMe(@AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @RequestBody UpdateMemberRequest request) {
         MemberResponse response = memberService.updateProfile(authenticatedMember.memberId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    // 프로필 이미지 업로드 URL 발급 API - 허용된 contentType이면 pending 태그가 포함된 presigned PUT URL과 최종 공개 URL을 반환
+    // 실제 저장 확정은 클라이언트가 PUT으로 업로드 후 기존 PATCH /api/members/me를 재호출해야 이루어진다
+    @Operation(summary = "프로필 이미지 업로드 URL 발급")
+    @PostMapping("/api/members/me/profile-image/upload-url")
+    public ResponseEntity<ProfileImageUploadUrlResponse> issueProfileImageUploadUrl(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody ProfileImageUploadUrlRequest request) {
+        ProfileImageUploadUrlResponse response = profileImageUploadService.issueUploadUrl(
+                authenticatedMember.memberId(), request);
         return ResponseEntity.ok(response);
     }
 
