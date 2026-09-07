@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +27,9 @@ class ProductSearchOutboxDispatcherTest {
     @InjectMocks
     private ProductSearchOutboxDispatcher dispatcher;
 
+    @Captor
+    private ArgumentCaptor<List<Long>> idsCaptor;
+
     // 반영에 성공한 이벤트들의 id를 모아 한 번의 벌크 UPDATE(markPublished)로 반영하는지 검증
     @Test
     void markPublished_성공한_이벤트_id를_모아_한_번에_반영한다() {
@@ -36,7 +40,6 @@ class ProductSearchOutboxDispatcherTest {
 
         dispatcher.markPublished(List.of(event1, event2));
 
-        ArgumentCaptor<List<Long>> idsCaptor = ArgumentCaptor.forClass(List.class);
         verify(outboxRepository).markPublished(idsCaptor.capture(), any());
         assertThat(idsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
     }
@@ -58,7 +61,6 @@ class ProductSearchOutboxDispatcherTest {
         dispatcher.recordFailures(List.of(new DispatchFailure(event, new RuntimeException("실패"))));
 
         assertThat(event.getRetryCount()).isEqualTo(1);
-        ArgumentCaptor<List<Long>> idsCaptor = ArgumentCaptor.forClass(List.class);
         verify(outboxRepository).incrementRetryCount(idsCaptor.capture());
         assertThat(idsCaptor.getValue()).containsExactly(10L);
     }
