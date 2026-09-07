@@ -3,6 +3,7 @@ package com.wellbuying.domain.member.service;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.event.PasswordReissueCodeIssuedEvent;
 import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
 import com.wellbuying.domain.member.event.VerificationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
@@ -22,6 +23,9 @@ public class EmailVerificationService {
     private static final String COOLDOWN_PURPOSE = "verification";
     private static final String REACTIVATION_CODE_KEY_PREFIX = "email:reactivation:";
     private static final String REACTIVATION_COOLDOWN_PURPOSE = "reactivation";
+    private static final String PASSWORD_REISSUE_CODE_KEY_PREFIX = "email:password-reissue:";
+    private static final String PASSWORD_REISSUE_VERIFIED_KEY_PREFIX = "email:password-reissue-verified:";
+    private static final String PASSWORD_REISSUE_COOLDOWN_PURPOSE = "password-reissue";
     private static final long CODE_TTL_MINUTES = 5L;
     private static final long COOLDOWN_SECONDS = 30L;
     private static final long VERIFIED_TTL_MINUTES = 30L;
@@ -95,6 +99,41 @@ public class EmailVerificationService {
             throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
         }
         redisTemplate.delete(codeKey);
+    }
+
+    // 비밀번호를 잊은 상태(비로그인)에서도 요청 가능해야 하므로 이메일만으로 본인확인 - 소셜 전용 계정은 비밀번호 자체가 없어 대상에서 제외
+    public void sendPasswordReissueCode(String email) {
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.isSocialOnly()) {
+            throw new BusinessException(ErrorCode.SOCIAL_ONLY_ACCOUNT);
+        }
+        emailCooldownGuard.acquire(PASSWORD_REISSUE_COOLDOWN_PURPOSE, email, COOLDOWN_SECONDS);
+
+        String code = generateCode();
+        redisTemplate.opsForValue()
+                .set(PASSWORD_REISSUE_CODE_KEY_PREFIX + email, code, Duration.ofMinutes(CODE_TTL_MINUTES));
+        eventPublisher.publishEvent(new PasswordReissueCodeIssuedEvent(email, buildVerificationContent(code)));
+    }
+
+    // Redis에 저장된 코드와 대조, 불일치/만료 시 예외. 성공 시 코드 삭제 + verified 플래그 저장(30분 TTL) - verifyCode와 동일 패턴
+    public void verifyPasswordReissueCode(String email, String code) {
+        String codeKey = PASSWORD_REISSUE_CODE_KEY_PREFIX + email;
+        String stored = redisTemplate.opsForValue().get(codeKey);
+        if (stored == null || !stored.equals(code)) {
+            throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
+        }
+        redisTemplate.delete(codeKey);
+        redisTemplate.opsForValue()
+                .set(PASSWORD_REISSUE_VERIFIED_KEY_PREFIX + email, "1", Duration.ofMinutes(VERIFIED_TTL_MINUTES));
+    }
+
+    // 비밀번호 재설정 진입 시 호출 - verified 플래그가 없으면 EMAIL_NOT_VERIFIED 예외, 있으면 소비(삭제) 후 재설정 허용 - assertVerified와 동일 패턴
+    public void assertPasswordReissueVerified(String email) {
+        Boolean deleted = redisTemplate.delete(PASSWORD_REISSUE_VERIFIED_KEY_PREFIX + email);
+        if (!Boolean.TRUE.equals(deleted)) {
+            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+        }
     }
 
     private String generateCode() {
