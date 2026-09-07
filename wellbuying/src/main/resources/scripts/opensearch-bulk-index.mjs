@@ -74,6 +74,7 @@ async function main() {
       p.created_at
     FROM product p
     LEFT JOIN product_count pc ON pc.product_id = p.id
+    WHERE p.status = 'APPROVED' AND p.deleted_at IS NULL
     ORDER BY p.id
   `;
 
