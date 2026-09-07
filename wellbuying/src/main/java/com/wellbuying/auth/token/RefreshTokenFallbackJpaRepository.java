@@ -19,11 +19,14 @@ public interface RefreshTokenFallbackJpaRepository extends JpaRepository<Refresh
             @Param("memberId") Long memberId, @Param("deviceId") String deviceId);
 
     // 파생 delete 쿼리(deleteBy...)는 대상을 SELECT로 조회한 뒤 건별로 DELETE하므로, 단일 벌크 DELETE로 대체
-    @Modifying(clearAutomatically = true)
+    // flushAutomatically = true: bulk delete 실행 전에 영속성 컨텍스트의 pending 변경(예: resetPassword()의
+    // 비밀번호 변경)을 먼저 flush한 뒤 clear하므로, ambient 트랜잭션 안에서 REQUIRED로 합류해도 caller의
+    // 미반영 변경이 유실되지 않는다(phase21 §4-6)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from RefreshTokenFallbackEntity r where r.memberId = :memberId and r.deviceId = :deviceId")
     void deleteByMemberIdAndDeviceId(@Param("memberId") Long memberId, @Param("deviceId") String deviceId);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from RefreshTokenFallbackEntity r where r.memberId = :memberId")
     void deleteByMemberId(@Param("memberId") Long memberId);
 }

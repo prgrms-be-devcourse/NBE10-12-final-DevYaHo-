@@ -3,16 +3,14 @@ package com.wellbuying.auth.token;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 // Redis 서킷이 open일 때만 쓰이는 DB 폴백 저장소 접근 전담.
-// save()/rotate()는 호출부(login()/reissue())가 이미 DB 조회 구간과 Redis 호출 구간을 분리해, 이 저장소를
-// 호출할 때는 ambient 트랜잭션이 없는 상태이므로 기본 propagation(REQUIRED)만으로도 매번 새 트랜잭션을 여는 것과
-// 동일하다 (phase21 §4-3). delete()/deleteAll()은 resetPassword()의 @Transactional 안에서 logoutAll()을 거쳐
-// ambient 트랜잭션이 있는 채로도 호출되는데, 파생 delete 쿼리가 @Modifying(clearAutomatically = true)라 REQUIRED로
-// 합류하면 그 트랜잭션의 영속성 컨텍스트 전체를 clear()해 caller가 방금 변경한(아직 flush 전인) 엔티티까지 통째로
-// 날려버린다 - 그래서 이 둘은 REQUIRES_NEW로 격리해 별도 영속성 컨텍스트에서만 clear가 일어나게 유지한다.
+// 모든 메서드가 기본 propagation(REQUIRED)을 쓴다 - save()/rotate()는 호출부(login()/reissue())가 이미 DB
+// 조회 구간과 Redis 호출 구간을 분리해 ambient 트랜잭션이 없는 상태로만 호출되고(phase21 §4-3),
+// delete()/deleteAll()은 파생 delete 쿼리(RefreshTokenFallbackJpaRepository)가
+// flushAutomatically = true라 REQUIRED로 합류해도 clear() 전에 caller의 pending 변경(예: resetPassword()의
+// 비밀번호 변경)을 먼저 flush하므로 유실되지 않는다(§4-6, 과거엔 REQUIRES_NEW로 격리했었음).
 @Component
 public class RefreshTokenFallbackStore {
 
@@ -51,12 +49,12 @@ public class RefreshTokenFallbackStore {
         return RotateResult.success(rotated);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void delete(Long memberId, String deviceId) {
         repository.deleteByMemberIdAndDeviceId(memberId, deviceId);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void deleteAll(Long memberId) {
         repository.deleteByMemberId(memberId);
     }

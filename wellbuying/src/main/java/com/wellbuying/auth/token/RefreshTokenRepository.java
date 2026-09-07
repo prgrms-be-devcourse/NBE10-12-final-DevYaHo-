@@ -113,12 +113,16 @@ public class RefreshTokenRepository {
     }
 
     // 특정 기기(deviceId)의 refresh token만 삭제 - 해당 기기 로그아웃
-    // Redis 정상 여부와 무관하게 DB 폴백도 함께 정리한다 - 장애 중 DB에만 기록된 세션이 로그아웃 후에도
-    // 살아남아 복구 시 되살아나는 것을 막기 위함(§2-4)
+    // 정상 상황에서는 세션이 Redis/DB 중 한 곳에만 존재하므로, Redis에서 실제로 지워졌다면(count > 0) DB엔
+    // 볼 것이 없다고 보고 DB 호출 자체를 생략한다 - Redis 장애가 없었던 대다수 로그아웃에서 매번 헛수고로
+    // DB를 왕복하던 비효율을 없앤다(phase21 §4-4/§4-5). Redis에 없었다면(count == 0, 장애 중 DB 폴백에만
+    // 있던 세션일 수 있음) 그때만 DB를 정리해 복구 후 되살아나는 것을 막는다(§2-4).
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "deleteFallback")
     public void delete(Long memberId, String deviceId) {
-        redisTemplate.opsForHash().delete(key(memberId), deviceId);
-        deleteFromFallbackStoreQuietly(memberId, deviceId);
+        Long deletedCount = redisTemplate.opsForHash().delete(key(memberId), deviceId);
+        if (deletedCount == null || deletedCount == 0) {
+            deleteFromFallbackStoreQuietly(memberId, deviceId);
+        }
     }
 
     private void deleteFallback(Long memberId, String deviceId, Throwable t) {
