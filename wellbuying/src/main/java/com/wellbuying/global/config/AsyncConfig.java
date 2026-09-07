@@ -38,4 +38,21 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    // 프로필 이미지 pending 태그 제거/이전 이미지 삭제 전용 스레드풀 - ProfileImageEventListener의 @Async("s3ConfirmExecutor")에서 사용
+    // DiscardPolicy: 실패해도 재시도/보상 트랜잭션 없이 로그만 남기는 best-effort 정리 작업이라, 큐가 찬 경우 Tomcat 스레드가 S3를 동기 호출하게 만드는 CallerRunsPolicy보다
+    // 작업을 버리는 편이 메인 API 응답 지연을 막는 데 낫다
+    @Bean(name = "s3ConfirmExecutor")
+    public Executor s3ConfirmExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("s3-confirm-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        return executor;
+    }
 }
