@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -95,6 +97,28 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+        relay.relay();
+
+        verify(productSearchRepository).deleteById(1L);
+        verify(productSearchRepository, never()).save(any());
+        ArgumentCaptor<List<ProductSearchEventOutbox>> captor = ArgumentCaptor.forClass(List.class);
+        verify(dispatcher).markPublished(captor.capture());
+        assertThat(captor.getValue()).containsExactly(event);
+    }
+
+    // 승인된 상품만 색인 정책 - 재조회 시 상품이 존재해도 APPROVED가 아니면
+    // (PENDING/REJECTED 등) save 대신 deleteById로 인덱스에서 제거되는지 검증
+    // Zombie Document 방지와 동일하게 ifPresentOrElse의 orElse 분기를 타야 한다
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = "APPROVED", mode = EnumSource.Mode.EXCLUDE)
+    void relay_UPSERT_이벤트인데_상품이_미승인_상태면_인덱스에서_제거한다(ProductStatus status) {
+        ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(List.of(event));
+        Product product = mock(Product.class);
+        when(product.getStatus()).thenReturn(status);
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
 
         relay.relay();
 
