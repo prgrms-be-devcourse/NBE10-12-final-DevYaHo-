@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -60,11 +62,10 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleMethodArgumentNotValidException_필드_에러_메시지를_정렬해서_결합한다() {
         MethodArgumentNotValidException e = mock(MethodArgumentNotValidException.class);
-        BindingResult bindingResult = mock(BindingResult.class);
-        FieldError fieldError1 = new FieldError("request", "productName", "상품명은 필수입니다");
-        FieldError fieldError2 = new FieldError("request", "startPrice", "가격은 0 이상이어야 합니다");
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
+        bindingResult.addError(new FieldError("request", "startPrice", "가격은 0 이상이어야 합니다"));
+        bindingResult.addError(new FieldError("request", "productName", "상품명은 필수입니다"));
         when(e.getBindingResult()).thenReturn(bindingResult);
-        when(bindingResult.getAllErrors()).thenReturn(List.of(fieldError2, fieldError1));
 
         ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentNotValidException(e);
 
@@ -77,13 +78,28 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleMethodArgumentNotValidException_에러_메시지가_없으면_기본_메시지를_사용한다() {
         MethodArgumentNotValidException e = mock(MethodArgumentNotValidException.class);
-        BindingResult bindingResult = mock(BindingResult.class);
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
         when(e.getBindingResult()).thenReturn(bindingResult);
-        when(bindingResult.getAllErrors()).thenReturn(List.of());
 
         ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentNotValidException(e);
 
         assertThat(response.getBody().message()).isEqualTo(ErrorCode.INVALID_INPUT.getMessage());
+    }
+
+    @Test
+    void handleMethodArgumentNotValidException_ObjectError가_섞여도_정상_처리한다() {
+        MethodArgumentNotValidException e = mock(MethodArgumentNotValidException.class);
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
+        bindingResult.addError(new FieldError("request", "amount", "수량은 1 이상이어야 합니다"));
+        bindingResult.addError(new ObjectError("request", "전체 요청 조건이 유효하지 않습니다"));
+        when(e.getBindingResult()).thenReturn(bindingResult);
+
+        ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentNotValidException(e);
+
+        assertThat(response.getStatusCode()).isEqualTo(ErrorCode.INVALID_INPUT.getStatus());
+        // ObjectError는 formatErrorMessage()에서 error.getObjectName()을 필드명으로 사용함
+        assertThat(response.getBody().message())
+                .isEqualTo("amount: 수량은 1 이상이어야 합니다, request: 전체 요청 조건이 유효하지 않습니다");
     }
 
     @Test
