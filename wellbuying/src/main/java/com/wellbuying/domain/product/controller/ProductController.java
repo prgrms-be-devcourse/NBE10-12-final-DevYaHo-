@@ -3,6 +3,7 @@ package com.wellbuying.domain.product.controller;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
@@ -30,7 +31,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -110,15 +110,18 @@ public class ProductController {
         return ResponseEntity.noContent().build();
     }
 
-    // 판매자 본인이 등록한 상품 소프트 삭제
-    @Operation(summary = "상품 삭제 - 판매자 전용")
+    // 판매자 본인이 등록한 상품 소프트 삭제 - 사유 필수
+    // DELETE + RequestBody는 일부 프록시/클라이언트에서 바디가 유실될 수 있어 POST로 처리
+    // (관리자 강제 삭제 API와 동일한 이유)
+    @Operation(summary = "상품 삭제 - 판매자 전용, 사유 필수")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
-    @DeleteMapping("/{id}")
+    @PostMapping("/{id}/delete")
     public ResponseEntity<Void> deleteProduct(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
-            @PathVariable Long id
+            @PathVariable Long id,
+            @Valid @RequestBody ProductDeleteRequest request
     ) {
-        productService.deleteProduct(authenticatedMember.memberId(), id);
+        productService.deleteProduct(authenticatedMember.memberId(), id, request.reason());
         return ResponseEntity.noContent().build();
     }
 

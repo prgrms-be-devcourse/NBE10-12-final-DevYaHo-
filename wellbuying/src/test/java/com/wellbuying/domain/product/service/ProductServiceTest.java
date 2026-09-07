@@ -223,7 +223,7 @@ class ProductServiceTest {
         Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
 
-        assertThatThrownBy(() -> productService.deleteProduct(999L, 1L))
+        assertThatThrownBy(() -> productService.deleteProduct(999L, 1L, "판매자 삭제 사유"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
     }
@@ -235,7 +235,7 @@ class ProductServiceTest {
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         when(groupBuyRepository.existsByProductIdAndStatusIn(anyLong(), anyList())).thenReturn(false);
 
-        productService.deleteProduct(1L, 1L);
+        productService.deleteProduct(1L, 1L, "판매자 삭제 사유");
 
         verify(outboxRepository, never()).save(any());
     }
@@ -248,7 +248,7 @@ class ProductServiceTest {
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         when(groupBuyRepository.existsByProductIdAndStatusIn(anyLong(), anyList())).thenReturn(false);
 
-        productService.deleteProduct(1L, 1L);
+        productService.deleteProduct(1L, 1L, "판매자 삭제 사유");
 
         ArgumentCaptor<ProductSearchEventOutbox> captor = ArgumentCaptor.forClass(ProductSearchEventOutbox.class);
         verify(outboxRepository).save(captor.capture());
@@ -261,7 +261,7 @@ class ProductServiceTest {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository);
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> productService.deleteProduct(1L, 1L))
+        assertThatThrownBy(() -> productService.deleteProduct(1L, 1L, "판매자 삭제 사유"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRODUCT_NOT_FOUND);
     }
@@ -273,7 +273,7 @@ class ProductServiceTest {
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         when(groupBuyRepository.existsByProductIdAndStatusIn(eq(1L), anyList())).thenReturn(true);
 
-        assertThatThrownBy(() -> productService.deleteProduct(1L, 1L))
+        assertThatThrownBy(() -> productService.deleteProduct(1L, 1L, "판매자 삭제 사유"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.CANNOT_DELETE_ACTIVE_PRODUCT);
 

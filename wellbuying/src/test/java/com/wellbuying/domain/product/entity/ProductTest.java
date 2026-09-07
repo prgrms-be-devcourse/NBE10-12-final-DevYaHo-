@@ -79,7 +79,7 @@ class ProductTest {
         Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
         product.approve();
 
-        product.delete(1L);
+        product.delete(1L, "판매자 삭제 사유");
 
         assertThat(product.isDeleted()).isTrue();
     }
@@ -87,9 +87,9 @@ class ProductTest {
     @Test
     void delete_이미_삭제된_상품이면_예외가_발생한다() {
         Product product = Product.register(1L, 1L, "테스트 상품", "설명", 10000, "url");
-        product.delete(1L);
+        product.delete(1L, "판매자 삭제 사유");
 
-        assertThatThrownBy(() -> product.delete(1L))
+        assertThatThrownBy(() -> product.delete(1L, "재삭제 시도"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRODUCT_ALREADY_PROCESSED);
