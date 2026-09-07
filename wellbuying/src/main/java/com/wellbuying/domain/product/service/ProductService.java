@@ -140,11 +140,11 @@ public class ProductService {
     }
 
     @Transactional
-    public void deleteProduct(Long sellerId, Long productId) {
+    public void deleteProduct(Long sellerId, Long productId, String reason) {
         Product product = getOwnedOrThrow(sellerId, productId);
         validateNoActiveGroupBuy(productId);
         boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
-        product.delete(sellerId);
+        product.delete(sellerId, reason);
         if (wasIndexed) {
             outboxRepository.save(ProductSearchEventOutbox.delete(productId));
         }

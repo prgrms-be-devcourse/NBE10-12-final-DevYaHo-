@@ -104,17 +104,12 @@ public class Product {
         this.status = ProductStatus.REJECTED;
     }
 
-    // 판매자가 상품 소프트 삭제 - 이미 삭제된 상품이면 예외
-    public void delete(Long deletedBy) {
+    public void delete(Long deletedBy, String reason) {
         if (this.deletedAt != null) {
             throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
         }
         this.deletedAt = LocalDateTime.now();
         this.deletedBy = deletedBy;
-    }
-
-    public void delete(Long deletedBy, String reason) {
-        delete(deletedBy);
         this.deleteReason = reason;
     }
 
