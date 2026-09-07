@@ -17,7 +17,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -63,10 +62,10 @@ public class AdminProductController {
         return ResponseEntity.noContent().build();
     }
 
-    // 상품 강제 삭제 - 소유권 무관, 사유 필수, 진행 중인 공동구매가 있으면 차단
+    // DELETE + RequestBody는 일부 프록시/클라이언트에서 바디가 유실될 수 있어 POST로 처리
     @Operation(summary = "상품 강제 삭제 - 소유권 무관, 사유 필수")
-    @DeleteMapping("/{productId}")
-    public ResponseEntity<Void> delete(
+    @PostMapping("/{productId}/force-delete")
+    public ResponseEntity<Void> forceDelete(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long productId,
             @Valid @RequestBody AdminProductDeleteRequest request

@@ -56,7 +56,7 @@ public class Product {
     @Column(name = "deleted_by")
     private Long deletedBy;
 
-    @Column(name = "delete_reason")
+    @Column(name = "delete_reason", length = 500)
     private String deleteReason;
 
     protected Product() {
