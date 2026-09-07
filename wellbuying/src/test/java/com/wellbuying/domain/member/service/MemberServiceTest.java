@@ -174,6 +174,21 @@ class MemberServiceTest {
         verify(eventPublisher).publishEvent(new ProfileImageOrphanedEvent(oldImageUrl));
     }
 
+    // 빈 문자열("")로 이미지를 명시적으로 지우면(null=생략/유지와 구분) 이전 이미지가 우리 버킷 URL일 때 정리 이벤트가 발행되는지 검증
+    @Test
+    void 프로필_이미지를_빈문자열로_명시적_삭제시_이전_이미지가_우리_버킷_URL이면_정리_이벤트를_발행한다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        String oldImageUrl = "https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/profile-images/1/old.jpg";
+        member.updateProfile("홍길동", oldImageUrl, null);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(profileImageUploadService.isOurBucketUrl(oldImageUrl)).thenReturn(true);
+        when(profileImageUploadService.isOurBucketUrl("")).thenReturn(false);
+
+        memberService.updateProfile(1L, new UpdateMemberRequest("김철수", "", null));
+
+        verify(eventPublisher).publishEvent(new ProfileImageOrphanedEvent(oldImageUrl));
+    }
+
     // 존재하지 않거나 이미 탈퇴한 회원 ID로 정보 수정 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
     @Test
     void 존재하지_않는_회원ID로_정보를_수정하면_예외가_발생한다() {

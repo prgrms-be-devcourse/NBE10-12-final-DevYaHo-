@@ -36,10 +36,12 @@ public class ProfileImageUploadService {
         this.s3Presigner = s3Presigner;
         this.bucket = bucket;
         this.presignedUrlExpirationSeconds = presignedUrlExpirationSeconds;
+        // 설정값에 트레일링 슬래시가 섞여 들어와도 중복 슬래시(//)가 생기지 않도록 정규화
+        String normalizedEndpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
         // 운영은 virtual-hosted-style S3 URL, 로컬/CI(MinIO)는 endpoint override + path-style URL
         this.publicUrlPrefix = endpoint.isBlank()
                 ? "https://%s.s3.%s.amazonaws.com/".formatted(bucket, region)
-                : "%s/%s/".formatted(endpoint, bucket);
+                : "%s/%s/".formatted(normalizedEndpoint, bucket);
     }
 
     // 허용된 contentType인지 확인 후 pending 태그가 포함된 presigned PUT URL을 발급 - 실제 저장 확정은 회원이 PATCH /api/members/me를 호출해야 이루어진다
