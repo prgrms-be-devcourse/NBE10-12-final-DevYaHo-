@@ -12,15 +12,19 @@ import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.config.OpenApiConfig;
+import com.wellbuying.global.dto.CursorPageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.net.URI;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -31,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Validated
 @RestController
 @RequestMapping("/api/products")
 @Tag(name = "상품", description = "상품 조회/등록")
@@ -44,18 +49,19 @@ public class ProductController {
         this.productSearchService = productSearchService;
     }
 
-    // 카테고리/가격 필터와 정렬 조건을 받아 상품 목록을 페이지 단위로 조회
+    // 카테고리/가격 필터와 정렬 조건을 받아 상품 목록을 커서 기반으로 조회
     @Operation(summary = "상품 목록 조회 - 카테고리/가격 필터, 정렬")
     @GetMapping
-    public Slice<ProductSummaryResponse> getProducts(
+    public CursorPageResponse<ProductSummaryResponse> getProducts(
             @RequestParam(required = false) Long category,
             @RequestParam(required = false) Integer minPrice,
             @RequestParam(required = false) Integer maxPrice,
             @RequestParam(required = false, defaultValue = "LATEST") ProductSortType sort,
-            @PageableDefault(size = 20) Pageable pageable
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         ProductSearchCondition condition = new ProductSearchCondition(category, minPrice, maxPrice, sort);
-        return productService.getProducts(condition, pageable);
+        return productService.getProducts(condition, cursor, size);
     }
 
     // 상품 상세 - 설명/썸네일 등 목록에 없는 정보까지 포함해 단건 조회
@@ -90,7 +96,7 @@ public class ProductController {
 
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
     @GetMapping("/search")
-    public Slice<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
-        return productSearchService.search(request.keyword(), request.sort(), request.page(), request.size());
+    public CursorPageResponse<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
+        return productSearchService.search(request.keyword(), request.sort(), request.cursor(), request.size());
     }
 }

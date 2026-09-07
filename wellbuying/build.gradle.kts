@@ -26,6 +26,8 @@ extra["snippetsDir"] = file("build/generated-snippets")
 val querydslVersion = "7.5"  // https://openfeign.github.io/querydsl/ 에서 최신 버전 확인 후 필요시 교체
 
 dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
@@ -57,7 +59,9 @@ dependencies {
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("org.testcontainers:testcontainers-kafka")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.opensearch:opensearch-testcontainers:4.1.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("io.github.openfeign.querydsl:querydsl-jpa:$querydslVersion")
     annotationProcessor("io.github.openfeign.querydsl:querydsl-apt:$querydslVersion:jpa")

@@ -17,6 +17,7 @@ import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import org.springframework.context.ApplicationEventPublisher;
+import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -40,10 +41,10 @@ public class ProductService {
         this.eventPublisher = eventPublisher;
     }
 
-    // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 페이지 단위로 조회
+    // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
     @Transactional(readOnly = true)
-    public Slice<ProductSummaryResponse> getProducts(ProductSearchCondition condition, Pageable pageable) {
-        return productRepository.search(condition, pageable);
+    public CursorPageResponse<ProductSummaryResponse> getProducts(ProductSearchCondition condition, String cursor, int size) {
+        return productRepository.search(condition, cursor, size);
     }
 
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회

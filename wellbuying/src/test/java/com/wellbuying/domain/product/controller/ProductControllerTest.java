@@ -2,6 +2,7 @@ package com.wellbuying.domain.product.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -12,14 +13,12 @@ import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
+import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -41,8 +40,8 @@ class ProductControllerTest {
     @Test
     void getProducts_파라미터없이_호출해도_정상응답한다() throws Exception {
         ProductSummaryResponse response = new ProductSummaryResponse(1L, "상품", 10000, "url", 0L);
-        Slice<ProductSummaryResponse> slice = new SliceImpl<>(List.of(response), PageRequest.of(0, 20), false);
-        when(productService.getProducts(any(), any())).thenReturn(slice);
+        CursorPageResponse<ProductSummaryResponse> result = new CursorPageResponse<>(List.of(response), null, false);
+        when(productService.getProducts(any(), any(), anyInt())).thenReturn(result);
 
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
@@ -52,8 +51,8 @@ class ProductControllerTest {
     // category, minPrice 파라미터를 보내면 200으로 응답한다 (실제 필터링은 리포지토리 테스트에서 검증)
     @Test
     void getProducts_필터파라미터를_보내도_정상응답한다() throws Exception {
-        Slice<ProductSummaryResponse> emptySlice = new SliceImpl<>(List.of(), PageRequest.of(0, 20), false);
-        when(productService.getProducts(any(), any())).thenReturn(emptySlice);
+        CursorPageResponse<ProductSummaryResponse> emptyResult = new CursorPageResponse<>(List.of(), null, false);
+        when(productService.getProducts(any(), any(), anyInt())).thenReturn(emptyResult);
 
         mockMvc.perform(get("/api/products").param("category", "1").param("minPrice", "1000"))
                 .andExpect(status().isOk());
@@ -75,8 +74,8 @@ class ProductControllerTest {
     @Test
     void searchProducts_키워드로_검색하면_결과를_반환한다() throws Exception {
         ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L);
-        Slice<ProductSearchResponse> slice = new SliceImpl<>(List.of(response), PageRequest.of(0, 20), false);
-        when(productSearchService.search(any(), any(), any(int.class), any(int.class))).thenReturn(slice);
+        CursorPageResponse<ProductSearchResponse> searchResult = new CursorPageResponse<>(List.of(response), null, false);
+        when(productSearchService.search(any(), any(), any(), anyInt())).thenReturn(searchResult);
 
         mockMvc.perform(get("/api/products/search").param("keyword", "비타민"))
                 .andExpect(status().isOk())
@@ -97,13 +96,13 @@ class ProductControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // page가 -1이면 @Min(0) 위반 → 400, 응답 메시지에 "page" 포함
+    // size가 음수이면 @Min(1) 위반 → 400, 응답 메시지에 "size" 포함
     @Test
-    void searchProducts_page가_음수이면_400을_반환한다() throws Exception {
-        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("page", "-1"))
+    void searchProducts_size가_음수이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search").param("keyword", "비타민").param("size", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.message").value(containsString("page")));
+                .andExpect(jsonPath("$.message").value(containsString("size")));
     }
 
     // size가 0이면 @Min(1) 위반 → 400, 응답 메시지에 "size" 포함
@@ -124,14 +123,13 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("keyword")));
     }
 
-    // keyword, page 둘 다 유효하지 않으면 두 파라미터의 에러 메시지가 모두 응답에 포함되는지 검증
-    // (여러 위반 항목을 결합하는 이번 변경의 핵심 동작을 검증)
+    // keyword, size 둘 다 유효하지 않으면 두 파라미터의 에러 메시지가 모두 응답에 포함되는지 검증
     @Test
     void searchProducts_여러_파라미터가_유효하지_않으면_모든_에러_메시지를_반환한다() throws Exception {
-        mockMvc.perform(get("/api/products/search").param("keyword", " ").param("page", "-1"))
+        mockMvc.perform(get("/api/products/search").param("keyword", " ").param("size", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("keyword")))
-                .andExpect(jsonPath("$.message").value(containsString("page")));
+                .andExpect(jsonPath("$.message").value(containsString("size")));
     }
 
     // 잘못된 sort 값은 enum 변환 실패 → MethodArgumentNotValidException → 400

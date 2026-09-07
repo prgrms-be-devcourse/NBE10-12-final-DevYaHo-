@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 // 회원이 재사용할 수 있는 배송지 주소록. 공동구매 참여 시 텍스트를 매번 새로 받는 대신 이 중 하나를
 // buyer_address_id로 참조한다 - 참여 건에 주소 텍스트를 스냅샷으로 복사해두던 이전 방식과 달리, 이후 이
@@ -32,9 +33,16 @@ public class BuyerAddress {
     @Column(nullable = false)
     private String zipcode;
 
+    @Column(name = "is_default", nullable = false)
+    private boolean isDefault = true;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     protected BuyerAddress() {
     }
@@ -70,7 +78,15 @@ public class BuyerAddress {
         return zipcode;
     }
 
+    public boolean isDefault() {
+        return isDefault;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }
