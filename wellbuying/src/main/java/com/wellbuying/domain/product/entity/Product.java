@@ -53,6 +53,12 @@ public class Product {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "deleted_by")
+    private Long deletedBy;
+
+    @Column(name = "delete_reason")
+    private String deleteReason;
+
     protected Product() {
     }
 
@@ -99,11 +105,17 @@ public class Product {
     }
 
     // 판매자가 상품 소프트 삭제 - 이미 삭제된 상품이면 예외
-    public void delete() {
+    public void delete(Long deletedBy) {
         if (this.deletedAt != null) {
             throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
         }
         this.deletedAt = LocalDateTime.now();
+        this.deletedBy = deletedBy;
+    }
+
+    public void delete(Long deletedBy, String reason) {
+        delete(deletedBy);
+        this.deleteReason = reason;
     }
 
     public boolean isDeleted() {
@@ -162,5 +174,13 @@ public class Product {
 
     public LocalDateTime getDeletedAt() {
         return deletedAt;
+    }
+
+    public Long getDeletedBy() {
+        return deletedBy;
+    }
+
+    public String getDeleteReason() {
+        return deleteReason;
     }
 }

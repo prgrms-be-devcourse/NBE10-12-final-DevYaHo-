@@ -18,9 +18,12 @@ import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
 import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -35,16 +38,19 @@ public class ProductService {
     private final ProductCategoryRepository productCategoryRepository;
     private final ProductCountRepository productCountRepository;
     private final ProductSearchEventOutboxRepository outboxRepository;
+    private final GroupBuyRepository groupBuyRepository;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
                           ProductCountRepository productCountRepository,
-                          ProductSearchEventOutboxRepository outboxRepository) {
+                          ProductSearchEventOutboxRepository outboxRepository,
+                          GroupBuyRepository groupBuyRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.productCountRepository = productCountRepository;
         this.outboxRepository = outboxRepository;
+        this.groupBuyRepository = groupBuyRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -136,10 +142,32 @@ public class ProductService {
     @Transactional
     public void deleteProduct(Long sellerId, Long productId) {
         Product product = getOwnedOrThrow(sellerId, productId);
+        validateNoActiveGroupBuy(productId);
         boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
-        product.delete();
+        product.delete(sellerId);
         if (wasIndexed) {
             outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+    }
+
+    // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단
+    @Transactional
+    public void adminDeleteProduct(Long adminId, Long productId, String reason) {
+        Product product = findProduct(productId);
+        validateNoActiveGroupBuy(productId);
+        boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        product.delete(adminId, reason);
+        if (wasIndexed) {
+            outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+    }
+
+    // 진행 중인(READY/ONGOING) 공동구매가 있으면 상품 삭제를 막는다
+    private void validateNoActiveGroupBuy(Long productId) {
+        boolean hasActiveGroupBuy = groupBuyRepository.existsByProductIdAndStatusIn(
+                productId, List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING));
+        if (hasActiveGroupBuy) {
+            throw new BusinessException(ErrorCode.CANNOT_DELETE_ACTIVE_PRODUCT);
         }
     }
 

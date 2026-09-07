@@ -1,5 +1,7 @@
 package com.wellbuying.domain.admin.controller;
 
+import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.product.dto.AdminProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.service.ProductService;
@@ -7,15 +9,19 @@ import com.wellbuying.global.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +60,18 @@ public class AdminProductController {
     @PostMapping("/{productId}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long productId) {
         productService.reject(productId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 상품 강제 삭제 - 소유권 무관, 사유 필수, 진행 중인 공동구매가 있으면 차단
+    @Operation(summary = "상품 강제 삭제 - 소유권 무관, 사유 필수")
+    @DeleteMapping("/{productId}")
+    public ResponseEntity<Void> delete(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long productId,
+            @Valid @RequestBody AdminProductDeleteRequest request
+    ) {
+        productService.adminDeleteProduct(authenticatedMember.memberId(), productId, request.reason());
         return ResponseEntity.noContent().build();
     }
 }
