@@ -21,6 +21,8 @@ import com.wellbuying.domain.member.dto.SignupResponse;
 import com.wellbuying.domain.member.dto.UpdateMemberRequest;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.entity.MemberStatus;
+import com.wellbuying.domain.member.event.ProfileImageConfirmedEvent;
+import com.wellbuying.domain.member.event.ProfileImageOrphanedEvent;
 import com.wellbuying.domain.member.repository.SocialAccountRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
 import com.wellbuying.domain.seller.entity.SellerStatus;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -53,6 +56,12 @@ class MemberServiceTest {
 
     @Mock
     private SellerInfoRepository sellerInfoRepository;
+
+    @Mock
+    private ProfileImageUploadService profileImageUploadService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MemberService memberService;
@@ -137,6 +146,34 @@ class MemberServiceTest {
         assertThat(response.profileImageUrl()).isEqualTo("https://example.com/profile.png");
     }
 
+    // 신규 프로필 이미지가 우리 S3 버킷 URL이면 pending 태그 제거를 위한 확정 이벤트가 발행되는지 검증
+    @Test
+    void 프로필_이미지가_우리_버킷_URL이면_확정_이벤트를_발행한다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        String newImageUrl = "https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/profile-images/1/new.jpg";
+        when(profileImageUploadService.isOurBucketUrl(newImageUrl)).thenReturn(true);
+
+        memberService.updateProfile(1L, new UpdateMemberRequest("김철수", newImageUrl, null));
+
+        verify(eventPublisher).publishEvent(new ProfileImageConfirmedEvent(newImageUrl));
+    }
+
+    // 프로필 이미지 교체 시 교체 전 이미지가 우리 S3 버킷 URL이면 정리(삭제) 이벤트가 발행되는지 검증 - 새 이미지가 외부 URL이어도 무관
+    @Test
+    void 프로필_이미지_교체시_이전_이미지가_우리_버킷_URL이면_정리_이벤트를_발행한다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        String oldImageUrl = "https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/profile-images/1/old.jpg";
+        member.updateProfile("홍길동", oldImageUrl, null);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(profileImageUploadService.isOurBucketUrl(oldImageUrl)).thenReturn(true);
+        when(profileImageUploadService.isOurBucketUrl("https://example.com/external.png")).thenReturn(false);
+
+        memberService.updateProfile(1L, new UpdateMemberRequest("김철수", "https://example.com/external.png", null));
+
+        verify(eventPublisher).publishEvent(new ProfileImageOrphanedEvent(oldImageUrl));
+    }
+
     // 존재하지 않거나 이미 탈퇴한 회원 ID로 정보 수정 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증
     @Test
     void 존재하지_않는_회원ID로_정보를_수정하면_예외가_발생한다() {
@@ -157,6 +194,20 @@ class MemberServiceTest {
         memberService.withdraw(1L);
 
         assertThat(member.getDeletedAt()).isNotNull();
+    }
+
+    // 탈퇴 시 기존 프로필 이미지가 우리 S3 버킷 URL이면 정리(삭제) 이벤트가 발행되는지 검증
+    @Test
+    void 탈퇴시_기존_프로필_이미지가_우리_버킷_URL이면_정리_이벤트를_발행한다() {
+        Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
+        String imageUrl = "https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/profile-images/1/old.jpg";
+        member.updateProfile("홍길동", imageUrl, null);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+        when(profileImageUploadService.isOurBucketUrl(imageUrl)).thenReturn(true);
+
+        memberService.withdraw(1L);
+
+        verify(eventPublisher).publishEvent(new ProfileImageOrphanedEvent(imageUrl));
     }
 
     // 존재하지 않거나 이미 탈퇴한 회원 ID로 탈퇴 시도 시 MEMBER_NOT_FOUND 예외가 발생하는지 검증

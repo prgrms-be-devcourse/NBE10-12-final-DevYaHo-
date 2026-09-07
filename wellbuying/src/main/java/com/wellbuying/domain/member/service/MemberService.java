@@ -10,6 +10,8 @@ import com.wellbuying.domain.member.dto.MemberSummaryResponse;
 import com.wellbuying.domain.member.dto.SignupRequest;
 import com.wellbuying.domain.member.dto.SignupResponse;
 import com.wellbuying.domain.member.dto.UpdateMemberRequest;
+import com.wellbuying.domain.member.event.ProfileImageConfirmedEvent;
+import com.wellbuying.domain.member.event.ProfileImageOrphanedEvent;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.repository.SocialAccountRepository;
 import com.wellbuying.domain.seller.entity.SellerInfo;
@@ -18,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,15 +38,20 @@ public class MemberService {
     private final EmailVerificationService emailVerificationService;
     private final SocialAccountRepository socialAccountRepository;
     private final SellerInfoRepository sellerInfoRepository;
+    private final ProfileImageUploadService profileImageUploadService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             EmailVerificationService emailVerificationService, SocialAccountRepository socialAccountRepository,
-            SellerInfoRepository sellerInfoRepository) {
+            SellerInfoRepository sellerInfoRepository, ProfileImageUploadService profileImageUploadService,
+            ApplicationEventPublisher eventPublisher) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailVerificationService = emailVerificationService;
         this.socialAccountRepository = socialAccountRepository;
         this.sellerInfoRepository = sellerInfoRepository;
+        this.profileImageUploadService = profileImageUploadService;
+        this.eventPublisher = eventPublisher;
     }
 
     // 이메일 인증 완료 여부 확인 후, 이메일 중복 체크 → 비밀번호를 BCrypt로 인코딩하여 회원을 저장, 중복이면 EMAIL_ALREADY_EXISTS 예외
@@ -68,25 +76,41 @@ public class MemberService {
     }
 
     // 탈퇴하지 않은 회원의 이름/프로필 이미지/전화번호를 수정, 없으면 MEMBER_NOT_FOUND 예외
+    // 프로필 이미지가 우리 S3 버킷 URL로 교체되면 pending 태그 제거(확정) 이벤트를, 교체 전 이미지가 우리 버킷 URL이면 정리(삭제) 이벤트를 발행한다 (phase18 § 6-1/§ 6-2)
     @Transactional
     public MemberResponse updateProfile(Long memberId, UpdateMemberRequest request) {
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        String previousProfileImage = member.getProfileImage();
         member.updateProfile(request.name(), request.profileImageUrl(), request.phoneNumber());
+
+        String newProfileImage = request.profileImageUrl();
+        boolean imageChanged = newProfileImage != null && !newProfileImage.equals(previousProfileImage);
+        if (imageChanged && profileImageUploadService.isOurBucketUrl(newProfileImage)) {
+            eventPublisher.publishEvent(new ProfileImageConfirmedEvent(newProfileImage));
+        }
+        if (imageChanged && profileImageUploadService.isOurBucketUrl(previousProfileImage)) {
+            eventPublisher.publishEvent(new ProfileImageOrphanedEvent(previousProfileImage));
+        }
         return MemberResponse.from(member);
     }
 
     // 탈퇴하지 않은 회원을 soft delete하며 개인정보를 익명화, 연동된 소셜 계정을 전부 해제하고
     // PENDING/REJECTED 셀러 신청 이력을 즉시 삭제 (APPROVED 셀러의 금융 정보는 Phase 12까지 보존)
+    // 탈퇴 전 프로필 이미지가 우리 S3 버킷 URL이면 정리(삭제) 이벤트를 발행한다 (phase18 § 6-2, 개인정보 삭제 관점에서 필수)
     @Transactional
     public void withdraw(Long memberId) {
         Member member = memberRepository.findByIdAndDeletedAtIsNull(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        String previousProfileImage = member.getProfileImage();
         member.withdraw();
         socialAccountRepository.deleteAllByMemberId(memberId);
         sellerInfoRepository.findByMemberId(memberId)
                 .filter(SellerInfo::isDeletableOnWithdraw)
                 .ifPresent(sellerInfoRepository::delete);
+        if (profileImageUploadService.isOurBucketUrl(previousProfileImage)) {
+            eventPublisher.publishEvent(new ProfileImageOrphanedEvent(previousProfileImage));
+        }
         log.info("회원 탈퇴 처리 완료: memberId={}", memberId);
     }
 

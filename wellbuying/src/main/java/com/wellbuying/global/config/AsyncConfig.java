@@ -38,4 +38,19 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    // 프로필 이미지 pending 태그 제거/이전 이미지 삭제 전용 스레드풀 - ProfileImageEventListener의 @Async("s3ConfirmExecutor")에서 사용
+    @Bean(name = "s3ConfirmExecutor")
+    public Executor s3ConfirmExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("s3-confirm-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        return executor;
+    }
 }

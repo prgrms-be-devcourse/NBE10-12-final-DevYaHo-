@@ -1,3 +1,10 @@
 logging:
   level:
     com.wellbuying: DEBUG
+
+aws:
+  s3:
+    # docker-compose.yml의 minio 서비스(로컬 전용 고정 계정) - 운영 자격증명과 무관
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
