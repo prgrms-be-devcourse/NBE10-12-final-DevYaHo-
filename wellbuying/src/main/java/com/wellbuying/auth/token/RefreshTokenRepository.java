@@ -118,7 +118,7 @@ public class RefreshTokenRepository {
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "deleteFallback")
     public void delete(Long memberId, String deviceId) {
         redisTemplate.opsForHash().delete(key(memberId), deviceId);
-        fallbackStore.delete(memberId, deviceId);
+        deleteFromFallbackStoreQuietly(memberId, deviceId);
     }
 
     private void deleteFallback(Long memberId, String deviceId, Throwable t) {
@@ -126,16 +126,34 @@ public class RefreshTokenRepository {
         fallbackStore.delete(memberId, deviceId);
     }
 
+    // Redis 삭제는 이미 성공했으므로 로그아웃의 주 목적은 달성한 상태 - DB 폴백 정리 실패가 이 예외를 삼켜
+    // 응답 실패로 번지는 것도, 서킷 브레이커가 이를 Redis 장애로 오인해 circuit을 여는 것도 막는다
+    private void deleteFromFallbackStoreQuietly(Long memberId, String deviceId) {
+        try {
+            fallbackStore.delete(memberId, deviceId);
+        } catch (Exception e) {
+            log.error("Redis 삭제 완료 후 DB 폴백 정리 중 오류 발생 - memberId={}, deviceId={}", memberId, deviceId, e);
+        }
+    }
+
     // 회원의 모든 기기 refresh token 삭제 - 전체 기기 로그아웃
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "deleteAllFallback")
     public void deleteAll(Long memberId) {
         redisTemplate.delete(key(memberId));
-        fallbackStore.deleteAll(memberId);
+        deleteAllFromFallbackStoreQuietly(memberId);
     }
 
     private void deleteAllFallback(Long memberId, Throwable t) {
         log.warn("Redis 장애로 DB 폴백에서만 전체 로그아웃 처리 - memberId={}", memberId, t);
         fallbackStore.deleteAll(memberId);
+    }
+
+    private void deleteAllFromFallbackStoreQuietly(Long memberId) {
+        try {
+            fallbackStore.deleteAll(memberId);
+        } catch (Exception e) {
+            log.error("Redis 삭제 완료 후 DB 폴백 전체 정리 중 오류 발생 - memberId={}", memberId, e);
+        }
     }
 
     // memberId로 Redis Hash 키(ReT:{memberId}) 생성

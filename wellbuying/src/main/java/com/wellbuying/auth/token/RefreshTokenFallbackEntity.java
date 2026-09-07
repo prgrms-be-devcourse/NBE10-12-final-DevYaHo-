@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.util.Objects;
 
 // Redis 장애(서킷 open) 시 refresh token을 임시로 보관하는 DB 폴백 저장소 - phase21 §2-3
 @Entity
@@ -56,8 +57,8 @@ public class RefreshTokenFallbackEntity {
 
     // rotate_refresh_token.lua와 동일한 검증 규칙(현재 토큰 또는 grace 기간 내 직전 토큰만 허용)을 DB에서 재현
     public boolean matches(String tokenHash, long now) {
-        boolean isCurrent = this.tokenHash.equals(tokenHash);
-        boolean isGracedPrevious = previousTokenHash != null && previousTokenHash.equals(tokenHash)
+        boolean isCurrent = Objects.equals(this.tokenHash, tokenHash);
+        boolean isGracedPrevious = Objects.equals(this.previousTokenHash, tokenHash)
                 && graceUntil != null && now <= graceUntil;
         return isCurrent || isGracedPrevious;
     }

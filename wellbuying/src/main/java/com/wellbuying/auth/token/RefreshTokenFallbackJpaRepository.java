@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,7 +18,12 @@ public interface RefreshTokenFallbackJpaRepository extends JpaRepository<Refresh
     Optional<RefreshTokenFallbackEntity> findByMemberIdAndDeviceIdForUpdate(
             @Param("memberId") Long memberId, @Param("deviceId") String deviceId);
 
-    void deleteByMemberIdAndDeviceId(Long memberId, String deviceId);
+    // 파생 delete 쿼리(deleteBy...)는 대상을 SELECT로 조회한 뒤 건별로 DELETE하므로, 단일 벌크 DELETE로 대체
+    @Modifying(clearAutomatically = true)
+    @Query("delete from RefreshTokenFallbackEntity r where r.memberId = :memberId and r.deviceId = :deviceId")
+    void deleteByMemberIdAndDeviceId(@Param("memberId") Long memberId, @Param("deviceId") String deviceId);
 
-    void deleteByMemberId(Long memberId);
+    @Modifying(clearAutomatically = true)
+    @Query("delete from RefreshTokenFallbackEntity r where r.memberId = :memberId")
+    void deleteByMemberId(@Param("memberId") Long memberId);
 }
