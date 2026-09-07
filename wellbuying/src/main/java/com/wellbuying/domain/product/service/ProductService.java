@@ -5,6 +5,7 @@ import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
@@ -15,11 +16,14 @@ import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
-import com.wellbuying.domain.product.search.ProductSearchDataChangedEvent;
+import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
+import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import org.springframework.context.ApplicationEventPublisher;
 import com.wellbuying.global.dto.CursorPageResponse;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -33,17 +37,20 @@ public class ProductService {
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final ProductCountRepository productCountRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final ProductSearchEventOutboxRepository outboxRepository;
+    private final GroupBuyRepository groupBuyRepository;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
                           ProductCountRepository productCountRepository,
-                          ApplicationEventPublisher eventPublisher) {
+                          ProductSearchEventOutboxRepository outboxRepository,
+                          GroupBuyRepository groupBuyRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.productCountRepository = productCountRepository;
-        this.eventPublisher = eventPublisher;
+        this.outboxRepository = outboxRepository;
+        this.groupBuyRepository = groupBuyRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -55,7 +62,7 @@ public class ProductService {
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
     @Transactional(readOnly = true)
     public ProductDetailResponse getDetail(Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         return ProductDetailResponse.of(product);
     }
@@ -63,7 +70,7 @@ public class ProductService {
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
     @Transactional(readOnly = true)
     public Product getOwnedOrThrow(Long sellerId, Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         if (!product.getSellerId().equals(sellerId)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
@@ -91,11 +98,10 @@ public class ProductService {
                 request.description(), request.startPrice(), request.thumbnailUrl());
         Long productId = productRepository.save(product).getId();
         productCountRepository.save(ProductCount.init(productId));
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
         return productId;
     }
 
-    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관) 조회
+    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관, 삭제된 상품은 제외) 조회
     @Transactional(readOnly = true)
     public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
         return productRepository.findBySeller(sellerId, pageable);
@@ -104,25 +110,69 @@ public class ProductService {
     // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회
     @Transactional(readOnly = true)
     public Page<ProductAdminResponse> findByStatus(ProductStatus status, Pageable pageable) {
-        return productRepository.findByStatus(status, pageable).map(ProductAdminResponse::of);
+        return productRepository.findByStatusAndDeletedAtIsNull(status, pageable).map(ProductAdminResponse::of);
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
     public void approve(Long productId) {
         findProduct(productId).approve();
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+        outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
     }
 
     // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
     public void reject(Long productId) {
         findProduct(productId).reject();
-        eventPublisher.publishEvent(new ProductSearchDataChangedEvent(productId));
+    }
+
+    @Transactional
+    public void updateProduct(Long sellerId, Long productId, ProductUpdateRequest request) {
+        Product product = getOwnedOrThrow(sellerId, productId);
+        if (!productCategoryRepository.existsById(request.categoryId())) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        product.update(request.categoryId(), request.productName(), request.description(),
+                request.startPrice(), request.thumbnailUrl());
+        if (product.getStatus() == ProductStatus.APPROVED) {
+            outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
+        }
+    }
+
+    @Transactional
+    public void deleteProduct(Long sellerId, Long productId) {
+        Product product = getOwnedOrThrow(sellerId, productId);
+        validateNoActiveGroupBuy(productId);
+        boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        product.delete(sellerId);
+        if (wasIndexed) {
+            outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+    }
+
+    // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단
+    @Transactional
+    public void adminDeleteProduct(Long adminId, Long productId, String reason) {
+        Product product = findProduct(productId);
+        validateNoActiveGroupBuy(productId);
+        boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        product.delete(adminId, reason);
+        if (wasIndexed) {
+            outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+    }
+
+    // 진행 중인(READY/ONGOING) 공동구매가 있으면 상품 삭제를 막는다
+    private void validateNoActiveGroupBuy(Long productId) {
+        boolean hasActiveGroupBuy = groupBuyRepository.existsByProductIdAndStatusIn(
+                productId, List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING));
+        if (hasActiveGroupBuy) {
+            throw new BusinessException(ErrorCode.CANNOT_DELETE_ACTIVE_PRODUCT);
+        }
     }
 
     private Product findProduct(Long productId) {
-        return productRepository.findById(productId)
+        return productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 }

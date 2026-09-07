@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
-public record ProductCreateRequest(
+public record ProductUpdateRequest(
         @NotNull Long categoryId,
         @NotBlank @Size(max = 100) String productName,
         String description,

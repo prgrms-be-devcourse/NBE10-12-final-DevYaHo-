@@ -17,6 +17,9 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     // 목록/검색 - 상태별 필터링
     Page<GroupBuy> findByStatus(GroupBuyStatus status, Pageable pageable);
 
+    // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
+    boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
+
     // 생산자별 조회 - GroupBuySeedRunner가 이전에 시딩한 자기 소유 데이터를 정리할 때 사용
     List<GroupBuy> findByProducerId(Long producerId);
 
