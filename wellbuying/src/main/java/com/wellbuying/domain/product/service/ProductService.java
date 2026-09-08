@@ -10,10 +10,13 @@ import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.entity.ImageType;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCount;
+import com.wellbuying.domain.product.entity.ProductImage;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
+import com.wellbuying.domain.product.repository.ProductImageRepository;
 import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
@@ -28,6 +31,7 @@ import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -45,6 +49,7 @@ public class ProductService {
     private final GroupBuyRepository groupBuyRepository;
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ProductImageRepository productImageRepository;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
@@ -52,7 +57,8 @@ public class ProductService {
                           ProductSearchEventOutboxRepository outboxRepository,
                           GroupBuyRepository groupBuyRepository,
                           ProductImageUploadService productImageUploadService,
-                          ApplicationEventPublisher eventPublisher) {
+                          ApplicationEventPublisher eventPublisher,
+                          ProductImageRepository productImageRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
@@ -61,6 +67,7 @@ public class ProductService {
         this.groupBuyRepository = groupBuyRepository;
         this.productImageUploadService = productImageUploadService;
         this.eventPublisher = eventPublisher;
+        this.productImageRepository = productImageRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -74,7 +81,15 @@ public class ProductService {
     public ProductDetailResponse getDetail(Long productId) {
         Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
-        return ProductDetailResponse.of(product);
+        List<String> galleryImageUrls = findImageUrls(productId, ImageType.GALLERY);
+        List<String> descriptionImageUrls = findImageUrls(productId, ImageType.DESCRIPTION);
+        return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls);
+    }
+
+    private List<String> findImageUrls(Long productId, ImageType imageType) {
+        return productImageRepository.findByProductIdAndImageTypeOrderBySortOrderAsc(productId, imageType).stream()
+                .map(ProductImage::getImageUrl)
+                .collect(Collectors.toList());
     }
 
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
