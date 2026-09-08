@@ -1,6 +1,9 @@
 package com.wellbuying.auth.controller;
 
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.document;
+import static org.springframework.restdocs.cookies.CookieDocumentation.responseCookies;
+import static org.springframework.restdocs.cookies.CookieDocumentation.requestCookies;
+import static org.springframework.restdocs.cookies.CookieDocumentation.cookieWithName;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.restdocs.payload.PayloadDocumentation.requestFields;
 import static org.springframework.restdocs.payload.PayloadDocumentation.responseFields;
@@ -10,6 +13,7 @@ import static org.springframework.restdocs.headers.HeaderDocumentation.requestHe
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -19,6 +23,7 @@ import com.wellbuying.auth.service.AuthService;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -33,7 +38,6 @@ import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
 
 @AutoConfigureMockMvc
 @AutoConfigureRestDocs
@@ -51,9 +55,6 @@ class AuthControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @Autowired
     private AuthService authService;
@@ -77,8 +78,12 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(jsonPath("$.deviceId").value("pc_web_browser_uuid"))
+                .andExpect(cookie().exists("refresh_token"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().secure("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/auth"))
                 .andDo(document("auth/login-success",
                         requestHeaders(
                                 headerWithName("X-Device-Id").description("기기 식별자 (선택, 없으면 서버가 신규 발급)").optional()),
@@ -87,9 +92,11 @@ class AuthControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("password").description("비밀번호")),
                         responseFields(
                                 fieldWithPath("accessToken").description("Access Token"),
-                                fieldWithPath("refreshToken").description("Refresh Token"),
                                 fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"),
-                                fieldWithPath("deviceId").description("기기 식별자"))));
+                                fieldWithPath("deviceId").description("기기 식별자")),
+                        responseCookies(
+                                cookieWithName("refresh_token").description(
+                                        "Refresh Token (httpOnly, Secure, SameSite=Lax, Path=/api/auth)"))));
     }
 
     // 비밀번호가 일치하지 않으면 401과 AUTH_401_INVALID_CREDENTIALS 에러 코드를 반환하는지 검증
@@ -222,16 +229,19 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .content(verifyRequestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().exists("refresh_token"))
                 .andDo(document("auth/reactivation-verify-success",
                         requestFields(
                                 fieldWithPath("email").description("휴면 계정 이메일"),
                                 fieldWithPath("code").description("이메일로 발송된 인증 코드")),
                         responseFields(
                                 fieldWithPath("accessToken").description("Access Token"),
-                                fieldWithPath("refreshToken").description("Refresh Token"),
                                 fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"),
-                                fieldWithPath("deviceId").description("기기 식별자"))));
+                                fieldWithPath("deviceId").description("기기 식별자")),
+                        responseCookies(
+                                cookieWithName("refresh_token").description(
+                                        "Refresh Token (httpOnly, Secure, SameSite=Lax, Path=/api/auth)"))));
 
         Member reactivated = memberRepository.findById(member.getId()).orElseThrow();
         assertThat(reactivated.getStatus()).isEqualTo(MemberStatus.ACTIVE);
@@ -460,44 +470,66 @@ class AuthControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("message").description("에러 메시지"))));
     }
 
-    // 유효한 refresh token으로 재발급 요청 시 200과 함께 기존과 다른 새 access/refresh 토큰이 발급되는지 검증
+    // 유효한 refresh token 쿠키로 재발급 요청 시 200과 함께 기존과 다른 새 access/refresh 토큰이 발급되는지 검증
     @Test
-    void refresh_token으로_토큰_재발급에_성공한다() throws Exception {
+    void refresh_token_쿠키로_토큰_재발급에_성공한다() throws Exception {
         signUpMember("reissue-success@example.com");
         String refreshToken = login("reissue-success@example.com", "device-1");
 
-        String requestBody = """
-                { "refreshToken": "%s" }
-                """.formatted(refreshToken);
-
-        String response = mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+        mockMvc.perform(post("/api/auth/reissue")
+                        .header("X-Device-Id", "device-1")
+                        .cookie(new Cookie("refresh_token", refreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().exists("refresh_token"))
+                .andExpect(cookie().value("refresh_token", org.hamcrest.Matchers.not(refreshToken)))
                 .andDo(document("auth/reissue-success",
-                        requestFields(fieldWithPath("refreshToken").description("Refresh Token")),
+                        requestHeaders(
+                                headerWithName("X-Device-Id").description("기기 식별자 (필수, CSRF 방어)")),
+                        requestCookies(cookieWithName("refresh_token").description("Refresh Token")),
                         responseFields(
                                 fieldWithPath("accessToken").description("새로 발급된 Access Token"),
-                                fieldWithPath("refreshToken").description("새로 발급된 Refresh Token"),
-                                fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"))))
-                .andReturn().getResponse().getContentAsString();
+                                fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)")),
+                        responseCookies(
+                                cookieWithName("refresh_token").description("새로 발급된 Refresh Token"))));
+    }
 
-        String newRefreshToken = objectMapper.readTree(response).get("refreshToken").asText();
-        assertThat(newRefreshToken).isNotEqualTo(refreshToken);
+    // refresh token 쿠키 없이 재발급 요청 시 401과 AUTH_401_REFRESH_NOT_FOUND 에러 코드를 반환하는지 검증
+    @Test
+    void refresh_token_쿠키가_없으면_재발급에_실패한다() throws Exception {
+        mockMvc.perform(post("/api/auth/reissue")
+                        .header("X-Device-Id", "device-1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REFRESH_NOT_FOUND"))
+                .andDo(document("auth/reissue-no-cookie",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // X-Device-Id 헤더 없이 재발급 요청 시 400과 AUTH_400_DEVICE_ID_REQUIRED 에러 코드를 반환하는지 검증(CSRF 방어)
+    @Test
+    void X_Device_Id_헤더가_없으면_재발급에_실패한다() throws Exception {
+        signUpMember("reissue-no-device-header@example.com");
+        String refreshToken = login("reissue-no-device-header@example.com", "device-1");
+
+        mockMvc.perform(post("/api/auth/reissue")
+                        .cookie(new Cookie("refresh_token", refreshToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUTH_400_DEVICE_ID_REQUIRED"))
+                .andDo(document("auth/reissue-no-device-header",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
     }
 
     // 서명이 유효하지 않은 refresh token으로 재발급 요청 시 401과 AUTH_401_INVALID_TOKEN 에러 코드를 반환하는지 검증
     @Test
     void 유효하지_않은_refresh_token으로_재발급하면_실패한다() throws Exception {
-        String requestBody = """
-                { "refreshToken": "invalid.token.value" }
-                """;
-
         mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+                        .header("X-Device-Id", "device-1")
+                        .cookie(new Cookie("refresh_token", "invalid.token.value")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_INVALID_TOKEN"))
                 .andDo(document("auth/reissue-invalid-token",
@@ -513,13 +545,9 @@ class AuthControllerTest extends AbstractIntegrationTest {
         String refreshToken = login("reissue-no-session@example.com", "device-1");
         redisTemplate.delete("ReT:" + member.getId());
 
-        String requestBody = """
-                { "refreshToken": "%s" }
-                """.formatted(refreshToken);
-
         mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+                        .header("X-Device-Id", "device-1")
+                        .cookie(new Cookie("refresh_token", refreshToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REFRESH_NOT_FOUND"))
                 .andDo(document("auth/reissue-session-not-found",
@@ -533,25 +561,17 @@ class AuthControllerTest extends AbstractIntegrationTest {
     void 재사용된_refresh_token으로_재발급하면_재사용_감지로_모든_세션이_삭제된다() throws Exception {
         signUpMember("reissue-reuse-detect@example.com");
         String originalRefreshToken = login("reissue-reuse-detect@example.com", "device-1");
-        String requestBody = """
-                { "refreshToken": "%s" }
-                """.formatted(originalRefreshToken);
+        Cookie requestCookie = new Cookie("refresh_token", originalRefreshToken);
 
-        mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+        mockMvc.perform(post("/api/auth/reissue").header("X-Device-Id", "device-1").cookie(requestCookie))
                 .andExpect(status().isOk());
 
         // grace 기간 내 직전 토큰으로 재요청 - 정상 경쟁 요청으로 허용됨
-        mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+        mockMvc.perform(post("/api/auth/reissue").header("X-Device-Id", "device-1").cookie(requestCookie))
                 .andExpect(status().isOk());
 
         // 2세대 전 토큰으로 재요청 - 더 이상 유효 범위 밖 → 재사용 감지
-        mockMvc.perform(post("/api/auth/reissue")
-                        .contentType("application/json")
-                        .content(requestBody))
+        mockMvc.perform(post("/api/auth/reissue").header("X-Device-Id", "device-1").cookie(requestCookie))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REFRESH_REUSE_DETECTED"))
                 .andDo(document("auth/reissue-reuse-detected",
@@ -573,6 +593,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/auth/logout").with(authentication(authentication)))
                 .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge("refresh_token", 0))
                 .andDo(document("auth/logout-success"));
 
         assertThat(redisTemplate.opsForHash().hasKey("ReT:" + member.getId(), "device-1")).isFalse();
@@ -604,6 +625,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/auth/logout-all").with(authentication(authentication)))
                 .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge("refresh_token", 0))
                 .andDo(document("auth/logout-all-success"));
 
         assertThat(redisTemplate.hasKey("ReT:" + member.getId())).isFalse();
@@ -625,17 +647,20 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(jsonPath("$.deviceId").value("pc_web_browser_uuid"))
+                .andExpect(cookie().exists("refresh_token"))
                 .andDo(document("auth/oauth-exchange-success",
                         requestHeaders(
                                 headerWithName("X-Device-Id").description("기기 식별자 (선택, 없으면 서버가 신규 발급)").optional()),
                         requestFields(fieldWithPath("code").description("소셜 로그인 콜백에서 발급받은 1회용 교환 코드")),
                         responseFields(
                                 fieldWithPath("accessToken").description("Access Token"),
-                                fieldWithPath("refreshToken").description("Refresh Token"),
                                 fieldWithPath("accessTokenExpiresIn").description("Access Token 만료(초)"),
-                                fieldWithPath("deviceId").description("기기 식별자"))));
+                                fieldWithPath("deviceId").description("기기 식별자")),
+                        responseCookies(
+                                cookieWithName("refresh_token").description(
+                                        "Refresh Token (httpOnly, Secure, SameSite=Lax, Path=/api/auth)"))));
     }
 
     // 존재하지 않거나 이미 사용된 교환 코드로 요청 시 401과 AUTH_401_OAUTH_CODE_INVALID 에러 코드를 반환하는지 검증
@@ -715,11 +740,11 @@ class AuthControllerTest extends AbstractIntegrationTest {
                 { "email": "%s", "password": "Pass1234!" }
                 """.formatted(email);
 
-        String response = mockMvc.perform(post("/api/auth/login")
+        Cookie refreshTokenCookie = mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
                         .header("X-Device-Id", deviceId)
                         .content(requestBody))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response).get("refreshToken").asText();
+                .andReturn().getResponse().getCookie("refresh_token");
+        return refreshTokenCookie.getValue();
     }
 }

@@ -27,7 +27,6 @@ import com.wellbuying.global.exception.DormantMemberException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
-import com.wellbuying.auth.dto.ReissueRequest;
 import com.wellbuying.auth.dto.ReissueResponse;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -293,7 +292,7 @@ class AuthServiceTest {
         when(tokenHasher.hash("new-refresh-token")).thenReturn("new-hash");
         when(refreshTokenRepository.rotate(1L, "device-1", "old-hash", "new-hash")).thenReturn(1L);
 
-        ReissueResponse response = authService.reissue(new ReissueRequest("old-refresh-token"));
+        ReissueResponse response = authService.reissue("old-refresh-token");
 
         assertThat(response.accessToken()).isEqualTo("new-access-token");
         assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
@@ -307,7 +306,7 @@ class AuthServiceTest {
         when(tokenProvider.getMemberId(claims)).thenReturn(1L);
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+        assertThatThrownBy(() -> authService.reissue("old-refresh-token"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
@@ -326,7 +325,7 @@ class AuthServiceTest {
         when(tokenHasher.hash(anyString())).thenReturn("some-hash");
         when(refreshTokenRepository.rotate(anyLong(), anyString(), anyString(), anyString())).thenReturn(0L);
 
-        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+        assertThatThrownBy(() -> authService.reissue("old-refresh-token"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
@@ -345,7 +344,7 @@ class AuthServiceTest {
         when(tokenHasher.hash(anyString())).thenReturn("some-hash");
         when(refreshTokenRepository.rotate(anyLong(), anyString(), anyString(), anyString())).thenReturn(-1L);
 
-        assertThatThrownBy(() -> authService.reissue(new ReissueRequest("old-refresh-token")))
+        assertThatThrownBy(() -> authService.reissue("old-refresh-token"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
