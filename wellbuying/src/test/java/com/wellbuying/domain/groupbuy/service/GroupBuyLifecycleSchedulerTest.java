@@ -187,4 +187,43 @@ class GroupBuyLifecycleSchedulerTest {
             verify(groupBuyCloseProcessor).closeSucceeded(id);
         }
     }
+
+    // 지속적으로 실패하는 건은 ORDER BY end_at ASC상 다음 라운드에도 계속 맨 앞에서 다시 조회되지만,
+    // 이번 틱 안에서는 한 번 실패하면 재시도하지 않는지 검증 - 그렇지 않으면 같은 건을 라운드마다(최대
+    // MAX_ROUNDS_PER_TICK번) 헛되이 재시도하게 된다
+    @Test
+    void 같은_틱_안에서_지속_실패건은_다음_라운드에서_재시도하지_않는다() {
+        GroupBuy failing = withId(1L, GroupBuy.create(10L, 1L, "지속_실패건",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        failing.start();
+        failing.increaseQuantity(10);
+        List<GroupBuy> firstRound = new java.util.ArrayList<>();
+        firstRound.add(failing);
+        for (long id = 2; id <= 500; id++) {
+            GroupBuy healthy = withId(id, GroupBuy.create(10L, 1L, "정상_건" + id,
+                    LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+            healthy.start();
+            healthy.increaseQuantity(150);
+            firstRound.add(healthy);
+        }
+        // 두 번째 라운드에서도 실패건이 여전히 ONGOING이라 맨 앞에 다시 조회되지만, 이번엔 이 건 하나뿐이라
+        // BATCH_LIMIT(500)에 못 미쳐 루프가 종료된다
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(firstRound, List.of(failing));
+        when(groupBuyCloseProcessor.closeFailed(1L)).thenThrow(new RuntimeException("지속 실패"));
+        when(groupBuyCloseProcessor.closeSucceeded(any())).thenAnswer(inv -> {
+            Long id = inv.getArgument(0);
+            GroupBuy closed = withId(id, GroupBuy.create(10L, 1L, "정상_건" + id,
+                    LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+            closed.start();
+            closed.succeed();
+            return closed;
+        });
+
+        scheduler.closeOngoingGroupBuys();
+
+        verify(groupBuyRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(), any());
+        verify(groupBuyCloseProcessor, org.mockito.Mockito.times(1)).closeFailed(1L);
+    }
 }

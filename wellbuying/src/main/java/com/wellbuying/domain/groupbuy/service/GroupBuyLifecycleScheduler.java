@@ -5,7 +5,9 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,12 +57,17 @@ public class GroupBuyLifecycleScheduler {
     // 마감 시각이 지난 ONGOING 공동구매를 최소 수량 달성 여부로 SUCCESS/FAILED 확정한다.
     // 라운드가 BATCH_LIMIT만큼 꽉 찼으면(아직 더 있을 가능성) 다음 60초 틱을 기다리지 않고 이 틱 안에서 곧바로
     // 다음 라운드를 이어서 처리한다 - GroupBuyOutboxRelay와 동일한 이유(고정 500건/60초가 아니라 밀렸을 때만
-    // 쉬지 않고 처리량을 늘리는 구조). 백로그가 없으면 지금까지와 동일하게 라운드 1번만 돌고 끝난다
+    // 쉬지 않고 처리량을 늘리는 구조). 백로그가 없으면 지금까지와 동일하게 라운드 1번만 돌고 끝난다.
+    // failedThisTick: 이번 틱 안에서 이미 실패가 확인된 건은 ORDER BY end_at ASC상 계속 맨 앞에 남아 다음
+    // 라운드에도 매번 다시 뽑히므로, 같은 건을 라운드마다 최대 10번(MAX_ROUNDS_PER_TICK)까지 헛되이 재시도하지
+    // 않도록 이번 틱 동안만 재시도 대상에서 제외한다(다음 60초 틱에서는 다시 시도됨 - 일시적 오류였을 수 있으므로
+    // 영구 제외하지 않는다)
     @Scheduled(fixedDelay = 60_000)
     public void closeOngoingGroupBuys() {
+        Set<Long> failedThisTick = ConcurrentHashMap.newKeySet();
         for (int round = 0; round < MAX_ROUNDS_PER_TICK; round++) {
-            int processed = closeOnce();
-            if (processed < BATCH_LIMIT.max()) {
+            int fetched = closeOnce(failedThisTick);
+            if (fetched < BATCH_LIMIT.max()) {
                 return;
             }
         }
@@ -71,7 +78,11 @@ public class GroupBuyLifecycleScheduler {
     // 병렬 실행한다 - 순차로 돌리면 건당 DB 왕복 시간이 그대로 배치 전체에 곱해지기 때문. 트랜잭션이 건별로
     // 분리돼 있어 특정 한 건에서 예외가 나도 나머지 건들의 마감 처리에 영향을 주지 않는다.
     // (성사 확정만 하고 끝난다 - 참여자 최종가 반영/outbox 기록은 GroupBuyFinalizationWorker가 뒤이어 처리)
-    private int closeOnce() {
+    //
+    // 반환값은 "실제 조회된 건수"다(성공 건수가 아니다) - 다음 라운드를 이어갈지는 "더 있을 가능성"(조회 결과가
+    // BATCH_LIMIT만큼 꽉 찼는지)으로 판단해야 하고, 이걸 성공 건수로 바꾸면 무관한 건 하나만 실패해도 실제로는
+    // 수천 건이 더 밀려있는데 드레인 루프가 조기 종료해버린다(이번 개선의 목적 자체가 무력화됨)
+    private int closeOnce(Set<Long> failedThisTick) {
         LocalDateTime now = LocalDateTime.now();
         List<GroupBuy> targets = groupBuyRepository
                 .findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(GroupBuyStatus.ONGOING, now, BATCH_LIMIT);
@@ -80,17 +91,20 @@ public class GroupBuyLifecycleScheduler {
         }
 
         List<CompletableFuture<Void>> futures = targets.stream()
-                .map(groupBuy -> CompletableFuture.runAsync(() -> closeOneSafely(groupBuy), groupBuyLifecycleExecutor))
+                .filter(groupBuy -> !failedThisTick.contains(groupBuy.getId()))
+                .map(groupBuy -> CompletableFuture.runAsync(() -> closeOneSafely(groupBuy, failedThisTick),
+                        groupBuyLifecycleExecutor))
                 .toList();
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         return targets.size();
     }
 
-    private void closeOneSafely(GroupBuy groupBuy) {
+    private void closeOneSafely(GroupBuy groupBuy, Set<Long> failedThisTick) {
         try {
             closeOne(groupBuy);
         } catch (Exception e) {
             log.error("공동구매 마감 처리 실패 - groupBuyId: {}", groupBuy.getId(), e);
+            failedThisTick.add(groupBuy.getId());
         }
     }
 
