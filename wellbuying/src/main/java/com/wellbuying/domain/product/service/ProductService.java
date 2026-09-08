@@ -24,6 +24,7 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -57,6 +58,14 @@ public class ProductService {
     @Transactional(readOnly = true)
     public CursorPageResponse<ProductSummaryResponse> getProducts(ProductSearchCondition condition, String cursor, int size) {
         return productRepository.search(condition, cursor, size);
+    }
+
+    // 메인 페이지 홈 노출용 - 자주 조회되지만 자주 안 바뀌는 데이터라 캐싱
+    // (CategoryService.getCategoryTree()와 동일 패턴, 캐시 무효화는 TTL로만 처리)
+    @Cacheable("popularProducts")
+    @Transactional(readOnly = true)
+    public List<ProductSummaryResponse> getPopularProducts() {
+        return productRepository.findTop10ByViewCount();
     }
 
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
