@@ -12,7 +12,7 @@ const NAV_ITEMS: NavItem[] = [];
 
 const BASE_ACCOUNT_LINKS: NavItem[] = [
   { href: "/favorites", label: "찜", icon: Heart },
-  { href: "/orders", label: "참여 내역", icon: ShoppingBag },
+  { href: "/orders", label: "결제 내역", icon: ShoppingBag },
   { href: "/profile", label: "내 정보", icon: Settings },
 ];
 

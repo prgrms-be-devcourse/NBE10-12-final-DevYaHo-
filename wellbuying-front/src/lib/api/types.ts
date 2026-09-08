@@ -317,3 +317,48 @@ export type BillingKeyResponse = {
   cardCompany: string | null;
   cardLast4: string | null;
 };
+
+// 주문/결제 내역 (order 도메인 - GET /api/orders/me)
+// 배송 상태(PREPARING~DELIVERED)는 shipping 도메인이 채우기 전까지 나타나지 않는다
+export type OrderStatus =
+  | "PENDING"
+  | "PAID"
+  | "PAYMENT_FAILED"
+  | "PREPARING"
+  | "SHIPPING"
+  | "DELIVERED"
+  | "CONFIRMED"
+  | "CANCELED";
+
+export type PaymentStatus = "READY" | "APPROVED" | "CANCELED" | "FAILED" | "REFUNDED";
+
+export type OrderSummaryResponse = {
+  orderId: string;
+  groupBuyId: number | null;
+  groupBuyTitle: string;
+  productName: string;
+  thumbnailUrl: string | null;
+  quantity: number;
+  totalPrice: number;
+  status: OrderStatus;
+  createdAt: string;
+};
+
+export type OrderDetailResponse = {
+  orderId: string;
+  groupBuyId: number | null;
+  groupBuyTitle: string;
+  productName: string;
+  thumbnailUrl: string | null;
+  quantity: number;
+  // group_buy_part.appliedPrice - 결제된 건이면 항상 채워지지만 이론상 성사 전 상태 대비 nullable
+  unitPrice: number | null;
+  totalPrice: number;
+  status: OrderStatus;
+  shippingAddress: string;
+  pgProvider: string | null;
+  pgTransactionId: string | null;
+  paymentStatus: PaymentStatus | null;
+  approvedAt: string | null;
+  createdAt: string;
+};
