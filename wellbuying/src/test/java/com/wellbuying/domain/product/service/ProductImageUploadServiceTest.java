@@ -114,4 +114,32 @@ class ProductImageUploadServiceTest {
                 .isEqualTo(ErrorCode.INVALID_INPUT);
         verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
     }
+
+    // 존재하지 않는(또는 탈퇴한) 회원이면 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_회원이면_예외가_발생한다() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productImageUploadService.issueUploadUrl(1L,
+                new ProductImageUploadUrlRequest("image/jpeg")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
+    }
+
+    // SELLER가 아닌 회원(예: BUYER)이면 PRODUCT_FORBIDDEN 예외가 발생하는지 검증
+    @Test
+    void 판매자가_아니면_예외가_발생한다() {
+        Member buyer = mock(Member.class);
+        when(buyer.getRole()).thenReturn(Role.BUYER);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(buyer));
+
+        assertThatThrownBy(() -> productImageUploadService.issueUploadUrl(1L,
+                new ProductImageUploadUrlRequest("image/jpeg")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRODUCT_FORBIDDEN);
+        verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
+    }
 }
