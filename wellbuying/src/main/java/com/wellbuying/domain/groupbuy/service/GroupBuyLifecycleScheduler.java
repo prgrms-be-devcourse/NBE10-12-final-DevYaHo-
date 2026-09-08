@@ -90,8 +90,18 @@ public class GroupBuyLifecycleScheduler {
             return 0;
         }
 
-        List<CompletableFuture<Void>> futures = targets.stream()
+        List<GroupBuy> executableTargets = targets.stream()
                 .filter(groupBuy -> !failedThisTick.contains(groupBuy.getId()))
+                .toList();
+        // 조회된 건 전부가 이번 틱에서 이미 실패 확인된 건이면(=지속 실패건들이 end_at ASC 정렬상 계속
+        // 맨 위를 차지하고 있을 뿐, 실행할 게 하나도 없다는 뜻) targets.size()를 그대로 반환하면 이번 틱
+        // 안에서 아무 실질적 처리도 없이 같은 조회만 MAX_ROUNDS_PER_TICK번 반복하게 된다 - 0을 반환해
+        // 루프를 즉시 종료한다(다음 60초 틱에서 다시 시도됨)
+        if (executableTargets.isEmpty()) {
+            return 0;
+        }
+
+        List<CompletableFuture<Void>> futures = executableTargets.stream()
                 .map(groupBuy -> CompletableFuture.runAsync(() -> closeOneSafely(groupBuy, failedThisTick),
                         groupBuyLifecycleExecutor))
                 .toList();

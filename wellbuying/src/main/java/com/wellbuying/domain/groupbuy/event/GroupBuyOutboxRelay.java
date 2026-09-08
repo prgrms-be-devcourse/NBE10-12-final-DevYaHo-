@@ -89,6 +89,15 @@ public class GroupBuyOutboxRelay {
 
             dispatcher.markPublished(succeeded);
             dispatcher.recordFailures(failed);
+            // 이번 라운드에서 단 한 건도 성공하지 못했다면(브로커 다운 등 광범위한 장애) 다음 라운드로 이어가지
+            // 않고 0을 반환해 이번 틱을 종료한다 - 계속 이어가면 브로커가 살아날 때까지 같은 건들을 틱 안에서
+            // 최대 10번까지 재시도하게 되고, retryCount는 실패마다 증가하므로 원래 "3초 주기로 최대 5번,
+            // 즉 최소 15초에 걸쳐 재시도"하도록 설계된 예산을 단일 틱 안에서 다 태워버려 재시도 유예 기간이
+            // 오히려 짧아진다. 일부만 실패한 경우(브로커는 정상, 개별 건 문제)는 그대로 이어간다 -
+            // pending.size()를 반환해 다음 라운드에서 나머지 정상 건들을 계속 드레인한다
+            if (succeeded.isEmpty()) {
+                return 0;
+            }
             return pending.size();
         } catch (Exception e) {
             log.error("아웃박스 릴레이 작업 중 예외 발생", e);

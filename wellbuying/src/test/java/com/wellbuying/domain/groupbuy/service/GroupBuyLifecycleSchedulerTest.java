@@ -226,4 +226,32 @@ class GroupBuyLifecycleSchedulerTest {
                 .findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(), any());
         verify(groupBuyCloseProcessor, org.mockito.Mockito.times(1)).closeFailed(1L);
     }
+
+    // 한 라운드에서 조회된 건 전부가 실패해서 다음 라운드에도 여전히 그 500건 전부가(ONGOING인 채로) 다시
+    // 조회되는 경우, 이미 이번 틱에서 실패 확인된 건들이라 실행할 게 하나도 없으므로 더 이상 라운드를
+    // 이어가지 않고 그 자리에서 멈추는지 검증 - 그렇지 않으면 아무 처리도 없이 같은 조회만
+    // MAX_ROUNDS_PER_TICK(10)번 반복하게 된다
+    @Test
+    void 조회된_건_전부가_이미_실패한_건이면_더_이상_라운드를_돌지_않는다() {
+        List<GroupBuy> allFailing = java.util.stream.IntStream.rangeClosed(1, 500)
+                .mapToObj(i -> withId((long) i, GroupBuy.create(10L, 1L, "실패건" + i,
+                        LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000)))
+                .peek(gb -> {
+                    gb.start();
+                    gb.increaseQuantity(10);
+                })
+                .toList();
+        // 매 라운드 같은 500건이 다시 조회된다고 가정(전부 계속 ONGOING으로 남아있으므로)
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(allFailing);
+        when(groupBuyCloseProcessor.closeFailed(any())).thenThrow(new RuntimeException("지속 실패"));
+
+        scheduler.closeOngoingGroupBuys();
+
+        // round 0에서 500건 전부 시도(전부 실패) -> round 1에서 다시 조회는 하되(전부 failedThisTick에
+        // 있어) 아무것도 실행하지 않고 바로 종료 -> 총 조회는 2번, closeFailed 호출은 500번(중복 없음)
+        verify(groupBuyRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(), any());
+        verify(groupBuyCloseProcessor, org.mockito.Mockito.times(500)).closeFailed(any());
+    }
 }
