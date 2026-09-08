@@ -12,6 +12,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.global.exception.BusinessException;
@@ -108,6 +109,40 @@ class ProductImageUploadServiceTest {
         when(seller.getRole()).thenReturn(Role.SELLER);
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(seller));
         assertThatThrownBy(() -> productImageUploadService.issueDescriptionImageUploadUrl(1L,
+                new ProductImageUploadUrlRequest("image/svg+xml")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
+    }
+
+    // 갤러리 이미지도 동일하게 허용 목록에 속하면 발급되는지, 키 prefix가 gallery-images/인지 검증
+    @Test
+    void 갤러리_이미지도_허용된_contentType이면_presigned_URL을_발급한다() throws MalformedURLException {
+        Member seller = mock(Member.class);
+        when(seller.getRole()).thenReturn(Role.SELLER);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(seller));
+        when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class))).thenReturn(presignedRequest);
+        when(presignedRequest.url())
+                .thenReturn(new URL("https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/presigned"));
+
+        ProductGalleryImageUploadUrlResponse response = productImageUploadService.issueGalleryImageUploadUrl(1L,
+                new ProductImageUploadUrlRequest("image/webp"));
+
+        assertThat(response.uploadUrl()).isEqualTo("https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/presigned");
+        assertThat(response.imageUrl())
+                .startsWith("https://wellbuying-dev.s3.ap-northeast-2.amazonaws.com/gallery-images/1/")
+                .endsWith(".webp");
+    }
+
+    // 갤러리 이미지 발급도 동일하게 허용되지 않은 contentType이면 예외가 발생하는지 검증
+    @Test
+    void 갤러리_이미지도_허용되지_않은_contentType이면_예외가_발생한다() {
+        Member seller = mock(Member.class);
+        when(seller.getRole()).thenReturn(Role.SELLER);
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(seller));
+
+        assertThatThrownBy(() -> productImageUploadService.issueGalleryImageUploadUrl(1L,
                 new ProductImageUploadUrlRequest("image/svg+xml")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())

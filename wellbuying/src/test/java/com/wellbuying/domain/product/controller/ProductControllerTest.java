@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
@@ -202,5 +203,27 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
                 .andExpect(jsonPath("$.imageUrl")
                         .value("https://bucket.s3.amazonaws.com/description-images/1/uuid.png"));
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 갤러리 이미지 업로드 URL이 반환된다
+    @Test
+    void 갤러리_이미지_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueGalleryImageUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductGalleryImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/gallery-images/1/uuid.webp"));
+
+        mockMvc.perform(post("/api/products/gallery-images/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/webp\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.imageUrl")
+                        .value("https://bucket.s3.amazonaws.com/gallery-images/1/uuid.webp"));
     }
 }

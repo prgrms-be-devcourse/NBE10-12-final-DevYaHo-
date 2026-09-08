@@ -5,6 +5,7 @@ import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
@@ -101,6 +102,18 @@ public class ProductController {
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @Valid @RequestBody ProductImageUploadUrlRequest request) {
         ProductImageUploadUrlResponse response = productImageUploadService.issueUploadUrl(
+                authenticatedMember.memberId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    // 판매자가 상품 갤러리 이미지를 업로드할 presigned URL 발급 - 등록 전/후 모두 호출 가능
+    @Operation(summary = "상품 갤러리 이미지 업로드 URL 발급 - 판매자 전용")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PostMapping("/gallery-images/upload-url")
+    public ResponseEntity<ProductGalleryImageUploadUrlResponse> issueGalleryImageUploadUrl(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody ProductImageUploadUrlRequest request) {
+        ProductGalleryImageUploadUrlResponse response = productImageUploadService.issueGalleryImageUploadUrl(
                 authenticatedMember.memberId(), request);
         return ResponseEntity.ok(response);
     }

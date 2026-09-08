@@ -4,6 +4,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.global.exception.BusinessException;
@@ -58,6 +59,16 @@ public class ProductImageUploadService {
         String key = "product-thumbnails/%d/%s.%s".formatted(sellerId, UUID.randomUUID(), extension);
         String uploadUrl = issuePresignedPutUrl(key, request.contentType());
         return new ProductImageUploadUrlResponse(uploadUrl, publicUrlPrefix + key);
+    }
+
+    // 갤러리 이미지 발급 - 상세설명과 동일하게 발급 시점엔 productId 없어도 됨(등록 전/후 모두 호출 가능)
+    public ProductGalleryImageUploadUrlResponse issueGalleryImageUploadUrl(Long sellerId,
+            ProductImageUploadUrlRequest request) {
+        validateSeller(sellerId);
+        String extension = validateContentType(request.contentType());
+        String key = "gallery-images/%d/%s.%s".formatted(sellerId, UUID.randomUUID(), extension);
+        String uploadUrl = issuePresignedPutUrl(key, request.contentType());
+        return new ProductGalleryImageUploadUrlResponse(uploadUrl, publicUrlPrefix + key);
     }
 
     // 상세설명 이미지 발급 - 발급 시점엔 productId가 없어도 되므로(등록 전/후 모두 호출 가능)
