@@ -63,9 +63,9 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
-    // 메인 페이지 홈에 노출할 조회수 기준 인기 상품 TOP 10 - 캐싱 대상이라 커서 없이 고정 10개만 반환
+    // 메인 페이지 홈에 노출할 조회수 기준 인기 상품 목록 - 캐싱 대상이라 커서 없이 고정 개수만 반환
     @Override
-    public List<ProductSummaryResponse> findTop10ByViewCount() {
+    public List<ProductSummaryResponse> findTopByViewCount(int limit) {
         return queryFactory
                 .select(Projections.constructor(ProductSummaryResponse.class,
                         product.id,
@@ -80,7 +80,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.deletedAt.isNull()
                 )
                 .orderBy(productCount.viewCount.desc(), product.id.desc())
-                .limit(10)
+                .limit(limit)
                 .fetch();
     }
 

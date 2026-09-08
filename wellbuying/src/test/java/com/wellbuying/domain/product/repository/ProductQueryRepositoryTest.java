@@ -233,7 +233,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
 
     // 조회수 내림차순으로 정렬되어 반환된다
     @Test
-    void findTop10ByViewCount_조회수_내림차순으로_정렬된다() {
+    void findTopByViewCount_조회수_내림차순으로_정렬된다() {
         Product low = Product.register(TEST_SELLER_ID, testCategoryId, "적은조회수", "설명", 10000, "url");
         low.approve();
         low = productRepository.save(low);
@@ -243,31 +243,30 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         high = productRepository.save(high);
         productCountRepository.save(withViewCount(high.getId(), 500L));
 
-        List<ProductSummaryResponse> result = productRepository.findTop10ByViewCount();
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
 
-        List<String> names = result.stream().map(ProductSummaryResponse::productName).toList();
-        assertThat(names.indexOf("많은조회수")).isLessThan(names.indexOf("적은조회수"));
+        assertThat(result).extracting("productName").containsExactly("많은조회수", "적은조회수");
     }
 
-    // 조건에 맞는 상품이 10개를 초과해도 최대 10개까지만 반환된다
+    // limit 파라미터만큼만 반환된다
     @Test
-    void findTop10ByViewCount_최대_10개까지만_반환한다() {
-        for (int i = 0; i < 12; i++) {
+    void findTopByViewCount_요청한_개수만큼만_반환한다() {
+        for (int i = 0; i < 5; i++) {
             Product p = Product.register(TEST_SELLER_ID, testCategoryId, "상품" + i, "설명", 10000, "url");
             p.approve();
             p = productRepository.save(p);
             productCountRepository.save(withViewCount(p.getId(), 100L - i));
         }
 
-        List<ProductSummaryResponse> result = productRepository.findTop10ByViewCount();
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(3);
 
-        assertThat(result).hasSize(10);
-        assertThat(result).extracting("productName").doesNotContain("상품10", "상품11");
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting("productName").containsExactly("상품0", "상품1", "상품2");
     }
 
     // PENDING/REJECTED 상품은 조회수가 높아도 제외된다
     @Test
-    void findTop10ByViewCount_승인되지_않은_상품은_제외된다() {
+    void findTopByViewCount_승인되지_않은_상품은_제외된다() {
         Product pending = productRepository.save(
                 Product.register(TEST_SELLER_ID, testCategoryId, "대기중인기상품", "설명", 10000, "url"));
         productCountRepository.save(withViewCount(pending.getId(), 1000L));
@@ -280,7 +279,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         approved = productRepository.save(approved);
         productCountRepository.save(withViewCount(approved.getId(), 1L));
 
-        List<ProductSummaryResponse> result = productRepository.findTop10ByViewCount();
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
 
         assertThat(result).extracting("productName")
                 .contains("승인된상품")
@@ -289,7 +288,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
 
     // 소프트 삭제된 상품은 조회수가 높아도 제외된다
     @Test
-    void findTop10ByViewCount_삭제된_상품은_제외된다() {
+    void findTopByViewCount_삭제된_상품은_제외된다() {
         Product deleted = Product.register(TEST_SELLER_ID, testCategoryId, "삭제된인기상품", "설명", 10000, "url");
         deleted.approve();
         deleted = productRepository.save(deleted);
@@ -297,7 +296,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         deleted.delete(TEST_SELLER_ID, "테스트 삭제");
         productRepository.save(deleted);
 
-        List<ProductSummaryResponse> result = productRepository.findTop10ByViewCount();
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
 
         assertThat(result).extracting("productName").doesNotContain("삭제된인기상품");
     }

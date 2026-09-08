@@ -12,5 +12,5 @@ public interface ProductQueryRepository {
 
     CursorPageResponse<ProductSummaryResponse> search(ProductSearchCondition condition, String cursor, int size);
     Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable);
-    List<ProductSummaryResponse> findTop10ByViewCount();
+    List<ProductSummaryResponse> findTopByViewCount(int limit);
 }

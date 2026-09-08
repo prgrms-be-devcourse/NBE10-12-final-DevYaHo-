@@ -34,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProductService {
 
+    private static final int POPULAR_PRODUCT_LIMIT = 10;
+
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
@@ -65,7 +67,7 @@ public class ProductService {
     @Cacheable("popularProducts")
     @Transactional(readOnly = true)
     public List<ProductSummaryResponse> getPopularProducts() {
-        return productRepository.findTop10ByViewCount();
+        return productRepository.findTopByViewCount(POPULAR_PRODUCT_LIMIT);
     }
 
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회

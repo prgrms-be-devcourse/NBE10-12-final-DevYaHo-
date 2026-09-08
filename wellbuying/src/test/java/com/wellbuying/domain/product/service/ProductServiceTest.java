@@ -315,11 +315,11 @@ class ProductServiceTest {
     void getPopularProducts_리포지토리_결과를_그대로_반환한다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository);
         ProductSummaryResponse response = new ProductSummaryResponse(1L, "인기상품", 10000, "url", 999L);
-        when(productRepository.findTop10ByViewCount()).thenReturn(List.of(response));
+        when(productRepository.findTopByViewCount(10)).thenReturn(List.of(response));
 
         List<ProductSummaryResponse> result = productService.getPopularProducts();
 
         assertThat(result).containsExactly(response);
-        verify(productRepository).findTop10ByViewCount();
+        verify(productRepository).findTopByViewCount(10);
     }
 }
