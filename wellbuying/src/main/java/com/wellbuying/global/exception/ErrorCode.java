@@ -55,6 +55,7 @@ public enum ErrorCode {
     MEMBER_DORMANT(HttpStatus.FORBIDDEN, "MEMBER_403_DORMANT", "휴면 처리된 계정입니다. 이메일 인증 후 재활성화해주세요."),
     MEMBER_NOT_DORMANT(HttpStatus.CONFLICT, "MEMBER_409_NOT_DORMANT", "휴면 상태가 아닙니다."),
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_NOT_FOUND", "존재하지 않는 결제입니다."),
+    ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_404_NOT_FOUND", "존재하지 않는 주문입니다."),
     BILLING_KEY_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_404_BILLING_KEY_NOT_FOUND", "등록된 결제 수단이 없습니다."),
     BILLING_KEY_ISSUE_FAILED(HttpStatus.BAD_GATEWAY, "PAYMENT_502_BILLING_KEY_ISSUE_FAILED", "카드 등록에 실패했습니다. 다시 시도해주세요."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "COMMON_400_INVALID_CURSOR", "유효하지 않은 커서입니다."),

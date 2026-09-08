@@ -1,4 +1,4 @@
-package com.wellbuying.domain.payment.entity;
+package com.wellbuying.domain.order.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
