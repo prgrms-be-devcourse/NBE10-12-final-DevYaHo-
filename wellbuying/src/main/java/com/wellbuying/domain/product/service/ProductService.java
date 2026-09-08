@@ -27,6 +27,7 @@ import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -151,7 +152,7 @@ public class ProductService {
             outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
         }
         String newThumbnailUrl = request.thumbnailUrl();
-        boolean imageChanged = newThumbnailUrl != null && !newThumbnailUrl.equals(previousThumbnailUrl);
+        boolean imageChanged = !Objects.equals(newThumbnailUrl, previousThumbnailUrl);
         if (imageChanged && productImageUploadService.isOurBucketUrl(newThumbnailUrl)) {
             eventPublisher.publishEvent(new ProductImageConfirmedEvent(newThumbnailUrl));
         }
