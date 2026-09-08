@@ -20,7 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RefreshTokenFallbackCleanupSchedulerTest {
 
     @Mock
-    private RefreshTokenFallbackJpaRepository refreshTokenFallbackJpaRepository;
+    private RefreshTokenFallbackStore refreshTokenFallbackStore;
 
     @Mock
     private JwtProperties jwtProperties;
@@ -36,13 +36,26 @@ class RefreshTokenFallbackCleanupSchedulerTest {
     @Test
     void refreshTokenExpirationMs만큼_이전_시점을_cutoff로_계산해_한_번만_삭제_쿼리를_호출한다() {
         when(jwtProperties.refreshTokenExpirationMs()).thenReturn(604_800_000L); // 7일
-        when(refreshTokenFallbackJpaRepository.deleteExpiredBefore(anyLong())).thenReturn(0);
+        when(refreshTokenFallbackStore.deleteExpiredBefore(anyLong())).thenReturn(0);
         long before = Instant.now().getEpochSecond() - 604_800L;
 
         scheduler.cleanupExpiredFallbackSessions();
 
         long after = Instant.now().getEpochSecond() - 604_800L;
-        verify(refreshTokenFallbackJpaRepository, times(1)).deleteExpiredBefore(cutoffCaptor.capture());
+        verify(refreshTokenFallbackStore, times(1)).deleteExpiredBefore(cutoffCaptor.capture());
         assertThat(cutoffCaptor.getValue()).isBetween(before, after);
+    }
+
+    // 트랜잭션 경계(RefreshTokenFallbackStore)에서 던진 예외가 스케줄러 밖으로 전파되지 않고
+    // 로깅으로만 처리되는지 검증 - @Transactional과 try/catch를 분리한 이유(phase23 §2-4)
+    @Test
+    void 삭제_중_예외가_발생해도_스케줄러_밖으로_전파되지_않는다() {
+        when(jwtProperties.refreshTokenExpirationMs()).thenReturn(604_800_000L);
+        when(refreshTokenFallbackStore.deleteExpiredBefore(anyLong()))
+                .thenThrow(new RuntimeException("DB 장애 시뮬레이션"));
+
+        scheduler.cleanupExpiredFallbackSessions();
+
+        verify(refreshTokenFallbackStore, times(1)).deleteExpiredBefore(anyLong());
     }
 }

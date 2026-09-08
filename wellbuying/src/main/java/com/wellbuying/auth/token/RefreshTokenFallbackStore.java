@@ -59,6 +59,14 @@ public class RefreshTokenFallbackStore {
         repository.deleteByMemberId(memberId);
     }
 
+    // RefreshTokenFallbackCleanupScheduler(phase23 §2) 전담 - 스케줄러 자체는 트랜잭션 없이 try/catch로
+    // 로깅만 하고, 실제 트랜잭션 경계는 여기서 연다. 트랜잭션 메서드 안에서 예외를 삼키면 프록시가 커밋을
+    // 시도하다 UnexpectedRollbackException이 날 수 있어(Hibernate가 내부적으로 rollback-only 마킹) 분리했다
+    @Transactional
+    public int deleteExpiredBefore(long cutoffEpochSeconds) {
+        return repository.deleteExpiredBefore(cutoffEpochSeconds);
+    }
+
     public record RotateResult(long code, RefreshTokenValue value) {
         static RotateResult notFound() {
             return new RotateResult(0, null);
