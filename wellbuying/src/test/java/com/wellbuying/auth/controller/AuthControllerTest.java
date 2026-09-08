@@ -532,6 +532,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .cookie(new Cookie("refresh_token", "invalid.token.value")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_INVALID_TOKEN"))
+                .andExpect(cookie().maxAge("refresh_token", 0))
                 .andDo(document("auth/reissue-invalid-token",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
@@ -550,6 +551,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .cookie(new Cookie("refresh_token", refreshToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REFRESH_NOT_FOUND"))
+                .andExpect(cookie().maxAge("refresh_token", 0))
                 .andDo(document("auth/reissue-session-not-found",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
@@ -574,6 +576,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/auth/reissue").header("X-Device-Id", "device-1").cookie(requestCookie))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REFRESH_REUSE_DETECTED"))
+                .andExpect(cookie().maxAge("refresh_token", 0))
                 .andDo(document("auth/reissue-reuse-detected",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),

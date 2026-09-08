@@ -11,6 +11,7 @@ import com.wellbuying.global.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpHeaders;
@@ -45,18 +46,18 @@ public class AuthController {
     private ResponseCookie buildRefreshTokenCookie(String refreshToken) {
         return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
-                .secure(true)
+                .secure(jwtProperties.cookieSecure())
                 .sameSite("Lax")
                 .path("/api/auth")
                 .maxAge(jwtProperties.refreshTokenExpirationMs() / 1000)
                 .build();
     }
 
-    // 로그아웃 시 브라우저에 남은 refresh token 쿠키를 즉시 만료시켜 지운다
+    // 로그아웃 시 / reissue 실패 시 브라우저에 남은 refresh token 쿠키를 즉시 만료시켜 지운다
     private ResponseCookie expireRefreshTokenCookie() {
         return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(jwtProperties.cookieSecure())
                 .sameSite("Lax")
                 .path("/api/auth")
                 .maxAge(0)
@@ -124,14 +125,23 @@ public class AuthController {
     @PostMapping("/api/auth/reissue")
     public ResponseEntity<ReissueResponse> reissue(
             @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String refreshToken,
-            @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId,
+            HttpServletResponse httpResponse) {
         if (refreshToken == null) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         if (deviceId == null || deviceId.isBlank()) {
             throw new BusinessException(ErrorCode.DEVICE_ID_REQUIRED);
         }
-        ReissueResponse response = authService.reissue(refreshToken);
+        ReissueResponse response;
+        try {
+            response = authService.reissue(refreshToken);
+        } catch (BusinessException e) {
+            // 유효하지 않은/재사용된 refresh token이면 브라우저에 남은 쿠키를 바로 지워 재시도 루프를 막는다
+            // GlobalExceptionHandler가 이 응답에 에러 바디를 채우므로 헤더만 추가하고 그대로 던진다
+            httpResponse.addHeader(HttpHeaders.SET_COOKIE, expireRefreshTokenCookie().toString());
+            throw e;
+        }
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(response.refreshToken()).toString())
                 .body(response);
