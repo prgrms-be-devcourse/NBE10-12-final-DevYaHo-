@@ -3,14 +3,21 @@ package com.wellbuying.domain.product.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductImageSaveRequest;
+import com.wellbuying.domain.product.entity.ImageType;
+import com.wellbuying.domain.product.service.ProductImageService;
 import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
@@ -20,6 +27,8 @@ import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -50,6 +59,9 @@ class ProductControllerTest {
 
     @MockitoBean
     private ProductImageUploadService productImageUploadService;
+
+    @MockitoBean
+    private ProductImageService productImageService;
 
     @AfterEach
     void clearSecurityContext() {
@@ -225,5 +237,39 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
                 .andExpect(jsonPath("$.imageUrl")
                         .value("https://bucket.s3.amazonaws.com/gallery-images/1/uuid.webp"));
+    }
+
+    // 판매자 인증 후 유효한 요청이면 204와 함께 갤러리 이미지가 저장된다
+    @Test
+    void 갤러리_이미지_저장_요청시_204를_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
+                .andExpect(status().isNoContent());
+
+        verify(productImageService).saveImages(eq(1L), eq(10L), eq(ImageType.GALLERY), any());
+    }
+
+    // 개수 초과 등으로 서비스에서 예외가 발생하면 400을 반환한다
+    @Test
+    void 갤러리_이미지_저장시_서비스_예외가_발생하면_400을_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        doThrow(new BusinessException(ErrorCode.INVALID_INPUT))
+                .when(productImageService).saveImages(any(), any(), any(), any());
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
+                .andExpect(status().isBadRequest());
     }
 }
