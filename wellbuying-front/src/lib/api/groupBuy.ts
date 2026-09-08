@@ -18,11 +18,15 @@ export function listGroupBuys(params?: {
   status?: GroupBuyStatus;
   page?: number;
   size?: number;
+  // Spring Pageable이 그대로 받는 "속성,방향" 형식(예: "viewCount,desc") - 서버가 이 기준으로
+  // 정렬해서 내려주므로, 전체 데이터 중 상위 N개를 잘라 받는 목록에서도 순서가 항상 정확하다
+  sort?: string;
 }): Promise<PageResponse<GroupBuySummaryResponse>> {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
+  if (params?.sort) query.set("sort", params.sort);
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return http.get<PageResponse<GroupBuySummaryResponse>>(`/api/groupBuys${suffix}`);
 }

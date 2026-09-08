@@ -114,12 +114,18 @@ public class GroupBuyService {
         return GroupBuyDetailResponse.of(groupBuy, priceTiers, product, resolveCategoryName(product));
     }
 
-    @Transactional(readOnly = true)
+    // 상세 조회마다 조회수를 증가시키므로 readOnly가 아니다(응답 자체는 증가 전 값을 담는다 -
+    // 매진 즉시 확정 시 currentQuantity를 응답 이후에 반영하는 것과 같은 이유로, 정확히 +1된 값을
+    // 이번 응답에 반영하는 것보다 조회 경로를 단순하게 유지하는 쪽을 택했다)
+    @Transactional
     public GroupBuyDetailResponse getDetail(Long groupBuyId) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
         List<GroupBuyPrice> priceTiers = groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(groupBuyId);
         Product product = productRepository.findById(groupBuy.getProductId()).orElse(null);
-        return GroupBuyDetailResponse.of(groupBuy, priceTiers, product, resolveCategoryName(product));
+        GroupBuyDetailResponse response = GroupBuyDetailResponse.of(groupBuy, priceTiers, product,
+                resolveCategoryName(product));
+        groupBuyRepository.increaseViewCount(groupBuyId);
+        return response;
     }
 
     @Transactional(readOnly = true)

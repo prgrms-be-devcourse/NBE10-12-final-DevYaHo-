@@ -22,7 +22,8 @@ public record GroupBuyDetailResponse(
         int maxQuantity,
         List<GroupBuyPriceResponse> priceTiers,
         LocalDateTime createdAt,
-        boolean suspended
+        boolean suspended,
+        long viewCount
 ) {
 
     // product가 null이면(이론상 항상 존재하지만, 이 응답이 추가되기 전에 만들어진 레거시 행 대비) 빈 값으로 안전하게 처리
@@ -42,6 +43,7 @@ public record GroupBuyDetailResponse(
                 groupBuy.getMaxQuantity(),
                 priceTiers.stream().map(GroupBuyPriceResponse::of).toList(),
                 groupBuy.getCreatedAt(),
-                groupBuy.isSuspended());
+                groupBuy.isSuspended(),
+                groupBuy.getViewCount());
     }
 }

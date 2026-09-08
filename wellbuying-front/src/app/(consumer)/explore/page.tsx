@@ -62,9 +62,9 @@ export default function ExplorePage() {
         case "closing":
           return a.daysLeft - b.daysLeft;
         case "new":
-          return baseDeals.indexOf(b) - baseDeals.indexOf(a);
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         default:
-          return b.currentQuantity - a.currentQuantity;
+          return b.viewCount - a.viewCount;
       }
     });
   }, [baseDeals, category, query, sort]);
