@@ -26,7 +26,7 @@ public class RefreshTokenFallbackCleanupScheduler {
     // 트랜잭션 경계는 RefreshTokenFallbackStore.deleteExpiredBefore()가 담당한다 - 이 메서드 자체는
     // 트랜잭션 없이 try/catch로 로깅만 하므로, @Transactional 메서드 안에서 예외를 삼켜 프록시가
     // 잘못 커밋을 시도하는 문제(UnexpectedRollbackException)가 생기지 않는다
-    @Scheduled(cron = "0 15 0 * * *")
+    @Scheduled(cron = "0 15 0 * * *", zone = "Asia/Seoul")
     public void cleanupExpiredFallbackSessions() {
         try {
             long cutoffEpochSeconds = Instant.now().minusMillis(jwtProperties.refreshTokenExpirationMs())

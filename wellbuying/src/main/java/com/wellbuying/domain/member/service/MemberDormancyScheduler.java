@@ -25,7 +25,7 @@ public class MemberDormancyScheduler {
         this.memberService = memberService;
     }
 
-    @Scheduled(cron = "0 5 0 * * *")
+    @Scheduled(cron = "0 5 0 * * *", zone = "Asia/Seoul")
     public void markDormantMembers() {
         LocalDateTime threshold = LocalDateTime.now().minusMonths(Member.DORMANT_THRESHOLD_MONTHS);
         int totalCount = 0;
