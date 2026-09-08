@@ -13,9 +13,9 @@ import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -29,8 +29,14 @@ class GroupBuyLifecycleSchedulerTest {
     @Mock
     private GroupBuyCloseProcessor groupBuyCloseProcessor;
 
-    @InjectMocks
     private GroupBuyLifecycleScheduler scheduler;
+
+    // 건별 마감 처리를 병렬 실행하는 실제 executor 대신, 테스트에서는 호출 스레드에서 즉시 동기 실행해
+    // verify() 시점에 모든 처리가 이미 끝나있음을 보장한다 (Runnable::run은 execute()를 그 자리에서 바로 호출)
+    @BeforeEach
+    void setUp() {
+        scheduler = new GroupBuyLifecycleScheduler(groupBuyRepository, groupBuyCloseProcessor, Runnable::run);
+    }
 
     // 순수 자바 객체로 생성한 GroupBuy는 id가 없어, 배치 쿼리 키로 쓸 수 있도록 테스트에서만 id를 직접 세팅한다
     private GroupBuy withId(Long id, GroupBuy groupBuy) {
@@ -150,5 +156,35 @@ class GroupBuyLifecycleSchedulerTest {
 
         verify(groupBuyCloseProcessor).closeFailed(1L);
         verify(groupBuyCloseProcessor).closeFailed(2L);
+    }
+
+    // 한 라운드가 BATCH_LIMIT(500)만큼 꽉 차면 다음 60초 틱을 기다리지 않고 이번 틱 안에서 곧바로 다음 라운드를
+    // 이어서 처리하는지 검증 - 마지막 라운드가 꽉 차지 않은 순간(더 이상 남지 않음) 멈춘다
+    @Test
+    void 라운드가_가득_차면_같은_틱_안에서_다음_라운드를_이어서_처리한다() {
+        List<GroupBuy> fullRound = java.util.stream.IntStream.rangeClosed(1, 500)
+                .mapToObj(i -> withId((long) i, GroupBuy.create(10L, 1L, "제목" + i,
+                        LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000)))
+                .peek(gb -> {
+                    gb.start();
+                    gb.increaseQuantity(150);
+                })
+                .toList();
+        GroupBuy remaining = withId(501L, GroupBuy.create(10L, 1L, "제목501",
+                LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
+        remaining.start();
+        remaining.increaseQuantity(150);
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(fullRound, List.of(remaining));
+        when(groupBuyCloseProcessor.closeSucceeded(any())).thenReturn(fullRound.get(0));
+
+        scheduler.closeOngoingGroupBuys();
+
+        verify(groupBuyRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(), any());
+        verify(groupBuyCloseProcessor).closeSucceeded(501L);
+        for (long id = 1; id <= 500; id++) {
+            verify(groupBuyCloseProcessor).closeSucceeded(id);
+        }
     }
 }

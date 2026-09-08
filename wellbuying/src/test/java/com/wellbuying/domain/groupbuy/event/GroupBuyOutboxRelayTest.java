@@ -99,4 +99,28 @@ class GroupBuyOutboxRelayTest {
 
         org.assertj.core.api.Assertions.assertThatCode(() -> relay.relay()).doesNotThrowAnyException();
     }
+
+    // 한 라운드가 BATCH_LIMIT(200)만큼 꽉 차면 다음 3초 틱을 기다리지 않고 이번 틱 안에서 곧바로 다음 라운드를
+    // 이어서 처리하는지 검증 - 마지막 라운드가 꽉 차지 않은 순간(더 이상 남지 않음) 멈춘다
+    @SuppressWarnings("unchecked")
+    @Test
+    void 라운드가_가득_차면_같은_틱_안에서_다음_라운드를_이어서_처리한다() {
+        List<GroupBuyEventOutbox> fullRound = java.util.stream.IntStream.rangeClosed(1, 200)
+                .mapToObj(i -> eventWithId((long) i))
+                .toList();
+        List<GroupBuyEventOutbox> partialRound = List.of(eventWithId(201L));
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(fullRound, partialRound);
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.relay();
+
+        verify(outboxRepository, org.mockito.Mockito.times(2))
+                .findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any());
+        ArgumentCaptor<List<GroupBuyEventOutbox>> succeededCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dispatcher, org.mockito.Mockito.times(2)).markPublished(succeededCaptor.capture());
+        assertThat(succeededCaptor.getAllValues().get(0)).hasSize(200);
+        assertThat(succeededCaptor.getAllValues().get(1)).hasSize(1);
+    }
 }
