@@ -7,16 +7,15 @@ export type LoginRequest = {
   password: string;
 };
 
+// refreshToken은 httpOnly 쿠키(Set-Cookie)로만 내려가고 응답 JSON에는 담기지 않는다(phase25)
 export type LoginResponse = {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresIn: number;
   deviceId: string;
 };
 
 export type ReissueResponse = {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresIn: number;
 };
 

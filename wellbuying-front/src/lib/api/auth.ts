@@ -21,7 +21,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
     { email, password },
     { headers: deviceId ? { "X-Device-Id": deviceId } : {} },
   );
-  saveTokens({ accessToken: response.accessToken, refreshToken: response.refreshToken });
+  saveTokens({ accessToken: response.accessToken });
   saveDeviceId(response.deviceId);
   return response;
 }
@@ -86,7 +86,7 @@ export async function exchangeOAuthCode(code: string): Promise<LoginResponse> {
     { code },
     { headers: deviceId ? { "X-Device-Id": deviceId } : {} },
   );
-  saveTokens({ accessToken: response.accessToken, refreshToken: response.refreshToken });
+  saveTokens({ accessToken: response.accessToken });
   saveDeviceId(response.deviceId);
   return response;
 }
