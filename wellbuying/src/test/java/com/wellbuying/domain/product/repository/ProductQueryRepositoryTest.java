@@ -245,7 +245,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
 
         List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
 
-        assertThat(result).extracting("productName").containsExactly("많은조회수", "적은조회수");
+        assertThat(result).extracting(ProductSummaryResponse::productName).containsExactly("많은조회수", "적은조회수");
     }
 
     // limit 파라미터만큼만 반환된다
@@ -261,7 +261,7 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         List<ProductSummaryResponse> result = productRepository.findTopByViewCount(3);
 
         assertThat(result).hasSize(3);
-        assertThat(result).extracting("productName").containsExactly("상품0", "상품1", "상품2");
+        assertThat(result).extracting(ProductSummaryResponse::productName).containsExactly("상품0", "상품1", "상품2");
     }
 
     // PENDING/REJECTED 상품은 조회수가 높아도 제외된다
