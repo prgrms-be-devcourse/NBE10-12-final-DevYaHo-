@@ -30,6 +30,7 @@ import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -81,15 +82,13 @@ public class ProductService {
     public ProductDetailResponse getDetail(Long productId) {
         Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
-        List<String> galleryImageUrls = findImageUrls(productId, ImageType.GALLERY);
-        List<String> descriptionImageUrls = findImageUrls(productId, ImageType.DESCRIPTION);
+        Map<ImageType, List<String>> imageUrlsByType = productImageRepository
+                .findByProductIdOrderBySortOrderAsc(productId).stream()
+                .collect(Collectors.groupingBy(ProductImage::getImageType,
+                        Collectors.mapping(ProductImage::getImageUrl, Collectors.toList())));
+        List<String> galleryImageUrls = imageUrlsByType.getOrDefault(ImageType.GALLERY, List.of());
+        List<String> descriptionImageUrls = imageUrlsByType.getOrDefault(ImageType.DESCRIPTION, List.of());
         return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls);
-    }
-
-    private List<String> findImageUrls(Long productId, ImageType imageType) {
-        return productImageRepository.findByProductIdAndImageTypeOrderBySortOrderAsc(productId, imageType).stream()
-                .map(ProductImage::getImageUrl)
-                .collect(Collectors.toList());
     }
 
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리
