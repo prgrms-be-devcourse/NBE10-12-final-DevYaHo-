@@ -222,13 +222,13 @@ public class GroupBuyService {
     public void requestSuspension(Long producerId, Long groupBuyId, GroupBuySuspensionRequestCreateRequest request) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
         validateOwner(groupBuy, producerId);
-        if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
-            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
-        }
-        // suspend()는 status(GroupBuyStatus)와 별개 축이라 이미 판매정지된 공동구매도 status는 ONGOING으로 남는다 -
-        // 위의 ONGOING 체크만으로는 걸러지지 않으므로 별도로 검증한다.
+        // isSuspended() 체크를 status 체크보다 먼저 한다 - suspend()가 status도 CANCELED로 바꾸므로,
+        // 순서가 바뀌면 이미 판매정지된 건이 더 일반적인 GROUP_BUY_NOT_ONGOING으로 잘못 응답된다.
         if (groupBuy.isSuspended()) {
             throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
+        if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
         }
         if (groupBuySuspensionRequestRepository.existsByGroupBuyIdAndStatus(groupBuyId,
                 GroupBuySuspensionStatus.PENDING)) {
@@ -251,7 +251,7 @@ public class GroupBuyService {
                 titlesById.getOrDefault(request.getGroupBuyId(), "")));
     }
 
-    // 판매정지 요청 승인 - 요청을 APPROVED로 전환하고 대상 공동구매를 suspended=true로 변경
+    // 판매정지 요청 승인 - 요청을 APPROVED로 전환하고 대상 공동구매를 suspended=true, status=CANCELED로 변경
     @Transactional
     public void approveSuspensionRequest(Long requestId) {
         GroupBuySuspensionRequest request = findPendingSuspensionRequest(requestId);
