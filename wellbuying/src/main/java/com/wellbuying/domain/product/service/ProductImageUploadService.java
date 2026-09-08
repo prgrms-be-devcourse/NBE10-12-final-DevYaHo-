@@ -1,5 +1,8 @@
 package com.wellbuying.domain.product.service;
 
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.entity.Role;
+import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
@@ -28,15 +31,18 @@ public class ProductImageUploadService {
     private final String bucket;
     private final String publicUrlPrefix;
     private final long presignedUrlExpirationSeconds;
+    private final MemberRepository memberRepository;
 
     public ProductImageUploadService(S3Presigner s3Presigner,
             @Value("${aws.s3.bucket}") String bucket,
             @Value("${aws.s3.region}") String region,
             @Value("${aws.s3.endpoint:}") String endpoint,
-            @Value("${aws.s3.presigned-url-expiration-seconds}") long presignedUrlExpirationSeconds) {
+            @Value("${aws.s3.presigned-url-expiration-seconds}") long presignedUrlExpirationSeconds,
+            MemberRepository memberRepository) {
         this.s3Presigner = s3Presigner;
         this.bucket = bucket;
         this.presignedUrlExpirationSeconds = presignedUrlExpirationSeconds;
+        this.memberRepository = memberRepository;
         // 설정값에 트레일링 슬래시가 섞여 들어와도 중복 슬래시(//)가 생기지 않도록 정규화
         String normalizedEndpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
         // 운영은 virtual-hosted-style S3 URL, 로컬/CI(MinIO)는 endpoint override + path-style URL
@@ -47,6 +53,7 @@ public class ProductImageUploadService {
 
     // 허용된 contentType인지 확인 후 pending 태그가 포함된 presigned PUT URL을 발급 - 실제 저장 확정은 판매자가 상품 등록/수정 API를 호출해야 이루어진다
     public ProductImageUploadUrlResponse issueUploadUrl(Long sellerId, ProductImageUploadUrlRequest request) {
+        validateSeller(sellerId);
         String extension = validateContentType(request.contentType());
         String key = "product-thumbnails/%d/%s.%s".formatted(sellerId, UUID.randomUUID(), extension);
         String uploadUrl = issuePresignedPutUrl(key, request.contentType());
@@ -57,6 +64,7 @@ public class ProductImageUploadService {
     // sellerId 기준으로 키를 생성하고, 실제 상품에 붙이는 건 별도 저장(확정) API가 담당한다
     public ProductDescriptionImageUploadUrlResponse issueDescriptionImageUploadUrl(Long sellerId,
             ProductImageUploadUrlRequest request) {
+        validateSeller(sellerId);
         String extension = validateContentType(request.contentType());
         String key = "description-images/%d/%s.%s".formatted(sellerId, UUID.randomUUID(), extension);
         String uploadUrl = issuePresignedPutUrl(key, request.contentType());
@@ -71,6 +79,14 @@ public class ProductImageUploadService {
     // 우리 버킷 URL에서 S3 객체 키를 추출 - isOurBucketUrl()로 확인된 URL에만 사용할 것
     public String extractKey(String url) {
         return url.substring(publicUrlPrefix.length());
+    }
+
+    private void validateSeller(Long sellerId) {
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(sellerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getRole() != Role.SELLER) {
+            throw new BusinessException(ErrorCode.PRODUCT_FORBIDDEN);
+        }
     }
 
     private String validateContentType(String contentType) {
