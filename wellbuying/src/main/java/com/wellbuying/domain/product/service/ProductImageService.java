@@ -49,6 +49,14 @@ public class ProductImageService {
         List<ProductImage> existing = productImageRepository.findByProductIdAndImageType(productId, imageType);
         Set<String> existingUrls = existing.stream().map(ProductImage::getImageUrl).collect(Collectors.toSet());
 
+        productImageRepository.deleteByProductIdAndImageType(productId, imageType);
+        List<ProductImage> toSave = new ArrayList<>();
+        int order = 0;
+        for (String url : newUrls) {
+            toSave.add(ProductImage.register(productId, imageType, url, order++));
+        }
+        productImageRepository.saveAll(toSave);
+
         newUrls.stream()
                 .filter(url -> !existingUrls.contains(url))
                 .forEach(url -> eventPublisher.publishEvent(new ProductImageConfirmedEvent(url)));
@@ -57,13 +65,5 @@ public class ProductImageService {
                 .filter(url -> !newUrls.contains(url))
                 .filter(productImageUploadService::isOurBucketUrl)
                 .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
-
-        productImageRepository.deleteByProductIdAndImageType(productId, imageType);
-        List<ProductImage> toSave = new ArrayList<>();
-        int order = 0;
-        for (String url : newUrls) {
-            toSave.add(ProductImage.register(productId, imageType, url, order++));
-        }
-        productImageRepository.saveAll(toSave);
     }
 }
