@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.wellbuying.domain.payment.entity.Order;
+import com.wellbuying.domain.order.entity.Order;
 import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
 import com.wellbuying.domain.payment.event.PaymentCompletedEvent;

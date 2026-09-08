@@ -1,6 +1,6 @@
-package com.wellbuying.domain.payment.repository;
+package com.wellbuying.domain.order.repository;
 
-import com.wellbuying.domain.payment.entity.Order;
+import com.wellbuying.domain.order.entity.Order;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 // PK는 토스로 보내는 orderId와 같은 값(문자열)이다 - Order 참고

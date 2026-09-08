@@ -1,11 +1,11 @@
 package com.wellbuying.domain.payment.service;
 
-import com.wellbuying.domain.payment.entity.Order;
+import com.wellbuying.domain.order.entity.Order;
+import com.wellbuying.domain.order.repository.OrderRepository;
 import com.wellbuying.domain.payment.entity.Payment;
 import com.wellbuying.domain.payment.entity.PaymentConsumedEvent;
 import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
 import com.wellbuying.domain.payment.gateway.PgApproveResult;
-import com.wellbuying.domain.payment.repository.OrderRepository;
 import com.wellbuying.domain.payment.repository.PaymentRepository;
 import com.wellbuying.domain.payment.repository.PaymentConsumedEventRepository;
 import com.wellbuying.global.exception.BusinessException;

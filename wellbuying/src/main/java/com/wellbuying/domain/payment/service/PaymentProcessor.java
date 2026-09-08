@@ -1,6 +1,6 @@
 package com.wellbuying.domain.payment.service;
 
-import com.wellbuying.domain.payment.entity.Order;
+import com.wellbuying.domain.order.entity.Order;
 import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
 import com.wellbuying.domain.payment.event.PaymentCompletedEvent;
