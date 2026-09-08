@@ -25,16 +25,22 @@ public class RefreshTokenFallbackCleanupScheduler {
     }
 
     // deleteExpiredBefore()가 @Modifying 벌크 쿼리라 활성 트랜잭션이 반드시 필요함(JPA
-    // executeUpdate() 요구사항) - 리포지토리 프록시가 자동으로 열어주지 않아 호출부에 명시해야 한다
+    // executeUpdate() 요구사항) - 리포지토리 메서드에 직접 붙여도 되지만, 트랜잭션 경계는
+    // 비즈니스 로직의 시작점(스케줄러)에서 여는 쪽을 따랐다
     @Transactional
     @Scheduled(cron = "0 15 0 * * *")
     public void cleanupExpiredFallbackSessions() {
-        long cutoffEpochSeconds = Instant.now().minusMillis(jwtProperties.refreshTokenExpirationMs()).getEpochSecond();
-        int deletedCount = refreshTokenFallbackJpaRepository.deleteExpiredBefore(cutoffEpochSeconds);
-        if (deletedCount > 0) {
-            log.info("refresh token fallback 정리 배치 완료 - {}건 삭제", deletedCount);
-        } else {
-            log.debug("refresh token fallback 정리 배치 완료 - 삭제 대상 없음");
+        try {
+            long cutoffEpochSeconds = Instant.now().minusMillis(jwtProperties.refreshTokenExpirationMs())
+                    .getEpochSecond();
+            int deletedCount = refreshTokenFallbackJpaRepository.deleteExpiredBefore(cutoffEpochSeconds);
+            if (deletedCount > 0) {
+                log.info("refresh token fallback 정리 배치 완료 - {}건 삭제", deletedCount);
+            } else {
+                log.debug("refresh token fallback 정리 배치 완료 - 삭제 대상 없음");
+            }
+        } catch (Exception e) {
+            log.error("refresh token fallback 정리 배치 중 오류 발생", e);
         }
     }
 }
