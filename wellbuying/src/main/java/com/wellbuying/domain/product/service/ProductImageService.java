@@ -36,18 +36,18 @@ public class ProductImageService {
     // DB는 기존 것을 전부 지우고 요청받은 순서 그대로 다시 저장한다 (개별 diff 갱신보다 단순하고 안전함)
     @Transactional
     public void saveImages(Long sellerId, Long productId, ImageType imageType, List<String> imageUrls) {
-        if (imageUrls.size() > imageType.getMaxCount()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
         boolean hasExternalUrl = imageUrls.stream().anyMatch(url -> !productImageUploadService.isOurBucketUrl(url));
         if (hasExternalUrl) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        Set<String> newUrls = new LinkedHashSet<>(imageUrls);
+        if (newUrls.size() > imageType.getMaxCount()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         productService.getOwnedOrThrow(sellerId, productId);
 
         List<ProductImage> existing = productImageRepository.findByProductIdAndImageType(productId, imageType);
         Set<String> existingUrls = existing.stream().map(ProductImage::getImageUrl).collect(Collectors.toSet());
-        Set<String> newUrls = new LinkedHashSet<>(imageUrls);
 
         newUrls.stream()
                 .filter(url -> !existingUrls.contains(url))
