@@ -46,7 +46,7 @@ class GroupBuyPriceRepositoryTest extends AbstractIntegrationTest {
     }
 
     // findByGroupBuyIdIn이 여러 공동구매의 가격 구간을 단 한 번의 쿼리로 함께 조회하는지 검증
-    // (GroupBuyLifecycleScheduler가 배치 마감 처리 시 건별 반복 조회 대신 사용하는 메서드)
+    // (GroupBuyFinalizationWorker가 최종가 확정 배치 처리 시 건별 반복 조회 대신 사용하는 메서드)
     @Test
     void findByGroupBuyIdIn은_여러_공동구매의_가격_구간을_한_번에_조회한다() {
         Long groupBuyId1 = saveGroupBuy();

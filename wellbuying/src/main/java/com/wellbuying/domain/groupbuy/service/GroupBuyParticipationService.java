@@ -7,18 +7,14 @@ import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartMeResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
-import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
-import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,21 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class GroupBuyParticipationService {
 
     private final GroupBuyRepository groupBuyRepository;
-    private final GroupBuyPriceRepository groupBuyPriceRepository;
     private final GroupBuyPartRepository groupBuyPartRepository;
     private final GroupBuyCounterRepository groupBuyCounterRepository;
-    private final GroupBuyEventPublisher groupBuyEventPublisher;
     private final BuyerAddressRepository buyerAddressRepository;
 
     public GroupBuyParticipationService(GroupBuyRepository groupBuyRepository,
-            GroupBuyPriceRepository groupBuyPriceRepository, GroupBuyPartRepository groupBuyPartRepository,
-            GroupBuyCounterRepository groupBuyCounterRepository, GroupBuyEventPublisher groupBuyEventPublisher,
+            GroupBuyPartRepository groupBuyPartRepository, GroupBuyCounterRepository groupBuyCounterRepository,
             BuyerAddressRepository buyerAddressRepository) {
         this.groupBuyRepository = groupBuyRepository;
-        this.groupBuyPriceRepository = groupBuyPriceRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
         this.groupBuyCounterRepository = groupBuyCounterRepository;
-        this.groupBuyEventPublisher = groupBuyEventPublisher;
         this.buyerAddressRepository = buyerAddressRepository;
     }
 
@@ -86,28 +77,17 @@ public class GroupBuyParticipationService {
             GroupBuy updatedGroupBuy = groupBuyRepository.findById(groupBuyId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_BUY_NOT_FOUND));
 
+            // 매진 판정만 여기서 즉시 하고 SUCCESS로 확정한다. 확정 참여자 전원(참여 시점이 서로 달랐던 사람들
+            // 포함)에게 최종 단가를 반영하고 성사 이벤트를 기록하는 무거운 작업(참여자 수 N에 비례)은 하지 않는다 -
+            // 그 작업까지 이 트랜잭션이 떠안으면 매진을 트리거한 단 하나의 요청만 N에 비례해 느려진다(부하테스트
+            // 실측: 300명 규모 1.7초, 3,000명 규모 6.2초). 대신 GroupBuyFinalizationWorker가 별도 스케줄 틱에서
+            // 뒤이어 처리하므로, 이 응답의 appliedPrice는 성사 트리거 여부와 무관하게 항상 null로 내려간다
             if (updatedGroupBuy.isSoldOut()) {
                 updatedGroupBuy.succeed();
-                // 매진으로 확정되는 순간이므로 여기서 딱 한 번만 최종 구간 단가를 계산해
-                // 확정 참여자 전원(참여 시점이 서로 달랐던 사람들 포함)에게 동일하게 채워준다
-                List<GroupBuyPrice> priceTiers = groupBuyPriceRepository
-                        .findByGroupBuyIdOrderByTierOrderAsc(groupBuyId);
-                int finalPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers,
-                        updatedGroupBuy.getCurrentQuantity());
-                // 확정 참여자 전원에게 최종 단가를 벌크 UPDATE 한 문장으로 반영한다 - 엔티티를 조회해 하나씩
-                // applyFinalPrice()로 mutate하면 참여자 수(N)만큼 dirty checking UPDATE가 나가므로,
-                // 그 대신 DB에 직접 반영한다. clearAutomatically라 실행 직후 영속성 컨텍스트가 비워진다
-                groupBuyPartRepository.applyFinalPriceToConfirmedParts(groupBuyId, finalPrice,
-                        GroupBuyPartStatus.CONFIRMED);
-                // Kafka 이벤트 발행용 확정 참여자 목록 - 위 벌크 UPDATE가 같은 트랜잭션 안에서 이미 반영된 뒤
-                // 재조회하는 것이라 최종가가 그대로 채워져 있다 (여기서 다시 forEach로 mutate하면 방금 피한
-                // dirty checking UPDATE가 그대로 재발하므로 절대 건드리지 않는다)
-                List<GroupBuyPart> confirmedParts = groupBuyPartRepository
-                        .findByGroupBuyIdAndStatus(groupBuyId, GroupBuyPartStatus.CONFIRMED);
-                // 방금 저장한 part는 위 clear로 인해 confirmedParts 안의 엔티티와 별개의(detached) 객체이므로,
-                // 응답에 최종가가 정확히 반영되도록 직접 채워준다 (detached라 이 mutation은 DB에 반영되지 않는다)
-                part.applyFinalPrice(finalPrice);
-                groupBuyEventPublisher.publishCompleted(updatedGroupBuy, confirmedParts);
+                // 마감 스케줄러 경로(GroupBuyCloseProcessor.closeSucceeded)와 동일하게 성사 확정 시점에
+                // Redis 카운터를 즉시 정리한다 - TTL로도 결국 만료되긴 하지만, 정리 시점을 경로마다 다르게
+                // 두지 않고 맞춘다
+                groupBuyCounterRepository.delete(groupBuyId);
             }
 
             return GroupBuyPartResponse.of(part);

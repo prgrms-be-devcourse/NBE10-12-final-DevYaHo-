@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
@@ -23,9 +24,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-// closeSucceeded/closeFailed는 GroupBuyLifecycleSchedulerTest가 아니라 여기서 검증한다 -
-// 상태 확정 + 참여자 최종가 반영 + 이벤트(아웃박스) 기록이 정확히 같은 메서드(=같은 트랜잭션) 안에서
-// 함께 호출되는지가 이 클래스의 핵심 책임이라, 스케줄러 쪽 목(mock)만으로는 그 원자성을 검증할 수 없다
+// closeSucceeded/closeFailed/finalizeSucceeded는 GroupBuyLifecycleSchedulerTest가 아니라 여기서 검증한다 -
+// 상태 확정(closeSucceeded/closeFailed)과 참여자 최종가 반영+이벤트 기록(finalizeSucceeded)이 각각
+// 정확히 같은 메서드(=같은 트랜잭션) 안에서 함께 호출되는지가 이 클래스의 핵심 책임이라, 스케줄러/워커
+// 쪽 목(mock)만으로는 그 원자성을 검증할 수 없다
 @ExtendWith(MockitoExtension.class)
 class GroupBuyCloseProcessorTest {
 
@@ -51,22 +53,38 @@ class GroupBuyCloseProcessorTest {
         return groupBuy;
     }
 
-    // 최소 수량 달성 시 SUCCESS로 확정하고, 확정 참여자 전원에게 최종 단가를 벌크 UPDATE로 반영하고,
-    // (배치 조회가 아니라) 이 건의 확정 참여자만 다시 조회해 이벤트 페이로드로 쓰고, Redis 카운터를 지우고,
-    // 성사 이벤트를 기록하는지 검증
+    // 최소 수량 달성 시 SUCCESS로 확정하고 Redis 카운터를 지우는지 검증 - 참여자 최종가 반영/이벤트 기록은
+    // 이 메서드가 하지 않는다(트리거 경로가 참여자 수와 무관하게 즉시 끝나야 하므로, finalizeSucceeded로 분리됨)
     @Test
-    void closeSucceeded는_상태_확정과_최종가_반영과_이벤트_기록을_모두_수행한다() {
+    void closeSucceeded는_상태_확정과_카운터_삭제만_수행하고_최종가_반영은_하지_않는다() {
         GroupBuy groupBuy = ongoingGroupBuy();
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+
+        GroupBuy result = closeProcessor.closeSucceeded(1L);
+
+        assertThat(result.getStatus().name()).isEqualTo("SUCCESS");
+        assertThat(result.getFinalizedAt()).isNull();
+        verify(groupBuyCounterRepository).delete(1L);
+        verify(groupBuyPartRepository, org.mockito.Mockito.never())
+                .applyFinalPriceToConfirmedParts(any(), any(Integer.class), any());
+        verify(groupBuyEventPublisher, org.mockito.Mockito.never()).publishCompleted(any(), any());
+    }
+
+    // finalizeSucceeded가 확정 참여자 전원에게 최종 단가를 벌크 UPDATE로 반영하고, 이 건의 확정 참여자만
+    // 다시 조회해 이벤트 페이로드로 쓰고, 성사 이벤트를 기록하고, finalizedAt을 채우는지 검증
+    @Test
+    void finalizeSucceeded는_최종가_반영과_이벤트_기록과_finalizedAt_기록을_모두_수행한다() {
+        GroupBuy groupBuy = ongoingGroupBuy();
+        groupBuy.succeed();
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         GroupBuyPart confirmedPart = GroupBuyPart.confirm(1L, 100L, 150);
         when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
                 .thenReturn(List.of(confirmedPart));
 
-        GroupBuy result = closeProcessor.closeSucceeded(1L, 12_000);
+        closeProcessor.finalizeSucceeded(1L, List.of(GroupBuyPrice.of(1L, 1, 1, 12_000)));
 
-        assertThat(result.getStatus().name()).isEqualTo("SUCCESS");
+        assertThat(groupBuy.getFinalizedAt()).isNotNull();
         verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 12_000, GroupBuyPartStatus.CONFIRMED);
-        verify(groupBuyCounterRepository).delete(1L);
         verify(groupBuyEventPublisher).publishCompleted(groupBuy, List.of(confirmedPart));
     }
 

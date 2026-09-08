@@ -4,14 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
-import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
-import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,9 +25,6 @@ class GroupBuyLifecycleSchedulerTest {
 
     @Mock
     private GroupBuyRepository groupBuyRepository;
-
-    @Mock
-    private GroupBuyPriceRepository groupBuyPriceRepository;
 
     @Mock
     private GroupBuyCloseProcessor groupBuyCloseProcessor;
@@ -57,43 +51,38 @@ class GroupBuyLifecycleSchedulerTest {
         assertThat(groupBuy.getStatus()).isEqualTo(GroupBuyStatus.ONGOING);
     }
 
-    // 마감 시각이 지났고 최소 수량을 달성한 공동구매는 GroupBuyCloseProcessor.closeSucceeded로 최종 단가와 함께
-    // 위임되는지 검증 (확정 참여자 조회·최종가 반영·이벤트 발행은 이제 closeSucceeded 내부 책임이라 GroupBuyCloseProcessorTest가 다룬다)
+    // 마감 시각이 지났고 최소 수량을 달성한 공동구매는 GroupBuyCloseProcessor.closeSucceeded로 위임되는지 검증
+    // (최종 단가 계산·확정 참여자 조회·최종가 반영·이벤트 발행은 이제 GroupBuyFinalizationWorker의 책임이라
+    // 스케줄러는 더 이상 가격 구간을 조회하지 않는다 - GroupBuyFinalizationWorkerTest가 그 부분을 다룬다)
     @Test
-    void 최소_수량을_달성했으면_closeSucceeded로_최종_단가와_함께_위임한다() {
+    void 최소_수량을_달성했으면_closeSucceeded로_위임한다() {
         GroupBuy groupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         groupBuy.start();
         groupBuy.increaseQuantity(150);
-        when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
-                .thenReturn(List.of(groupBuy));
-        when(groupBuyPriceRepository.findByGroupBuyIdIn(List.of(1L)))
-                .thenReturn(List.of(
-                        GroupBuyPrice.of(1L, 1, 1, 15_000),
-                        GroupBuyPrice.of(1L, 2, 100, 12_000)));
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(List.of(groupBuy));
         GroupBuy closedGroupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         closedGroupBuy.start();
         closedGroupBuy.succeed();
-        when(groupBuyCloseProcessor.closeSucceeded(1L, 12_000)).thenReturn(closedGroupBuy);
+        when(groupBuyCloseProcessor.closeSucceeded(1L)).thenReturn(closedGroupBuy);
 
         scheduler.closeOngoingGroupBuys();
 
-        // 마감 시점 누적 수량(150)이 100명 구간을 넘겼으므로 최종 단가는 12,000원으로 계산되어 위임된다
-        verify(groupBuyCloseProcessor).closeSucceeded(1L, 12_000);
+        verify(groupBuyCloseProcessor).closeSucceeded(1L);
         verify(groupBuyCloseProcessor, never()).closeFailed(any());
     }
 
     // 마감 시각이 지났지만 최소 수량 미달인 공동구매는 GroupBuyCloseProcessor.closeFailed로 위임되는지 검증
-    // (성사되지 않았으므로 가격 구간 조회 자체가 발생하지 않는다)
     @Test
     void 최소_수량_미달이면_closeFailed로_위임한다() {
         GroupBuy groupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         groupBuy.start();
         groupBuy.increaseQuantity(50);
-        when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
-                .thenReturn(List.of(groupBuy));
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(List.of(groupBuy));
         GroupBuy closedGroupBuy = withId(1L, GroupBuy.create(10L, 1L, "제목",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         closedGroupBuy.start();
@@ -103,16 +92,14 @@ class GroupBuyLifecycleSchedulerTest {
         scheduler.closeOngoingGroupBuys();
 
         verify(groupBuyCloseProcessor).closeFailed(1L);
-        verify(groupBuyCloseProcessor, never()).closeSucceeded(any(), any(Integer.class));
-        verify(groupBuyPriceRepository, never()).findByGroupBuyIdIn(any());
+        verify(groupBuyCloseProcessor, never()).closeSucceeded(any());
     }
 
-    // 여러 공동구매가 한 배치에서 동시에 마감돼도 가격 구간 조회(findByGroupBuyIdIn)는 건마다 반복 호출되지 않고
-    // 배치 전체에 대해 정확히 한 번씩만 호출되는지 검증 (N+1 회귀 방지). 확정 참여자 조회는 이제 스케줄러가 아니라
-    // GroupBuyCloseProcessor가 건별로 하므로 여기서는 다루지 않는다(GroupBuyCloseProcessorTest 참고).
-    // 실제 상태 확정(closeSucceeded/closeFailed)은 건별로 호출되고, 서로 다른 최종가가 그룹별로 뒤섞이지 않는지도 검증
+    // 여러 공동구매가 한 배치에서 동시에 마감돼도 각 건이 성사/미달 여부에 따라 정확히 closeSucceeded/closeFailed로
+    // 나뉘어 위임되는지 검증. 최종 단가 계산은 이제 스케줄러의 책임이 아니므로(GroupBuyFinalizationWorker로 이동)
+    // 여기서는 다루지 않는다
     @Test
-    void 여러_건이_동시에_마감돼도_최종_단가는_그룹별로_정확히_계산되고_가격_구간_조회는_한_번씩만_호출된다() {
+    void 여러_건이_동시에_마감돼도_성사_미달_여부에_따라_각각_위임된다() {
         GroupBuy succeeded1 = withId(1L, GroupBuy.create(10L, 1L, "제목1",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         succeeded1.start();
@@ -126,24 +113,15 @@ class GroupBuyLifecycleSchedulerTest {
         failed.start();
         failed.increaseQuantity(10);
 
-        when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
-                .thenReturn(List.of(succeeded1, succeeded2, failed));
-        when(groupBuyPriceRepository.findByGroupBuyIdIn(List.of(1L, 2L)))
-                .thenReturn(List.of(
-                        GroupBuyPrice.of(1L, 1, 1, 15_000),
-                        GroupBuyPrice.of(1L, 2, 100, 12_000),
-                        GroupBuyPrice.of(2L, 1, 1, 15_000),
-                        GroupBuyPrice.of(2L, 2, 1_000, 10_000)));
-        when(groupBuyCloseProcessor.closeSucceeded(any(), any(Integer.class))).thenReturn(succeeded1);
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(List.of(succeeded1, succeeded2, failed));
+        when(groupBuyCloseProcessor.closeSucceeded(any())).thenReturn(succeeded1);
         when(groupBuyCloseProcessor.closeFailed(any())).thenReturn(failed);
 
         scheduler.closeOngoingGroupBuys();
 
-        // 대상이 3건이지만 가격 구간 조회는 건별 반복이 아니라 딱 1번만 호출된다
-        verify(groupBuyPriceRepository, times(1)).findByGroupBuyIdIn(any());
-        // 공동구매 1은 150명(12,000원 구간), 공동구매 2는 1,000명(10,000원 구간) - 서로 다른 최종가가 뒤섞이지 않는다
-        verify(groupBuyCloseProcessor).closeSucceeded(1L, 12_000);
-        verify(groupBuyCloseProcessor).closeSucceeded(2L, 10_000);
+        verify(groupBuyCloseProcessor).closeSucceeded(1L);
+        verify(groupBuyCloseProcessor).closeSucceeded(2L);
         verify(groupBuyCloseProcessor).closeFailed(3L);
     }
 
@@ -159,8 +137,8 @@ class GroupBuyLifecycleSchedulerTest {
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
         healthy.start();
         healthy.increaseQuantity(5);
-        when(groupBuyRepository.findByStatusAndEndAtLessThanEqual(eq(GroupBuyStatus.ONGOING), any(), any()))
-                .thenReturn(List.of(failing, healthy));
+        when(groupBuyRepository.findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(eq(GroupBuyStatus.ONGOING), any(),
+                any())).thenReturn(List.of(failing, healthy));
         when(groupBuyCloseProcessor.closeFailed(1L)).thenThrow(new RuntimeException("DB 오류"));
         GroupBuy closedHealthy = withId(2L, GroupBuy.create(10L, 1L, "정상_건",
                 LocalDateTime.now().minusDays(2), LocalDateTime.now().minusMinutes(1), 100, 1_000));
