@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -253,7 +254,8 @@ class ProductControllerTest {
                         .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
                 .andExpect(status().isNoContent());
 
-        verify(productImageService).saveImages(eq(1L), eq(10L), eq(ImageType.GALLERY), any());
+        verify(productImageService).saveImages(eq(1L), eq(10L), eq(ImageType.GALLERY),
+                eq(List.of("https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg")));
     }
 
     // 개수 초과 등으로 서비스에서 예외가 발생하면 400을 반환한다
@@ -271,5 +273,22 @@ class ProductControllerTest {
                         .contentType("application/json")
                         .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // 이미지 URL 목록에 빈 문자열이 섞여 있으면 서비스 호출 전 400을 반환한다 (@NotBlank 검증)
+    @Test
+    void 갤러리_이미지_저장시_빈_URL이_섞여있으면_400을_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\", \"\"]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(productImageService, never()).saveImages(any(), any(), any(), any());
     }
 }
