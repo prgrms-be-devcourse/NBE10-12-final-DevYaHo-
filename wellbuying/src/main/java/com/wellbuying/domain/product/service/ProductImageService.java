@@ -35,8 +35,12 @@ public class ProductImageService {
     // 이미지 목록을 전체 교체 방식으로 저장 - 새로 추가된 URL은 확정 이벤트, 빠진 URL은 정리 이벤트를 발행하고
     // DB는 기존 것을 전부 지우고 요청받은 순서 그대로 다시 저장한다 (개별 diff 갱신보다 단순하고 안전함)
     @Transactional
-    public void saveImages(Long sellerId, Long productId, ImageType imageType, int maxCount, List<String> imageUrls) {
-        if (imageUrls.size() > maxCount) {
+    public void saveImages(Long sellerId, Long productId, ImageType imageType, List<String> imageUrls) {
+        if (imageUrls.size() > imageType.getMaxCount()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        boolean hasExternalUrl = imageUrls.stream().anyMatch(url -> !productImageUploadService.isOurBucketUrl(url));
+        if (hasExternalUrl) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         productService.getOwnedOrThrow(sellerId, productId);
@@ -47,7 +51,6 @@ public class ProductImageService {
 
         newUrls.stream()
                 .filter(url -> !existingUrls.contains(url))
-                .filter(productImageUploadService::isOurBucketUrl)
                 .forEach(url -> eventPublisher.publishEvent(new ProductImageConfirmedEvent(url)));
 
         existingUrls.stream()

@@ -53,9 +53,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "상품", description = "상품 조회/등록")
 public class ProductController {
 
-    private static final int MAX_GALLERY_IMAGES = 6;
-    private static final int MAX_DESCRIPTION_IMAGES = 10;
-
     private final ProductService productService;
     private final ProductSearchService productSearchService;
     private final ProductImageUploadService productImageUploadService;
@@ -148,7 +145,7 @@ public class ProductController {
             @PathVariable Long id,
             @Valid @RequestBody ProductImageSaveRequest request) {
         productImageService.saveImages(authenticatedMember.memberId(), id, ImageType.GALLERY,
-                MAX_GALLERY_IMAGES, request.imageUrls());
+                request.imageUrls());
         return ResponseEntity.noContent().build();
     }
 
@@ -161,7 +158,7 @@ public class ProductController {
             @PathVariable Long id,
             @Valid @RequestBody ProductImageSaveRequest request) {
         productImageService.saveImages(authenticatedMember.memberId(), id, ImageType.DESCRIPTION,
-                MAX_DESCRIPTION_IMAGES, request.imageUrls());
+                request.imageUrls());
         return ResponseEntity.noContent().build();
     }
 
