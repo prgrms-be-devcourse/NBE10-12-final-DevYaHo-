@@ -94,7 +94,7 @@ class ProductControllerTest {
     // 상품 단건 조회 시 200과 함께 상세 필드가 반환된다
     @Test
     void getProduct_존재하는_상품이면_상세정보를_반환한다() throws Exception {
-        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true);
+        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of());
         when(productService.getDetail(1L)).thenReturn(response);
 
         mockMvc.perform(get("/api/products/1"))
