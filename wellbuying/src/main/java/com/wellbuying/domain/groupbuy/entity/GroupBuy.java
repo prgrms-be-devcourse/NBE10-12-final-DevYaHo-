@@ -54,6 +54,11 @@ public class GroupBuy {
     @Column(nullable = false)
     private boolean suspended;
 
+    // 성사(SUCCESS) 확정 시점에는 채워지지 않는다 - GroupBuyFinalizationWorker가 참여자 최종가 반영 +
+    // outbox 이벤트 기록을 마친 뒤에만 채운다. null이면 "성사는 됐지만 아직 확정 참여자 후속 처리 전"이라는 뜻
+    @Column(name = "finalized_at")
+    private LocalDateTime finalizedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -108,6 +113,11 @@ public class GroupBuy {
     // 관리자가 판매정지 요청을 승인 - status(GroupBuyStatus)와는 별개 축으로, ONGOING인 채로 신규 참여만 막는다
     public void suspend() {
         this.suspended = true;
+    }
+
+    // GroupBuyFinalizationWorker가 확정 참여자 최종가 반영 + outbox 이벤트 기록까지 마쳤음을 표시
+    public void markFinalized() {
+        this.finalizedAt = LocalDateTime.now();
     }
 
     // 참여 확정 시 누적 참여 수량 증가 (Redis 원자적 카운터로 재고 초과 여부는 이미 검증된 상태)
@@ -180,6 +190,10 @@ public class GroupBuy {
 
     public boolean isSuspended() {
         return suspended;
+    }
+
+    public LocalDateTime getFinalizedAt() {
+        return finalizedAt;
     }
 
     public LocalDateTime getCreatedAt() {

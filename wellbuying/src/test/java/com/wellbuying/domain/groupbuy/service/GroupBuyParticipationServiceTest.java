@@ -17,16 +17,12 @@ import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
-import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
-import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
-import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,16 +37,10 @@ class GroupBuyParticipationServiceTest {
     private GroupBuyRepository groupBuyRepository;
 
     @Mock
-    private GroupBuyPriceRepository groupBuyPriceRepository;
-
-    @Mock
     private GroupBuyPartRepository groupBuyPartRepository;
 
     @Mock
     private GroupBuyCounterRepository groupBuyCounterRepository;
-
-    @Mock
-    private GroupBuyEventPublisher groupBuyEventPublisher;
 
     @Mock
     private BuyerAddressRepository buyerAddressRepository;
@@ -102,75 +92,29 @@ class GroupBuyParticipationServiceTest {
         assertThat(response.quantity()).isEqualTo(50);
         assertThat(response.appliedPrice()).isNull();
         assertThat(groupBuy.getCurrentQuantity()).isEqualTo(50);
-        verify(groupBuyEventPublisher, never()).publishCompleted(any(), any());
-        verify(groupBuyPriceRepository, never()).findByGroupBuyIdOrderByTierOrderAsc(any());
     }
 
-    // 참여로 인해 최대 수량에 도달하면(매진) 공동구매가 즉시 SUCCESS로 확정되고 확정된 참여자 전체에 대해 성사 이벤트가 발행되는지 검증
+    // 참여로 인해 최대 수량에 도달하면(매진) 공동구매가 즉시 SUCCESS로 확정되는지 검증. 확정 참여자 전원의
+    // 최종가 반영/성사 이벤트 발행은 이 메서드가 더 이상 하지 않는다 - GroupBuyFinalizationWorker가 별도
+    // 스케줄 틱에서 뒤이어 처리하므로(트리거 요청이 참여자 수와 무관하게 항상 빠르게 끝나야 함),
+    // 응답의 appliedPrice는 매진 트리거 여부와 상관없이 null로 내려간다 (그 부분은 GroupBuyCloseProcessorTest 참고)
     @Test
-    void 최대_수량에_도달하면_즉시_성사되고_참여자별로_이벤트가_발행된다() {
+    void 최대_수량에_도달하면_즉시_SUCCESS로_확정되지만_최종가_반영은_이_메서드가_하지_않는다() {
         GroupBuy groupBuy = ongoingGroupBuy(100, 100);
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
-        when(groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(1L))
-                .thenReturn(List.of(GroupBuyPrice.of(1L, 1, 1, 15_000)));
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        // 벌크 UPDATE는 mock이라 실제 DB 반영이 일어나지 않으므로, 재조회(findByGroupBuyIdAndStatus)가
-        // 벌크 UPDATE 이후의 DB 상태(최종가가 이미 반영된 상태)를 반환한다고 가정하고 미리 값을 채워둔다
-        GroupBuyPart confirmedPart = GroupBuyPart.confirm(1L, 100L, 100);
-        confirmedPart.applyFinalPrice(15_000);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenReturn(List.of(confirmedPart));
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
-
-        groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(100, 1L));
-
-        assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
-        assertThat(confirmedPart.getAppliedPrice()).isEqualTo(15_000);
-        // 확정 참여자 전원의 최종가는 개별 dirty checking이 아니라 벌크 UPDATE 한 문장으로 반영되는지 검증 (N+1 방지)
-        verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 15_000, GroupBuyPartStatus.CONFIRMED);
-        verify(groupBuyEventPublisher).publishCompleted(groupBuy, List.of(confirmedPart));
-    }
-
-    // 매진으로 성사되는 순간, 그보다 먼저 참여해 더 비싼 구간에 가격이 잠겨있던 참여자에게도 최종(가장 낮은) 구간 단가가
-    // 소급 적용되는지 검증 - "먼저 참여한 사람도 나중에 가격이 내려가면 그 가격으로 통일돼야 한다"는 요구사항
-    @Test
-    void 매진으로_성사되면_먼저_참여한_사람의_가격도_최종가로_소급_적용된다() {
-        GroupBuy groupBuy = ongoingGroupBuy(50, 100);
-        // 이미 50명이 참여해 DB상 누적 수량이 50인 상태를 재현 (Redis의 newTotal=100과 일치시키기 위함)
-        groupBuy.increaseQuantity(50);
-        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
-        stubAtomicIncrease(1L, groupBuy);
-        // 100명 도달 시점의 마지막 참여자 - 이 참여로 매진되며, 이 순간의 가격(10,000원)이 최종가다
-        when(groupBuyCounterRepository.tryIncrease(1L, 50, 100)).thenReturn(100L);
-        when(groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(1L))
-                .thenReturn(List.of(
-                        GroupBuyPrice.of(1L, 1, 1, 15_000),
-                        GroupBuyPrice.of(1L, 2, 100, 10_000)));
-        // save()로 실제 생성되는 참여 엔티티를 캡처해서, DB 조회(findByGroupBuyIdAndStatus)가 그 엔티티를 포함해
-        // 반환하도록 재현한다 (실제 DB라면 방금 insert한 행도 같은 조회에 당연히 함께 잡힌다)
-        GroupBuyPart[] savedPartHolder = new GroupBuyPart[1];
-        when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> {
-            savedPartHolder[0] = invocation.getArgument(0);
-            return savedPartHolder[0];
-        });
-        // 참여 시점엔 가격을 저장하지 않으므로 아직 null이었다가, 매진 확정 시 벌크 UPDATE로 최종가가 반영된다.
-        // 벌크 UPDATE는 mock이라 실제 DB 반영이 일어나지 않으므로, 재조회가 그 이후의 DB 상태를 반환한다고
-        // 가정하고 미리 최종가(10,000원)를 채워둔다
-        GroupBuyPart earlyParticipant = GroupBuyPart.confirm(1L, 200L, 50);
-        earlyParticipant.applyFinalPrice(10_000);
-        when(groupBuyPartRepository.findByGroupBuyIdAndStatus(1L, GroupBuyPartStatus.CONFIRMED))
-                .thenAnswer(invocation -> List.of(earlyParticipant, savedPartHolder[0]));
         when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
-                new GroupBuyPartCreateRequest(50, 1L));
+                new GroupBuyPartCreateRequest(100, 1L));
 
-        assertThat(response.appliedPrice()).isEqualTo(10_000);
-        assertThat(earlyParticipant.getAppliedPrice()).isEqualTo(10_000);
-        verify(groupBuyPartRepository).applyFinalPriceToConfirmedParts(1L, 10_000, GroupBuyPartStatus.CONFIRMED);
+        assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
+        assertThat(groupBuy.getFinalizedAt()).isNull();
+        assertThat(response.appliedPrice()).isNull();
+        verify(groupBuyPartRepository, never()).applyFinalPriceToConfirmedParts(any(), any(Integer.class), any());
+        verify(groupBuyPartRepository, never()).findByGroupBuyIdAndStatus(any(), any());
     }
 
     // Redis 원자적 카운터가 재고 초과로 -1을 반환하면 GROUP_BUY_SOLD_OUT 예외가 발생하고 DB에는 아무것도 저장되지 않는지 검증
