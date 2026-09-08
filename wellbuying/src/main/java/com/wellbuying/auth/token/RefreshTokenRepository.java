@@ -1,6 +1,8 @@
 package com.wellbuying.auth.token;
 
 import com.wellbuying.auth.jwt.JwtProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -33,13 +35,16 @@ public class RefreshTokenRepository {
     private final ObjectMapper objectMapper;
     private final JwtProperties jwtProperties;
     private final RefreshTokenFallbackStore fallbackStore;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     public RefreshTokenRepository(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
-            JwtProperties jwtProperties, RefreshTokenFallbackStore fallbackStore) {
+            JwtProperties jwtProperties, RefreshTokenFallbackStore fallbackStore,
+            CircuitBreakerRegistry circuitBreakerRegistry) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.jwtProperties = jwtProperties;
         this.fallbackStore = fallbackStore;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
     }
 
     // ReT:{memberId} Hash의 deviceId 필드에 refresh token 정보를 저장하고 필드 단위 TTL을 원자적으로 설정 (HSETEX)
@@ -84,22 +89,57 @@ public class RefreshTokenRepository {
     // 있으면 그대로 회전하고 결과를 Redis로 되돌린다(§2-4 자연 이관)
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "rotateFallback")
     public long rotate(Long memberId, String deviceId, String oldTokenHash, String newTokenHash) {
-        long result = redisTemplate.execute(ROTATE_SCRIPT, List.of(key(memberId)),
-                deviceId, oldTokenHash, newTokenHash,
-                String.valueOf(jwtProperties.refreshTokenExpirationMs() / 1000),
-                String.valueOf(jwtProperties.refreshTokenGraceSeconds()),
-                String.valueOf(Instant.now().getEpochSecond()));
+        long result = executeRotateScript(memberId, deviceId, oldTokenHash, newTokenHash);
         if (result != 0) {
             return result;
         }
         return applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, true);
     }
 
+    private long executeRotateScript(Long memberId, String deviceId, String oldTokenHash, String newTokenHash) {
+        return redisTemplate.execute(ROTATE_SCRIPT, List.of(key(memberId)),
+                deviceId, oldTokenHash, newTokenHash,
+                String.valueOf(jwtProperties.refreshTokenExpirationMs() / 1000),
+                String.valueOf(jwtProperties.refreshTokenGraceSeconds()),
+                String.valueOf(Instant.now().getEpochSecond()));
+    }
+
+    // DB 폴백에도 세션이 없다면 HALF_OPEN 전환 직후의 예산 경쟁(phase21 §2-4, 2026-09-08 chaos 테스트로
+    // 실증)일 수 있으므로 circuit breaker의 남은 시험 호출 예산으로 Redis를 1회만 더 직접 조회한다.
+    // this.rotate(...) 재귀 호출로 만들면 이미 원본(raw) 객체 위에서 실행 중이라 프록시를 거치지 않는
+    // self-invocation이 되어 @CircuitBreaker가 재적용되지 않으므로, CircuitBreakerRegistry에서 얻은
+    // 동일 named 인스턴스로 permission 확인과 결과 기록을 직접 수행한다.
     private long rotateFallback(Long memberId, String deviceId, String oldTokenHash, String newTokenHash,
             Throwable t) {
         log.warn("Redis 장애로 DB 폴백에서 refresh token 회전 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
                 t.getMessage());
-        return applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, false);
+        long dbResult = applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, false);
+        if (dbResult != 0) {
+            return dbResult;
+        }
+        return retryRotateOnceViaCircuitBreaker(memberId, deviceId, oldTokenHash, newTokenHash);
+    }
+
+    private long retryRotateOnceViaCircuitBreaker(Long memberId, String deviceId, String oldTokenHash,
+            String newTokenHash) {
+        io.github.resilience4j.circuitbreaker.CircuitBreaker circuitBreaker =
+                circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
+        try {
+            Long result = circuitBreaker.executeSupplier(
+                    () -> executeRotateScript(memberId, deviceId, oldTokenHash, newTokenHash));
+            if (result != 0) {
+                log.info("DB 폴백에 없던 세션을 HALF_OPEN 재조회로 Redis에서 회전 성공 - memberId={}, deviceId={}",
+                        memberId, deviceId);
+            }
+            return result;
+        } catch (CallNotPermittedException e) {
+            // 재조회도 시험 호출 예산에 들지 못함 - DB 폴백과 동일하게 세션 없음으로 처리
+            return 0;
+        } catch (Exception e) {
+            log.warn("HALF_OPEN 재조회 중 Redis 호출 실패 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                    e.getMessage());
+            return 0;
+        }
     }
 
     private long applyFallbackRotate(Long memberId, String deviceId, String oldTokenHash, String newTokenHash,
