@@ -4,6 +4,8 @@ import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductDeleteRequest;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
@@ -11,6 +13,7 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.search.ProductSearchRequest;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -46,10 +49,13 @@ public class ProductController {
 
     private final ProductService productService;
     private final ProductSearchService productSearchService;
+    private final ProductImageUploadService productImageUploadService;
 
-    public ProductController(ProductService productService, ProductSearchService productSearchService) {
+    public ProductController(ProductService productService, ProductSearchService productSearchService,
+            ProductImageUploadService productImageUploadService) {
         this.productService = productService;
         this.productSearchService = productSearchService;
+        this.productImageUploadService = productImageUploadService;
     }
 
     // 카테고리/가격 필터와 정렬 조건을 받아 상품 목록을 커서 기반으로 조회
@@ -84,6 +90,18 @@ public class ProductController {
     ) {
         Long productId = productService.createProduct(authenticatedMember.memberId(), request);
         return ResponseEntity.created(URI.create("/api/products/" + productId)).build();
+    }
+
+    // 판매자가 상품 썸네일 이미지를 업로드할 presigned URL 발급
+    @Operation(summary = "상품 썸네일 업로드 URL 발급 - 판매자 전용")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PostMapping("/thumbnail/upload-url")
+    public ResponseEntity<ProductImageUploadUrlResponse> issueThumbnailUploadUrl(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @Valid @RequestBody ProductImageUploadUrlRequest request) {
+        ProductImageUploadUrlResponse response = productImageUploadService.issueUploadUrl(
+                authenticatedMember.memberId(), request);
+        return ResponseEntity.ok(response);
     }
 
     // 로그인한 판매자 본인이 등록한 상품 전체 조회

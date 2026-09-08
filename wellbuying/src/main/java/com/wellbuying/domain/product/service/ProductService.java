@@ -20,9 +20,12 @@ import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
 import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
+import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
+import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,18 +42,24 @@ public class ProductService {
     private final ProductCountRepository productCountRepository;
     private final ProductSearchEventOutboxRepository outboxRepository;
     private final GroupBuyRepository groupBuyRepository;
+    private final ProductImageUploadService productImageUploadService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
                           ProductCountRepository productCountRepository,
                           ProductSearchEventOutboxRepository outboxRepository,
-                          GroupBuyRepository groupBuyRepository) {
+                          GroupBuyRepository groupBuyRepository,
+                          ProductImageUploadService productImageUploadService,
+                          ApplicationEventPublisher eventPublisher) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.productCountRepository = productCountRepository;
         this.outboxRepository = outboxRepository;
         this.groupBuyRepository = groupBuyRepository;
+        this.productImageUploadService = productImageUploadService;
+        this.eventPublisher = eventPublisher;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -98,6 +107,9 @@ public class ProductService {
                 request.description(), request.startPrice(), request.thumbnailUrl());
         Long productId = productRepository.save(product).getId();
         productCountRepository.save(ProductCount.init(productId));
+        if (productImageUploadService.isOurBucketUrl(request.thumbnailUrl())) {
+            eventPublisher.publishEvent(new ProductImageConfirmedEvent(request.thumbnailUrl()));
+        }
         return productId;
     }
 
@@ -132,10 +144,19 @@ public class ProductService {
         if (!productCategoryRepository.existsById(request.categoryId())) {
             throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
+        String previousThumbnailUrl = product.getThumbnailUrl();
         product.update(request.categoryId(), request.productName(), request.description(),
                 request.startPrice(), request.thumbnailUrl());
         if (product.getStatus() == ProductStatus.APPROVED) {
             outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
+        }
+        String newThumbnailUrl = request.thumbnailUrl();
+        boolean imageChanged = newThumbnailUrl != null && !newThumbnailUrl.equals(previousThumbnailUrl);
+        if (imageChanged && productImageUploadService.isOurBucketUrl(newThumbnailUrl)) {
+            eventPublisher.publishEvent(new ProductImageConfirmedEvent(newThumbnailUrl));
+        }
+        if (imageChanged && productImageUploadService.isOurBucketUrl(previousThumbnailUrl)) {
+            eventPublisher.publishEvent(new ProductImageOrphanedEvent(previousThumbnailUrl));
         }
     }
 
@@ -144,9 +165,13 @@ public class ProductService {
         Product product = getOwnedOrThrow(sellerId, productId);
         validateNoActiveGroupBuy(productId);
         boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        String thumbnailUrl = product.getThumbnailUrl();
         product.delete(sellerId, reason);
         if (wasIndexed) {
             outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+        if (productImageUploadService.isOurBucketUrl(thumbnailUrl)) {
+            eventPublisher.publishEvent(new ProductImageOrphanedEvent(thumbnailUrl));
         }
     }
 
@@ -156,9 +181,13 @@ public class ProductService {
         Product product = findProduct(productId);
         validateNoActiveGroupBuy(productId);
         boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
+        String thumbnailUrl = product.getThumbnailUrl();
         product.delete(adminId, reason);
         if (wasIndexed) {
             outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        }
+        if (productImageUploadService.isOurBucketUrl(thumbnailUrl)) {
+            eventPublisher.publishEvent(new ProductImageOrphanedEvent(thumbnailUrl));
         }
     }
 
