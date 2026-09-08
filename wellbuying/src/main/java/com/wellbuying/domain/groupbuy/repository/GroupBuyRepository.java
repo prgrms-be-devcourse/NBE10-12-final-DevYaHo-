@@ -57,4 +57,10 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE GroupBuy g SET g.currentQuantity = GREATEST(g.currentQuantity - :quantity, 0) WHERE g.id = :id")
     void decreaseQuantity(@Param("id") Long id, @Param("quantity") int quantity);
+
+    // 상세 조회(GET /{id}) 시마다 조회수를 원자적으로 증가시킨다 - increaseQuantity와 동일한 이유로
+    // 엔티티를 읽어 자바에서 +1 하는 대신 DB에 직접 반영한다(동시 조회가 몰려도 갱신 유실 없음)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE GroupBuy g SET g.viewCount = g.viewCount + 1 WHERE g.id = :id")
+    void increaseViewCount(@Param("id") Long id);
 }
