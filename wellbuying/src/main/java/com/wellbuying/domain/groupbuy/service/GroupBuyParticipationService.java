@@ -84,6 +84,10 @@ public class GroupBuyParticipationService {
             // 뒤이어 처리하므로, 이 응답의 appliedPrice는 성사 트리거 여부와 무관하게 항상 null로 내려간다
             if (updatedGroupBuy.isSoldOut()) {
                 updatedGroupBuy.succeed();
+                // 마감 스케줄러 경로(GroupBuyCloseProcessor.closeSucceeded)와 동일하게 성사 확정 시점에
+                // Redis 카운터를 즉시 정리한다 - TTL로도 결국 만료되긴 하지만, 정리 시점을 경로마다 다르게
+                // 두지 않고 맞춘다
+                groupBuyCounterRepository.delete(groupBuyId);
             }
 
             return GroupBuyPartResponse.of(part);
