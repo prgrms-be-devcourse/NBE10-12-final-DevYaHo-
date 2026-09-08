@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
@@ -179,5 +180,27 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
                 .andExpect(jsonPath("$.thumbnailUrl")
                         .value("https://bucket.s3.amazonaws.com/product-thumbnails/1/uuid.jpg"));
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 상세설명 이미지 업로드 URL이 반환된다
+    @Test
+    void 상세설명_이미지_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueDescriptionImageUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductDescriptionImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/description-images/1/uuid.png"));
+
+        mockMvc.perform(post("/api/products/description-images/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/png\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.imageUrl")
+                        .value("https://bucket.s3.amazonaws.com/description-images/1/uuid.png"));
     }
 }
