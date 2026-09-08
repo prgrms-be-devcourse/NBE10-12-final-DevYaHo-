@@ -96,6 +96,20 @@ public class AuthService {
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
     }
 
+    // 비밀번호 재발급 - verify 단계에서 남긴 verified 플래그를 확인·소비한 뒤 비밀번호를 교체하고,
+    // 계정 탈취 가능성을 전제로 기존에 로그인되어 있던 모든 기기 세션을 무효화한다
+    @Transactional
+    public void resetPassword(String email, String newPassword) {
+        emailVerificationService.assertPasswordReissueVerified(email);
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (passwordEncoder.matches(newPassword, member.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD);
+        }
+        member.changePassword(passwordEncoder.encode(newPassword));
+        logoutAll(member.getId());
+    }
+
     // access/refresh 토큰을 발급하고 refresh token 해시를 Redis에 저장 (비밀번호 로그인/소셜 로그인 공용)
     private LoginResponse issueTokens(Long memberId, Role role, String requestDeviceId) {
         String deviceId = requestDeviceId != null ? requestDeviceId : UUID.randomUUID().toString();

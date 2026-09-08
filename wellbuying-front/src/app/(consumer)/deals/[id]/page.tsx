@@ -9,6 +9,7 @@ import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TextField } from "@/components/ui/TextField";
+import { createMyAddress, listMyAddresses } from "@/lib/api/address";
 import {
   cancelGroupBuyParticipation,
   getGroupBuy,
@@ -19,6 +20,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { getProduct } from "@/lib/api/product";
 import type {
+  BuyerAddressResponse,
   GroupBuyDetailResponse,
   GroupBuyPartMeResponse,
   GroupBuyStatusResponse,
@@ -28,6 +30,15 @@ import { formatDateTime, formatRemaining, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
 import { clearPendingParticipation, takePendingParticipation } from "@/lib/payments/pendingParticipation";
+
+const NEW_ADDRESS = "new" as const;
+
+// select 옵션과 결제 확인 창에 공통으로 쓰는 배송지 한 줄 표기
+function formatAddressLabel(address: BuyerAddressResponse): string {
+  return `[${address.zipcode}] ${address.address}${
+    address.addressDetail ? ` ${address.addressDetail}` : ""
+  }`;
+}
 
 // 공동구매(groupBuyId) 자체가 없을 때만 404 페이지로 보내야 한다. 상태/내 참여/상품 조회의 404는
 // 별개 자원의 문제이므로 여기서 일반 에러로 바꿔, 존재하는 공동구매를 "찾을 수 없음"으로 잘못 표시하지 않는다.
@@ -51,9 +62,14 @@ export default function DealDetailPage() {
   const [resourceNotFound, setResourceNotFound] = useState(false);
 
   const [quantity, setQuantity] = useState(1);
-  const [address, setAddress] = useState("");
-  const [addressDetail, setAddressDetail] = useState("");
-  const [zipcode, setZipcode] = useState("");
+  const [addresses, setAddresses] = useState<BuyerAddressResponse[]>([]);
+  // 저장된 배송지 id, 또는 NEW_ADDRESS(직접 입력) 모드
+  const [selectedAddressId, setSelectedAddressId] = useState<number | typeof NEW_ADDRESS>(NEW_ADDRESS);
+  const [newAddress, setNewAddress] = useState("");
+  const [newAddressDetail, setNewAddressDetail] = useState("");
+  const [newZipcode, setNewZipcode] = useState("");
+  // "참여하기"를 누른 시점에 확정된 buyerAddressId - 결제 확인 창/카드 등록 리다이렉트로 넘긴다
+  const [pendingAddressId, setPendingAddressId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -62,16 +78,24 @@ export default function DealDetailPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   const reload = useCallback(async () => {
-    const [detailRes, statusRes, myPartRes] = await Promise.all([
+    const [detailRes, statusRes, myPartRes, addressesRes] = await Promise.all([
       getGroupBuy(groupBuyId),
       getGroupBuyStatus(groupBuyId).catch(demote404),
       getMyGroupBuyParticipation(groupBuyId).catch(demote404),
+      // 배송지 조회 실패가 공동구매 화면 전체를 막지 않도록 빈 목록으로 넘어간다
+      listMyAddresses().catch(() => [] as BuyerAddressResponse[]),
     ]);
     const productRes = await getProduct(detailRes.productId).catch(demote404);
     setDetail(detailRes);
     setStatus(statusRes);
     setMyPart(myPartRes);
     setProduct(productRes);
+    setAddresses(addressesRes);
+    // 저장된 배송지가 있으면 첫 항목을 기본 선택, 없으면 직접 입력 모드
+    setSelectedAddressId((current) => {
+      if (current !== NEW_ADDRESS && addressesRes.some((a) => a.id === current)) return current;
+      return addressesRes[0]?.id ?? NEW_ADDRESS;
+    });
   }, [groupBuyId]);
 
   useEffect(() => {
@@ -104,27 +128,54 @@ export default function DealDetailPage() {
 
   // 카드 등록을 마치고 돌아온 경우다. 결제창으로 페이지를 떠나기 전에 보관해 둔 입력값을 되살리고
   // 결제 정보 창을 다시 열어, 사용자가 수량·배송지를 다시 채우지 않고 참여를 이어가게 한다.
+  // 배송지는 떠나기 전에 이미 주소록에 확정(buyerAddressId)해 뒀으므로 그 id만 되살리면 된다.
   useEffect(() => {
     if (!Number.isFinite(groupBuyId)) return;
     const pending = takePendingParticipation();
     if (!pending || pending.groupBuyId !== groupBuyId) return;
     setQuantity(pending.quantity);
-    setAddress(pending.address);
-    setAddressDetail(pending.addressDetail);
-    setZipcode(pending.zipcode);
+    setSelectedAddressId(pending.buyerAddressId);
+    setPendingAddressId(pending.buyerAddressId);
     setPaymentOpen(true);
   }, [groupBuyId]);
 
+  // "참여하기"를 누르면, 직접 입력한 배송지는 주소록에 먼저 저장해 buyerAddressId를 확정한 뒤 결제 확인 창을 연다
+  async function handleOpenPayment() {
+    setActionError(null);
+    setActionMessage(null);
+    setSubmitting(true);
+    try {
+      let addressId: number;
+      if (selectedAddressId === NEW_ADDRESS) {
+        const created = await createMyAddress({
+          address: newAddress.trim(),
+          addressDetail: newAddressDetail.trim() || undefined,
+          zipcode: newZipcode.trim(),
+        });
+        setAddresses((prev) => [created, ...prev]);
+        setSelectedAddressId(created.id);
+        addressId = created.id;
+      } else {
+        addressId = selectedAddressId;
+      }
+      setPendingAddressId(addressId);
+      setPaymentOpen(true);
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : "배송지 저장 중 오류가 발생했어요.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleParticipate() {
+    if (pendingAddressId === null) return;
     setActionError(null);
     setActionMessage(null);
     setSubmitting(true);
     try {
       await participateInGroupBuy(groupBuyId, {
         quantity,
-        address,
-        addressDetail: addressDetail || undefined,
-        zipcode,
+        buyerAddressId: pendingAddressId,
       });
       clearPendingParticipation();
       setPaymentOpen(false);
@@ -171,8 +222,16 @@ export default function DealDetailPage() {
   }
 
   const catalog = resolveCatalogEntry(detail.productName);
+  const newAddressValid = /^\d{5}$/.test(newZipcode.trim()) && newAddress.trim() !== "";
+  const deliveryReady = selectedAddressId === NEW_ADDRESS ? newAddressValid : true;
   const canParticipate =
-    status.status === "ONGOING" && !myPart?.participated && address.trim() !== "" && zipcode.trim() !== "";
+    status.status === "ONGOING" && !myPart?.participated && quantity >= 1 && deliveryReady;
+  const myPartAddress =
+    myPart?.part?.buyerAddressId != null
+      ? addresses.find((a) => a.id === myPart.part!.buyerAddressId)
+      : undefined;
+  const pendingAddress =
+    pendingAddressId != null ? addresses.find((a) => a.id === pendingAddressId) : undefined;
   const currentPrice = resolveCurrentUnitPrice(detail.priceTiers, status.currentQuantity);
   const achievementRate =
     detail.maxQuantity === 0 ? 0 : Math.round((status.currentQuantity / detail.maxQuantity) * 100);
@@ -274,10 +333,8 @@ export default function DealDetailPage() {
                     </>
                   )}
                 </p>
-                {myPart.part.address && (
-                  <p className="text-xs text-wb-secondary">
-                    [{myPart.part.zipcode}] {myPart.part.address} {myPart.part.addressDetail ?? ""}
-                  </p>
+                {myPartAddress && (
+                  <p className="text-xs text-wb-secondary">{formatAddressLabel(myPartAddress)}</p>
                 )}
                 {status.status === "ONGOING" && myPart.part.status === "CONFIRMED" && (
                   <Button
@@ -374,30 +431,54 @@ export default function DealDetailPage() {
                       setQuantity(Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1);
                     }}
                   />
-                  <TextField
-                    label="우편번호"
-                    value={zipcode}
-                    onChange={(e) => setZipcode(e.target.value)}
-                  />
-                  <TextField
-                    label="배송지 주소"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                  <TextField
-                    label="상세주소 (선택)"
-                    value={addressDetail}
-                    onChange={(e) => setAddressDetail(e.target.value)}
-                  />
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-bold text-wb-ink">배송지</span>
+                    <select
+                      value={selectedAddressId === NEW_ADDRESS ? NEW_ADDRESS : String(selectedAddressId)}
+                      onChange={(e) =>
+                        setSelectedAddressId(
+                          e.target.value === NEW_ADDRESS ? NEW_ADDRESS : Number(e.target.value),
+                        )
+                      }
+                      className="h-11 rounded-lg border border-wb-line bg-wb-canvas px-3 text-sm text-wb-ink focus:border-wb-green focus:outline-none focus:ring-1 focus:ring-wb-green"
+                    >
+                      {addresses.map((a) => (
+                        <option key={a.id} value={String(a.id)}>
+                          {formatAddressLabel(a)}
+                        </option>
+                      ))}
+                      <option value={NEW_ADDRESS}>+ 새 배송지 입력</option>
+                    </select>
+                  </label>
+
+                  {selectedAddressId === NEW_ADDRESS && (
+                    <>
+                      <TextField
+                        label="우편번호"
+                        inputMode="numeric"
+                        maxLength={5}
+                        value={newZipcode}
+                        onChange={(e) => setNewZipcode(e.target.value)}
+                      />
+                      <TextField
+                        label="배송지 주소"
+                        value={newAddress}
+                        onChange={(e) => setNewAddress(e.target.value)}
+                      />
+                      <TextField
+                        label="상세주소 (선택)"
+                        value={newAddressDetail}
+                        onChange={(e) => setNewAddressDetail(e.target.value)}
+                      />
+                    </>
+                  )}
+
                   <Button
                     className="w-full"
                     disabled={!canParticipate}
                     loading={submitting}
-                    onClick={() => {
-                      setActionError(null);
-                      setActionMessage(null);
-                      setPaymentOpen(true);
-                    }}
+                    onClick={handleOpenPayment}
                   >
                     {status.status !== "ONGOING" ? "참여할 수 없어요" : "참여하기"}
                   </Button>
@@ -420,7 +501,8 @@ export default function DealDetailPage() {
         onClose={() => setPaymentOpen(false)}
         title={detail.title}
         unitPrice={currentPrice}
-        pending={{ groupBuyId, quantity, address, addressDetail, zipcode }}
+        pending={{ groupBuyId, quantity, buyerAddressId: pendingAddressId ?? 0 }}
+        addressLabel={pendingAddress ? formatAddressLabel(pendingAddress) : null}
         submitting={submitting}
         onConfirm={handleParticipate}
       />

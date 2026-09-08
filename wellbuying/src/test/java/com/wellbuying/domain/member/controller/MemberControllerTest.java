@@ -77,7 +77,7 @@ class MemberControllerTest extends AbstractIntegrationTest {
                 .andDo(document("member/signup-success",
                         requestFields(
                                 fieldWithPath("email").description("이메일"),
-                                fieldWithPath("password").description("비밀번호 (8자 이상)"),
+                                fieldWithPath("password").description("비밀번호 (숫자/영문자/특수문자 각 1개 이상 포함, 8자 이상)"),
                                 fieldWithPath("name").description("이름")),
                         responseFields(
                                 fieldWithPath("memberId").description("회원 ID"),
@@ -97,6 +97,26 @@ class MemberControllerTest extends AbstractIntegrationTest {
                   "password": "Pass1234!",
                   "name": "홍길동",
                   "phoneNumber": "not-a-phone-number"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"));
+    }
+
+    // 비밀번호가 복잡도 요건(숫자/영문자/특수문자 각 1개 이상, 8자 이상)을 충족하지 않으면 400과 COMMON_400_INVALID_INPUT 에러 코드를 반환하는지 검증
+    @Test
+    void 비밀번호_복잡도_요건을_충족하지_않으면_회원가입이_실패한다() throws Exception {
+        redisTemplate.opsForValue().set(EMAIL_VERIFIED_KEY_PREFIX + "weak-password@example.com", "1",
+                Duration.ofMinutes(30));
+        String requestBody = """
+                {
+                  "email": "weak-password@example.com",
+                  "password": "password1234",
+                  "name": "홍길동"
                 }
                 """;
 
@@ -306,6 +326,83 @@ class MemberControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"))
                 .andDo(document("member/update-me-unauthorized",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 로그인한 회원이 허용된 contentType으로 업로드 URL 발급을 요청하면 presigned URL과 최종 공개 URL을 응답받는지 검증
+    @Test
+    void 로그인한_회원은_프로필_이미지_업로드_URL을_발급받는다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("profile-image-upload@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        String requestBody = """
+                {
+                  "contentType": "image/jpeg"
+                }
+                """;
+
+        mockMvc.perform(post("/api/members/me/profile-image/upload-url")
+                        .with(authentication(authentication))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").isNotEmpty())
+                .andExpect(jsonPath("$.profileImageUrl").isNotEmpty())
+                .andDo(document("member/profile-image-upload-url-success",
+                        requestFields(fieldWithPath("contentType")
+                                .description("업로드할 이미지의 Content-Type (image/jpeg, image/png, image/webp만 허용)")),
+                        responseFields(
+                                fieldWithPath("uploadUrl").description("S3 presigned PUT URL (직접 업로드용)"),
+                                fieldWithPath("profileImageUrl").description("업로드 완료 후 저장할 최종 공개 URL"))));
+    }
+
+    // 허용되지 않는 contentType으로 요청하면 400과 COMMON_400_INVALID_INPUT 에러 코드를 반환하는지 검증 (SVG는 스크립트 포함 가능성으로 명시적 제외)
+    @Test
+    void 허용되지_않는_contentType이면_400을_반환한다() throws Exception {
+        Member member = memberRepository.save(
+                Member.signUp("profile-image-invalid-type@example.com", passwordEncoder.encode("Pass1234!"), "홍길동"));
+        var authentication = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(member.getId(), "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_BUYER")));
+
+        String requestBody = """
+                {
+                  "contentType": "image/svg+xml"
+                }
+                """;
+
+        mockMvc.perform(post("/api/members/me/profile-image/upload-url")
+                        .with(authentication(authentication))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"))
+                .andDo(document("member/profile-image-upload-url-invalid-type",
+                        responseFields(
+                                fieldWithPath("code").description("에러 코드"),
+                                fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 인증 정보 없이 업로드 URL 발급 요청 시 401과 AUTH_401_REQUIRED 에러 코드를 반환하는지 검증
+    @Test
+    void 인증되지_않은_요청은_실패한다() throws Exception {
+        String requestBody = """
+                {
+                  "contentType": "image/jpeg"
+                }
+                """;
+
+        mockMvc.perform(post("/api/members/me/profile-image/upload-url")
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_REQUIRED"))
+                .andDo(document("member/profile-image-upload-url-unauthorized",
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));

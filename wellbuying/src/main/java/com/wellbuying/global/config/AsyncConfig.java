@@ -23,22 +23,6 @@ public class AsyncConfig {
         return executor;
     }
 
-    // OpenSearch 검색 인덱스 동기화 전용 스레드풀 - ProductSearchIndexingListener의 @Async("searchIndexExecutor")에서 사용
-    // CallerRunsPolicy: 색인 이벤트가 유실되는 것보다 약간의 지연이 낫기 때문에 큐가 찬 경우 호출 스레드에서 직접 실행
-    @Bean(name = "searchIndexExecutor")
-    public Executor searchIndexExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(200);
-        executor.setThreadNamePrefix("search-index-");
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(10);
-        executor.initialize();
-        return executor;
-    }
-
     // 로그인 활동(lastLoginAt/휴면 전환) 갱신 전용 스레드풀 - MemberLoginEventListener.handleLoginEvent의 @Async("memberEventExecutor")에서 사용
     // CallerRunsPolicy: 큐+풀이 모두 찬 경우 이벤트를 버리는(AbortPolicy 기본값) 대신 호출 스레드(AFTER_COMMIT 콜백 스레드)에서 직접 실행해 유실 방지
     @Bean(name = "memberEventExecutor")
@@ -49,6 +33,23 @@ public class AsyncConfig {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("member-event-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        return executor;
+    }
+
+    // 프로필 이미지 pending 태그 제거/이전 이미지 삭제 전용 스레드풀 - ProfileImageEventListener의 @Async("s3ConfirmExecutor")에서 사용
+    // DiscardPolicy: 실패해도 재시도/보상 트랜잭션 없이 로그만 남기는 best-effort 정리 작업이라, 큐가 찬 경우 Tomcat 스레드가 S3를 동기 호출하게 만드는 CallerRunsPolicy보다
+    // 작업을 버리는 편이 메인 API 응답 지연을 막는 데 낫다
+    @Bean(name = "s3ConfirmExecutor")
+    public Executor s3ConfirmExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("s3-confirm-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         executor.initialize();

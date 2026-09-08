@@ -3,8 +3,6 @@ package com.wellbuying.domain.product.repository;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.Expressions;
-import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.entity.ProductSortType;
@@ -40,11 +38,12 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
-                        coalesceViewCount()))
+                        productCount.viewCount))
                 .from(product)
-                .leftJoin(productCount).on(productCount.productId.eq(product.id))
+                .join(productCount).on(productCount.productId.eq(product.id))
                 .where(
                         product.status.eq(ProductStatus.APPROVED),
+                        product.deletedAt.isNull(),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
                         priceLoe(condition.maxPrice()),
@@ -76,7 +75,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.status,
                         product.createdAt))
                 .from(product)
-                .where(product.sellerId.eq(sellerId))
+                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull())
                 .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize() + 1L)
@@ -114,8 +113,8 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 Cursor c = Cursor.decode(resolved.name(), cursor, 2);
                 long viewCount = c.getLong(0);
                 long id = c.getLong(1);
-                yield coalesceViewCount().lt(viewCount)
-                        .or(coalesceViewCount().eq(viewCount).and(product.id.lt(id)));
+                yield productCount.viewCount.lt(viewCount)
+                        .or(productCount.viewCount.eq(viewCount).and(product.id.lt(id)));
             }
             case PRICE_ASC -> {
                 Cursor c = Cursor.decode(resolved.name(), cursor, 2);
@@ -139,7 +138,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         ProductSortType resolved = sortType != null ? sortType : ProductSortType.LATEST;
         return switch (resolved) {
             case POPULAR -> new OrderSpecifier<?>[] {
-                    coalesceViewCount().desc(),
+                    productCount.viewCount.desc(),
                     product.id.desc()
             };
             case PRICE_ASC -> new OrderSpecifier<?>[] {
@@ -156,10 +155,6 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
     private BooleanExpression categoryEq(Long categoryId) {
         return categoryId != null ? product.categoryId.eq(categoryId) : null;
-    }
-
-    private static NumberExpression<Long> coalesceViewCount() {
-        return Expressions.numberTemplate(Long.class, "coalesce({0}, 0)", productCount.viewCount);
     }
 
     private BooleanExpression priceGoe(Integer minPrice) {

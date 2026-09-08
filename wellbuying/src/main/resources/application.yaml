@@ -2,6 +2,9 @@ server:
   # nginx(리버스 프록시) 뒤에서 X-Forwarded-Proto 등을 반영해 {baseUrl}이 https로 올바르게 계산되도록 함
   # 미설정 시 OAuth2 redirect_uri가 http://로 계산되어 구글 콘솔에 등록한 https URI와 불일치(redirect_uri_mismatch) 발생
   forward-headers-strategy: framework
+  tomcat:
+    threads:
+      max: 300
 
 spring:
   profiles:
@@ -14,6 +17,9 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -77,7 +83,6 @@ spring:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
-
 opensearch:
   uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
 
@@ -131,3 +136,15 @@ billing-key:
   # 빌링키 암복호화용 마스터 키. AES-256(32바이트) 키를 Base64로 인코딩한 값이며,
   # 운영에서는 반드시 BILLING_KEY_MASTER_KEY 환경변수로 주입할 것 (seller-info.encryption.key와 같은 방식)
   master-key: ${BILLING_KEY_MASTER_KEY:Q0hBTkdFX01FX2xvY2FsX2Rldl9iaWxsaW5na2V5XyE=}
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:wellbuying-dev}
+    region: ${AWS_S3_REGION:ap-northeast-2}
+    presigned-url-expiration-seconds: ${AWS_S3_PRESIGNED_URL_EXPIRATION_SECONDS:300}
+    # endpoint/access-key/secret-key는 운영(EC2)에서는 비워둔다 - AWS SDK v2 DefaultCredentialsProvider가
+    # 인스턴스 IAM 역할을 자동으로 사용한다. 로컬/CI에서는 MinIO를 쓰므로 application-local.yaml/테스트 설정에서
+    # endpoint override + 고정 자격증명을 채운다 (S3Config 참고)
+    endpoint: ${AWS_S3_ENDPOINT:}
+    access-key: ${AWS_S3_ACCESS_KEY:}
+    secret-key: ${AWS_S3_SECRET_KEY:}

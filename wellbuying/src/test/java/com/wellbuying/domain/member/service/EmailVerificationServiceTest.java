@@ -14,6 +14,7 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
+import com.wellbuying.domain.member.event.PasswordReissueCodeIssuedEvent;
 import com.wellbuying.domain.member.event.ReactivationCodeIssuedEvent;
 import com.wellbuying.domain.member.event.VerificationCodeIssuedEvent;
 import com.wellbuying.domain.member.mail.EmailCooldownGuard;
@@ -226,6 +227,94 @@ class EmailVerificationServiceTest {
         when(redisTemplate.delete("email:verified:test@example.com")).thenReturn(false);
 
         assertThatThrownBy(() -> emailVerificationService.assertVerified("test@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+    }
+
+    // 존재하는 일반 계정이면 email:password-reissue:{email} 키로 코드가 5분 TTL로 저장되고 이벤트가 발행되는지 검증
+    @Test
+    void 존재하는_일반_계정이면_재발급_코드_발송에_성공한다() {
+        Member member = Member.signUp("reissue@example.com", "encoded-password", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("reissue@example.com")).thenReturn(Optional.of(member));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        emailVerificationService.sendPasswordReissueCode("reissue@example.com");
+
+        verify(valueOperations).set(eq("email:password-reissue:reissue@example.com"), anyString(),
+                eq(Duration.ofMinutes(5)));
+        verify(emailCooldownGuard).acquire(eq("password-reissue"), eq("reissue@example.com"), eq(30L));
+        verify(eventPublisher).publishEvent(any(PasswordReissueCodeIssuedEvent.class));
+    }
+
+    // 소셜 전용 계정(비밀번호 없음)은 재발급 코드 발송이 거부되고 쿨다운/이벤트 발행도 일어나지 않는지 검증
+    @Test
+    void 소셜_전용_계정이면_재발급_코드_발송이_실패한다() {
+        Member member = Member.socialOnly("social@example.com", "홍길동");
+        when(memberRepository.findByEmailAndDeletedAtIsNull("social@example.com")).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> emailVerificationService.sendPasswordReissueCode("social@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SOCIAL_ONLY_ACCOUNT);
+        verify(emailCooldownGuard, never()).acquire(anyString(), anyString(), eq(30L));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // 존재하지 않는 이메일로 재발급 코드를 요청하면 MEMBER_NOT_FOUND 예외가 발생하는지 검증
+    @Test
+    void 존재하지_않는_이메일이면_재발급_코드_발송이_실패한다() {
+        when(memberRepository.findByEmailAndDeletedAtIsNull("none@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailVerificationService.sendPasswordReissueCode("none@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // 저장된 코드와 일치하는 코드로 재발급 코드를 검증하면 코드는 삭제되고 verified 플래그가 30분 TTL로 저장되는지 검증
+    @Test
+    void 저장된_코드와_일치하면_재발급_코드_검증에_성공하고_verified_플래그가_저장된다() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("email:password-reissue:reissue@example.com")).thenReturn("482913");
+
+        emailVerificationService.verifyPasswordReissueCode("reissue@example.com", "482913");
+
+        verify(redisTemplate).delete("email:password-reissue:reissue@example.com");
+        verify(valueOperations).set("email:password-reissue-verified:reissue@example.com", "1",
+                Duration.ofMinutes(30));
+    }
+
+    // 저장된 코드와 다른 코드로 재발급 코드를 검증하면 예외가 발생하고 verified 플래그가 저장되지 않는지 검증
+    @Test
+    void 저장된_코드와_불일치하면_재발급_코드_검증이_실패한다() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("email:password-reissue:reissue@example.com")).thenReturn("482913");
+
+        assertThatThrownBy(() -> emailVerificationService.verifyPasswordReissueCode("reissue@example.com", "000000"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_VERIFICATION_CODE_INVALID);
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    // verified 플래그가 있으면 검증 확인에 성공하고 플래그가 소비(삭제)되는지 검증
+    @Test
+    void verified_플래그가_있으면_검증_확인에_성공하고_플래그가_소비된다() {
+        when(redisTemplate.delete("email:password-reissue-verified:reissue@example.com")).thenReturn(true);
+
+        emailVerificationService.assertPasswordReissueVerified("reissue@example.com");
+
+        verify(redisTemplate, times(1)).delete("email:password-reissue-verified:reissue@example.com");
+    }
+
+    // verified 플래그가 없으면(verify 단계를 거치지 않았거나 만료됐으면) 검증 확인이 실패하는지 검증
+    @Test
+    void verified_플래그가_없으면_검증_확인이_실패한다() {
+        when(redisTemplate.delete("email:password-reissue-verified:reissue@example.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> emailVerificationService.assertPasswordReissueVerified("reissue@example.com"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);

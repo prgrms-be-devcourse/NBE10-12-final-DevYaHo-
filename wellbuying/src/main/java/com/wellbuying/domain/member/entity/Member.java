@@ -119,6 +119,11 @@ public class Member {
         }
     }
 
+    // 비밀번호 재발급 - 이미 인코딩된 값을 그대로 대입 (인코딩은 서비스 레이어 책임)
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
     // 회원 탈퇴 - 개인정보를 익명화하고 status를 WITHDRAWN으로, deletedAt을 현재 시각으로 세팅 (soft delete)
     public void withdraw() {
         this.email = "withdrawn-" + id + "@wellbuying.local";

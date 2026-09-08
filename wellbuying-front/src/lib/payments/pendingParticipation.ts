@@ -7,9 +7,8 @@ const KEY = "wb.pendingParticipation";
 export type PendingParticipation = {
   groupBuyId: number;
   quantity: number;
-  address: string;
-  addressDetail: string;
-  zipcode: string;
+  // 카드 등록 리다이렉트 전에 이미 주소록에 확정해 둔 배송지 항목의 ID
+  buyerAddressId: number;
 };
 
 export function savePendingParticipation(pending: PendingParticipation): void {

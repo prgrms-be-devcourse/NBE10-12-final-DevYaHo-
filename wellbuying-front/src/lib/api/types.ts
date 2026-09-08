@@ -168,9 +168,8 @@ export type GroupBuySummaryResponse = {
 
 export type GroupBuyPartCreateRequest = {
   quantity: number;
-  address: string;
-  addressDetail?: string;
-  zipcode: string;
+  // 회원 주소록(GET /api/members/me/addresses)에 등록된 배송지 항목의 ID
+  buyerAddressId: number;
 };
 
 export type GroupBuySuspensionStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -255,15 +254,29 @@ export type GroupBuyPartResponse = {
   quantity: number;
   appliedPrice: number | null;
   status: GroupBuyPartStatus;
-  address: string | null;
-  addressDetail: string | null;
-  zipcode: string | null;
+  buyerAddressId: number | null;
   createdAt: string;
 };
 
 export type GroupBuyPartMeResponse = {
   participated: boolean;
   part: GroupBuyPartResponse | null;
+};
+
+// 회원 배송지 주소록 - 공동구매 참여 시 buyerAddressId로 참조한다
+export type BuyerAddressResponse = {
+  id: number;
+  address: string;
+  addressDetail: string | null;
+  zipcode: string;
+  createdAt: string;
+};
+
+export type BuyerAddressCreateRequest = {
+  address: string;
+  addressDetail?: string;
+  // 새 우편번호 체계 - 숫자 5자리 고정
+  zipcode: string;
 };
 
 // 백엔드가 Page<T>를 그대로 직렬화하지 않고 Spring Data의 PagedModel(@EnableSpringDataWebSupport(VIA_DTO))로

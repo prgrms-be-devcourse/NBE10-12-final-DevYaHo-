@@ -3,6 +3,8 @@ package com.wellbuying.domain.product.controller;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
+import com.wellbuying.domain.product.dto.ProductDeleteRequest;
+import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
@@ -29,6 +31,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -92,6 +95,34 @@ public class ProductController {
             @PageableDefault(size = 20) Pageable pageable
     ) {
         return productService.getMyProducts(authenticatedMember.memberId(), pageable);
+    }
+
+    // 판매자 본인이 등록한 상품 수정
+    @Operation(summary = "상품 수정 - 판매자 전용")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PatchMapping("/{id}")
+    public ResponseEntity<Void> updateProduct(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long id,
+            @Valid @RequestBody ProductUpdateRequest request
+    ) {
+        productService.updateProduct(authenticatedMember.memberId(), id, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 판매자 본인이 등록한 상품 소프트 삭제 - 사유 필수
+    // DELETE + RequestBody는 일부 프록시/클라이언트에서 바디가 유실될 수 있어 POST로 처리
+    // (관리자 강제 삭제 API와 동일한 이유)
+    @Operation(summary = "상품 삭제 - 판매자 전용, 사유 필수")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PostMapping("/{id}/delete")
+    public ResponseEntity<Void> deleteProduct(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long id,
+            @Valid @RequestBody ProductDeleteRequest request
+    ) {
+        productService.deleteProduct(authenticatedMember.memberId(), id, request.reason());
+        return ResponseEntity.noContent().build();
     }
 
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
