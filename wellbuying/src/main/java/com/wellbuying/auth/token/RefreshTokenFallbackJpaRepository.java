@@ -29,4 +29,11 @@ public interface RefreshTokenFallbackJpaRepository extends JpaRepository<Refresh
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from RefreshTokenFallbackEntity r where r.memberId = :memberId")
     void deleteByMemberId(@Param("memberId") Long memberId);
+
+    // Redis 장애 중 생성된 뒤 재조회/로그아웃 없이 방치된 폴백 세션 정리(phase23 §2) - Redis Hash TTL과
+    // 달리 이 테이블은 시간 기반 자동 만료가 없어 RefreshTokenFallbackCleanupScheduler가 주기적으로 호출한다.
+    // 대상이 평상시 0건에 가까울 것으로 예상돼(장애 중에만 생성됨) LIMIT 기반 배치 분할 없이 단일 벌크 DELETE로 처리
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from RefreshTokenFallbackEntity r where r.lastUsedAt < :cutoffEpochSeconds")
+    int deleteExpiredBefore(@Param("cutoffEpochSeconds") long cutoffEpochSeconds);
 }
