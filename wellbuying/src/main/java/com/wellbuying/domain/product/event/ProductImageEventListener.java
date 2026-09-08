@@ -43,11 +43,11 @@ public class ProductImageEventListener {
         try {
             s3Client.deleteObjectTagging(DeleteObjectTaggingRequest.builder().bucket(bucket).key(key).build());
         } catch (Exception e) {
-            log.error("상품 썸네일 이미지 pending 태그 제거 실패: key={}", key, e);
+            log.error("상품 이미지 pending 태그 제거 실패: key={}", key, e);
         }
     }
 
-    // 상품 썸네일 이미지 교체/삭제로 더 이상 참조되지 않는 이전 이미지를 삭제
+    // 상품 이미지 교체/삭제로 더 이상 참조되지 않는 이전 이미지를 삭제
     @Async("s3ConfirmExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleOrphaned(ProductImageOrphanedEvent event) {
@@ -58,7 +58,7 @@ public class ProductImageEventListener {
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
         } catch (Exception e) {
-            log.error("상품 썸네일 이미지 삭제 실패: key={}", key, e);
+            log.error("상품 이미지 삭제 실패: key={}", key, e);
         }
     }
 }

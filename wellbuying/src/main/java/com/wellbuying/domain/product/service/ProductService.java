@@ -188,6 +188,12 @@ public class ProductService {
         if (productImageUploadService.isOurBucketUrl(thumbnailUrl)) {
             eventPublisher.publishEvent(new ProductImageOrphanedEvent(thumbnailUrl));
         }
+        List<ProductImage> extraImages = productImageRepository.findByProductId(productId);
+        extraImages.stream()
+                .map(ProductImage::getImageUrl)
+                .filter(productImageUploadService::isOurBucketUrl)
+                .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
+        productImageRepository.deleteByProductId(productId);
     }
 
     // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단
@@ -204,6 +210,12 @@ public class ProductService {
         if (productImageUploadService.isOurBucketUrl(thumbnailUrl)) {
             eventPublisher.publishEvent(new ProductImageOrphanedEvent(thumbnailUrl));
         }
+        List<ProductImage> extraImages = productImageRepository.findByProductId(productId);
+        extraImages.stream()
+                .map(ProductImage::getImageUrl)
+                .filter(productImageUploadService::isOurBucketUrl)
+                .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
+        productImageRepository.deleteByProductId(productId);
     }
 
     // 진행 중인(READY/ONGOING) 공동구매가 있으면 상품 삭제를 막는다
