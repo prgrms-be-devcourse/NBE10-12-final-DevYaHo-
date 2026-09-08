@@ -45,9 +45,7 @@ public class ProductImage {
         if (imageUrl == null || imageUrl.isBlank()) {
             throw new IllegalArgumentException("이미지 URL은 필수입니다");
         }
-        if (sortOrder == null || sortOrder < 0) {
-            throw new IllegalArgumentException("순서는 0 이상이어야 합니다");
-        }
+        validateSortOrder(sortOrder);
         this.productId = productId;
         this.imageUrl = imageUrl;
         this.sortOrder = sortOrder;
@@ -60,10 +58,14 @@ public class ProductImage {
 
     // 순서 변경 API에서 사용 - @UpdateTimestamp가 자동으로 updated_at을 갱신
     public void changeSortOrder(Integer sortOrder) {
+        validateSortOrder(sortOrder);
+        this.sortOrder = sortOrder;
+    }
+
+    private void validateSortOrder(Integer sortOrder) {
         if (sortOrder == null || sortOrder < 0) {
             throw new IllegalArgumentException("순서는 0 이상이어야 합니다");
         }
-        this.sortOrder = sortOrder;
     }
 
     public Long getId() {
