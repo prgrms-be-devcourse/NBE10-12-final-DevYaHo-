@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 const ACCOUNT_LINKS: NavItem[] = [
   { href: "/profile", label: "내 정보", icon: Settings },
   { href: "/favorites", label: "찜", icon: Heart },
-  { href: "/orders", label: "참여 내역", icon: ShoppingBag },
+  { href: "/orders", label: "결제 내역", icon: ShoppingBag },
 ];
 
 // 내 정보/찜/참여 내역 세 페이지가 공유하는 셸.
