@@ -15,8 +15,9 @@ public interface ProductImageRepository extends JpaRepository<ProductImage, Long
     // 상품 삭제 시 정리 이벤트 발행 대상을 조회할 때 사용
     List<ProductImage> findByProductId(Long productId);
 
-    // 벌크 삭제 - S3 정리 이벤트 발행용 URL 목록은 findByProductId()로 먼저 조회한 뒤 호출할 것
-    @Modifying(clearAutomatically = true)
+    // 벌크 삭제 - S3 정리 이벤트 발행용 URL 목록은 findByProductId()로 먼저 조회한 뒤 호출할 것.
+    // flushAutomatically: 같은 트랜잭션 내 미반영 변경사항을 먼저 flush해 벌크 쿼리와의 정합성 보장
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM ProductImage pi WHERE pi.productId = :productId")
-    void deleteByProductId(@Param("productId") Long productId);
+    int deleteByProductId(@Param("productId") Long productId);
 }
