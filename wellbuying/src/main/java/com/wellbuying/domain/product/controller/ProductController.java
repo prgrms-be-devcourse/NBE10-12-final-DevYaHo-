@@ -8,13 +8,16 @@ import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlRespons
 import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductImageSaveRequest;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.entity.ImageType;
 import com.wellbuying.domain.product.search.ProductSearchRequest;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.service.ProductImageService;
 import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
@@ -38,6 +41,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -49,15 +53,20 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "상품", description = "상품 조회/등록")
 public class ProductController {
 
+    private static final int MAX_GALLERY_IMAGES = 6;
+    private static final int MAX_DESCRIPTION_IMAGES = 10;
+
     private final ProductService productService;
     private final ProductSearchService productSearchService;
     private final ProductImageUploadService productImageUploadService;
+    private final ProductImageService productImageService;
 
     public ProductController(ProductService productService, ProductSearchService productSearchService,
-            ProductImageUploadService productImageUploadService) {
+            ProductImageUploadService productImageUploadService, ProductImageService productImageService) {
         this.productService = productService;
         this.productSearchService = productSearchService;
         this.productImageUploadService = productImageUploadService;
+        this.productImageService = productImageService;
     }
 
     // 카테고리/가격 필터와 정렬 조건을 받아 상품 목록을 커서 기반으로 조회
@@ -128,6 +137,32 @@ public class ProductController {
         ProductDescriptionImageUploadUrlResponse response = productImageUploadService.issueDescriptionImageUploadUrl(
                 authenticatedMember.memberId(), request);
         return ResponseEntity.ok(response);
+    }
+
+    // 판매자가 상품 갤러리 이미지 목록을 저장(전체 교체) - 새로 추가된 이미지는 확정, 빠진 이미지는 정리
+    @Operation(summary = "상품 갤러리 이미지 저장 - 판매자 전용, 최대 6장")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PutMapping("/{id}/gallery-images")
+    public ResponseEntity<Void> saveGalleryImages(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long id,
+            @Valid @RequestBody ProductImageSaveRequest request) {
+        productImageService.saveImages(authenticatedMember.memberId(), id, ImageType.GALLERY,
+                MAX_GALLERY_IMAGES, request.imageUrls());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 판매자가 상품 상세설명 이미지 목록을 저장(전체 교체) - 새로 추가된 이미지는 확정, 빠진 이미지는 정리
+    @Operation(summary = "상품 상세설명 이미지 저장 - 판매자 전용, 최대 10장")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @PutMapping("/{id}/description-images")
+    public ResponseEntity<Void> saveDescriptionImages(
+            @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @PathVariable Long id,
+            @Valid @RequestBody ProductImageSaveRequest request) {
+        productImageService.saveImages(authenticatedMember.memberId(), id, ImageType.DESCRIPTION,
+                MAX_DESCRIPTION_IMAGES, request.imageUrls());
+        return ResponseEntity.noContent().build();
     }
 
     // 로그인한 판매자 본인이 등록한 상품 전체 조회
