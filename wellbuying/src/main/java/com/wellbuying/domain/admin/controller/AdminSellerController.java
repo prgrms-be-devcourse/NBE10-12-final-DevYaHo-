@@ -1,6 +1,8 @@
 package com.wellbuying.domain.admin.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.dto.AdminActionReasonRequest;
 import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.entity.SellerStatus;
 import com.wellbuying.domain.seller.service.SellerInfoService;
@@ -8,6 +10,7 @@ import com.wellbuying.global.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -18,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,8 +52,9 @@ public class AdminSellerController {
     @Operation(summary = "셀러 승인 - SELLER_INFO.status를 APPROVED로, MEMBERS.role을 SELLER로 변경")
     @PostMapping("/{sellerId}/approve")
     public ResponseEntity<Void> approve(@PathVariable Long sellerId,
-            @AuthenticationPrincipal AuthenticatedMember admin) {
-        sellerInfoService.approve(sellerId, admin.memberId());
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        sellerInfoService.approve(sellerId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
     }
 
@@ -57,8 +62,9 @@ public class AdminSellerController {
     @Operation(summary = "셀러 거절 - SELLER_INFO.status를 REJECTED로 변경 (role은 BUYER 유지)")
     @PostMapping("/{sellerId}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long sellerId,
-            @AuthenticationPrincipal AuthenticatedMember admin) {
-        sellerInfoService.reject(sellerId, admin.memberId());
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        sellerInfoService.reject(sellerId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
     }
 
@@ -66,8 +72,9 @@ public class AdminSellerController {
     @Operation(summary = "셀러 정지 - SELLER_INFO.status를 SUSPENDED로 변경 (role은 SELLER 유지)")
     @PostMapping("/{sellerId}/suspend")
     public ResponseEntity<Void> suspend(@PathVariable Long sellerId,
-            @AuthenticationPrincipal AuthenticatedMember admin) {
-        sellerInfoService.suspend(sellerId, admin.memberId());
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        sellerInfoService.suspend(sellerId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
     }
 
@@ -75,8 +82,25 @@ public class AdminSellerController {
     @Operation(summary = "셀러 정지 복귀 - SELLER_INFO.status를 다시 APPROVED로 변경")
     @PostMapping("/{sellerId}/reactivate")
     public ResponseEntity<Void> reactivate(@PathVariable Long sellerId,
-            @AuthenticationPrincipal AuthenticatedMember admin) {
-        sellerInfoService.reactivate(sellerId, admin.memberId());
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        sellerInfoService.reactivate(sellerId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
+    }
+
+    // 셀러 전환(승인/거절) 이력 조회 - "승인 대기 요청 처리" 화면
+    @Operation(summary = "셀러 전환(승인/거절) 이력 조회")
+    @GetMapping("/action-logs/conversion")
+    public ResponseEntity<Page<AdminActionLogResponse>> listConversionActionLogs(
+            @PageableDefault(size = 20, sort = "occurredAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(sellerInfoService.listConversionActionLogs(pageable));
+    }
+
+    // 셀러 정지/정지복귀 이력 조회 - 승인 대기 요청 처리와는 별개인 "활성 셀러 관리" 화면
+    @Operation(summary = "셀러 정지/정지복귀 이력 조회")
+    @GetMapping("/action-logs/suspension")
+    public ResponseEntity<Page<AdminActionLogResponse>> listSuspensionActionLogs(
+            @PageableDefault(size = 20, sort = "occurredAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(sellerInfoService.listSuspensionActionLogs(pageable));
     }
 }

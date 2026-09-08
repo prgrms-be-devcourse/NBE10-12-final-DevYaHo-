@@ -2,6 +2,11 @@ package com.wellbuying.domain.groupbuy.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.entity.AdminActionLog;
+import com.wellbuying.domain.admin.entity.AdminActionTargetType;
+import com.wellbuying.domain.admin.entity.AdminActionType;
+import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
@@ -57,13 +62,15 @@ public class GroupBuyService {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final GroupBuySuspensionRequestRepository groupBuySuspensionRequestRepository;
+    private final AdminActionLogRepository adminActionLogRepository;
 
     public GroupBuyService(GroupBuyRepository groupBuyRepository, GroupBuyPriceRepository groupBuyPriceRepository,
             GroupBuyPartRepository groupBuyPartRepository, GroupBuyCounterRepository groupBuyCounterRepository,
             GroupBuyEventPublisher groupBuyEventPublisher, MemberRepository memberRepository,
             ProductService productService, ProductRepository productRepository,
             ProductCategoryRepository productCategoryRepository,
-            GroupBuySuspensionRequestRepository groupBuySuspensionRequestRepository) {
+            GroupBuySuspensionRequestRepository groupBuySuspensionRequestRepository,
+            AdminActionLogRepository adminActionLogRepository) {
         this.groupBuyRepository = groupBuyRepository;
         this.groupBuyPriceRepository = groupBuyPriceRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
@@ -74,6 +81,7 @@ public class GroupBuyService {
         this.productRepository = productRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.groupBuySuspensionRequestRepository = groupBuySuspensionRequestRepository;
+        this.adminActionLogRepository = adminActionLogRepository;
     }
 
     // product의 categoryId로 카테고리명을 조회, 카테고리가 없으면(레거시/삭제된 카테고리 대비) "기타"로 대체
@@ -253,18 +261,46 @@ public class GroupBuyService {
 
     // 판매정지 요청 승인 - 요청을 APPROVED로 전환하고 대상 공동구매를 suspended=true, status=CANCELED로 변경
     @Transactional
-    public void approveSuspensionRequest(Long requestId) {
+    public void approveSuspensionRequest(Long requestId, Long adminId, String reason) {
         GroupBuySuspensionRequest request = findPendingSuspensionRequest(requestId);
         request.approve();
         GroupBuy groupBuy = getGroupBuyOrThrow(request.getGroupBuyId());
         groupBuy.suspend();
+        recordSuspensionAction(requestId, adminId, AdminActionType.APPROVE, reason);
     }
 
     // 판매정지 요청 반려 - 요청만 REJECTED로 전환, 공동구매 상태는 변경하지 않음
     @Transactional
-    public void rejectSuspensionRequest(Long requestId) {
+    public void rejectSuspensionRequest(Long requestId, Long adminId, String reason) {
         GroupBuySuspensionRequest request = findPendingSuspensionRequest(requestId);
         request.reject();
+        recordSuspensionAction(requestId, adminId, AdminActionType.REJECT, reason);
+    }
+
+    // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용
+    @Transactional(readOnly = true)
+    public Page<AdminActionLogResponse> listSuspensionActionLogs(Pageable pageable) {
+        Page<AdminActionLog> page = adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
+                AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
+        List<Long> requestIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
+        Map<Long, Long> groupBuyIdsByRequestId = groupBuySuspensionRequestRepository.findAllById(requestIds).stream()
+                .collect(Collectors.toMap(GroupBuySuspensionRequest::getId, GroupBuySuspensionRequest::getGroupBuyId));
+        List<Long> groupBuyIds = groupBuyIdsByRequestId.values().stream().distinct().toList();
+        Map<Long, String> titlesByGroupBuyId = groupBuyRepository.findAllById(groupBuyIds).stream()
+                .collect(Collectors.toMap(GroupBuy::getId, GroupBuy::getTitle));
+        List<Long> adminIds = page.getContent().stream().map(AdminActionLog::getAdminId).distinct().toList();
+        Map<Long, String> adminNamesById = memberRepository.findAllById(adminIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getName));
+        return page.map(actionLog -> {
+            Long groupBuyId = groupBuyIdsByRequestId.get(actionLog.getTargetId());
+            String title = groupBuyId != null ? titlesByGroupBuyId.getOrDefault(groupBuyId, "") : "";
+            return AdminActionLogResponse.of(actionLog, title, adminNamesById.getOrDefault(actionLog.getAdminId(), ""));
+        });
+    }
+
+    private void recordSuspensionAction(Long requestId, Long adminId, AdminActionType action, String reason) {
+        adminActionLogRepository.save(AdminActionLog.record(AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST,
+                requestId, adminId, action, reason));
     }
 
     private GroupBuySuspensionRequest findPendingSuspensionRequest(Long requestId) {
