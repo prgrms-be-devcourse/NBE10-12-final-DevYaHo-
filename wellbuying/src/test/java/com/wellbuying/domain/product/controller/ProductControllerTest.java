@@ -48,6 +48,17 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.content[0].productName").value("상품"));
     }
 
+    // 인기 상품 TOP 10 조회 시 200과 함께 결과를 반환한다
+    @Test
+    void getPopularProducts_호출하면_정상응답한다() throws Exception {
+        ProductSummaryResponse response = new ProductSummaryResponse(1L, "인기상품", 10000, "url", 999L);
+        when(productService.getPopularProducts()).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/products/popular"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productName").value("인기상품"));
+    }
+
     // category, minPrice 파라미터를 보내면 200으로 응답한다 (실제 필터링은 리포지토리 테스트에서 검증)
     @Test
     void getProducts_필터파라미터를_보내도_정상응답한다() throws Exception {
