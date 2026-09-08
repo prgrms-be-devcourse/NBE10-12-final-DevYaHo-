@@ -5,16 +5,26 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -35,6 +45,14 @@ class ProductControllerTest {
 
     @MockitoBean
     private ProductSearchService productSearchService;
+
+    @MockitoBean
+    private ProductImageUploadService productImageUploadService;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     // 파라미터 없이 호출해도 200과 함께 목록이 반환된다
     @Test
@@ -139,5 +157,27 @@ class ProductControllerTest {
                         .param("keyword", "비타민")
                         .param("sort", "INVALID_TYPE"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 업로드 URL이 반환된다
+    @Test
+    void 썸네일_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/product-thumbnails/1/uuid.jpg"));
+
+        mockMvc.perform(post("/api/products/thumbnail/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/jpeg\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.thumbnailUrl")
+                        .value("https://bucket.s3.amazonaws.com/product-thumbnails/1/uuid.jpg"));
     }
 }
