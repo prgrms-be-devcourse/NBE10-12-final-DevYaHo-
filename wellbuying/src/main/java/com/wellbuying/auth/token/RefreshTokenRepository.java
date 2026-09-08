@@ -49,7 +49,8 @@ public class RefreshTokenRepository {
     }
 
     private void saveFallback(Long memberId, String deviceId, RefreshTokenValue value, Throwable t) {
-        log.warn("Redis 장애로 DB 폴백에 refresh token 저장 - memberId={}, deviceId={}", memberId, deviceId, t);
+        log.warn("Redis 장애로 DB 폴백에 refresh token 저장 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
         fallbackStore.save(memberId, deviceId, value);
     }
 
@@ -96,7 +97,8 @@ public class RefreshTokenRepository {
 
     private long rotateFallback(Long memberId, String deviceId, String oldTokenHash, String newTokenHash,
             Throwable t) {
-        log.warn("Redis 장애로 DB 폴백에서 refresh token 회전 - memberId={}, deviceId={}", memberId, deviceId, t);
+        log.warn("Redis 장애로 DB 폴백에서 refresh token 회전 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
         return applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, false);
     }
 
@@ -126,7 +128,8 @@ public class RefreshTokenRepository {
     }
 
     private void deleteFallback(Long memberId, String deviceId, Throwable t) {
-        log.warn("Redis 장애로 DB 폴백에서만 로그아웃 처리 - memberId={}, deviceId={}", memberId, deviceId, t);
+        log.warn("Redis 장애로 DB 폴백에서만 로그아웃 처리 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
         fallbackStore.delete(memberId, deviceId);
     }
 
@@ -148,7 +151,7 @@ public class RefreshTokenRepository {
     }
 
     private void deleteAllFallback(Long memberId, Throwable t) {
-        log.warn("Redis 장애로 DB 폴백에서만 전체 로그아웃 처리 - memberId={}", memberId, t);
+        log.warn("Redis 장애로 DB 폴백에서만 전체 로그아웃 처리 - memberId={}, cause={}", memberId, t.getMessage());
         fallbackStore.deleteAll(memberId);
     }
 
