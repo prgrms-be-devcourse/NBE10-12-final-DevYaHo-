@@ -102,6 +102,19 @@ management:
     tags:
       application: ${spring.application.name}
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      redisRefreshToken:
+        # Redis 장애 시 login()/reissue()/logout()이 막히지 않도록 DB 폴백으로 전환 (phase21 §2-3)
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+
 jwt:
   secret: ${JWT_SECRET:CHANGE_ME_local_dev_secret_key_min_256_bits_______}
   access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:1800000}   # 30분

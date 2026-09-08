@@ -1,11 +1,16 @@
 package com.wellbuying.auth.token;
 
 import com.wellbuying.auth.jwt.JwtProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.RedisHashCommands.HashFieldSetOption;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,26 +19,47 @@ import org.springframework.data.redis.core.types.Expiration;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
 
+// Redis 장애 시 login()/reissue()/logout()이 막히지 않도록 서킷 브레이커로 감지해 DB 폴백으로 전환한다
+// (phase21 §2-3). Redis 정상화 후에는 reissue()에서 DB 폴백 세션을 발견하는 즉시 Redis로 되돌려
+// 자연스럽게 이관한다(§2-4).
 @Repository
 public class RefreshTokenRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(RefreshTokenRepository.class);
     private static final String KEY_PREFIX = "ReT:";
+    private static final String CIRCUIT_BREAKER_NAME = "redisRefreshToken";
     private static final RedisScript<Long> ROTATE_SCRIPT =
             RedisScript.of(new ClassPathResource("scripts/rotate_refresh_token.lua"), Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final JwtProperties jwtProperties;
+    private final RefreshTokenFallbackStore fallbackStore;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     public RefreshTokenRepository(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
-            JwtProperties jwtProperties) {
+            JwtProperties jwtProperties, RefreshTokenFallbackStore fallbackStore,
+            CircuitBreakerRegistry circuitBreakerRegistry) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.jwtProperties = jwtProperties;
+        this.fallbackStore = fallbackStore;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
     }
 
     // ReT:{memberId} Hash의 deviceId 필드에 refresh token 정보를 저장하고 필드 단위 TTL을 원자적으로 설정 (HSETEX)
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "saveFallback")
     public void save(Long memberId, String deviceId, RefreshTokenValue value) {
+        putInRedis(memberId, deviceId, value);
+    }
+
+    private void saveFallback(Long memberId, String deviceId, RefreshTokenValue value, Throwable t) {
+        log.warn("Redis 장애로 DB 폴백에 refresh token 저장 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
+        fallbackStore.save(memberId, deviceId, value);
+    }
+
+    private void putInRedis(Long memberId, String deviceId, RefreshTokenValue value) {
         String json = objectMapper.writeValueAsString(value);
         Expiration expiration = Expiration.milliseconds(jwtProperties.refreshTokenExpirationMs());
         redisTemplate.opsForHash()
@@ -59,7 +85,18 @@ public class RefreshTokenRepository {
     }
 
     // rotate_refresh_token.lua 실행 - grace 기간 내 경쟁 요청까지 허용하는 RTR 원자적 회전 (1=성공, 0=세션없음, -1=재사용감지로 전체세션삭제)
+    // Redis가 정상인데도 세션이 없다면(0) 장애 중 DB 폴백에만 기록된 세션일 수 있으므로 폴백을 조회해
+    // 있으면 그대로 회전하고 결과를 Redis로 되돌린다(§2-4 자연 이관)
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "rotateFallback")
     public long rotate(Long memberId, String deviceId, String oldTokenHash, String newTokenHash) {
+        long result = executeRotateScript(memberId, deviceId, oldTokenHash, newTokenHash);
+        if (result != 0) {
+            return result;
+        }
+        return applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, true);
+    }
+
+    private long executeRotateScript(Long memberId, String deviceId, String oldTokenHash, String newTokenHash) {
         return redisTemplate.execute(ROTATE_SCRIPT, List.of(key(memberId)),
                 deviceId, oldTokenHash, newTokenHash,
                 String.valueOf(jwtProperties.refreshTokenExpirationMs() / 1000),
@@ -67,14 +104,103 @@ public class RefreshTokenRepository {
                 String.valueOf(Instant.now().getEpochSecond()));
     }
 
+    // DB 폴백에도 세션이 없다면 HALF_OPEN 전환 직후의 예산 경쟁(phase21 §2-4, 2026-09-08 chaos 테스트로
+    // 실증)일 수 있으므로 circuit breaker의 남은 시험 호출 예산으로 Redis를 1회만 더 직접 조회한다.
+    // this.rotate(...) 재귀 호출로 만들면 이미 원본(raw) 객체 위에서 실행 중이라 프록시를 거치지 않는
+    // self-invocation이 되어 @CircuitBreaker가 재적용되지 않으므로, CircuitBreakerRegistry에서 얻은
+    // 동일 named 인스턴스로 permission 확인과 결과 기록을 직접 수행한다.
+    private long rotateFallback(Long memberId, String deviceId, String oldTokenHash, String newTokenHash,
+            Throwable t) {
+        log.warn("Redis 장애로 DB 폴백에서 refresh token 회전 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
+        long dbResult = applyFallbackRotate(memberId, deviceId, oldTokenHash, newTokenHash, false);
+        if (dbResult != 0) {
+            return dbResult;
+        }
+        return retryRotateOnceViaCircuitBreaker(memberId, deviceId, oldTokenHash, newTokenHash);
+    }
+
+    private long retryRotateOnceViaCircuitBreaker(Long memberId, String deviceId, String oldTokenHash,
+            String newTokenHash) {
+        io.github.resilience4j.circuitbreaker.CircuitBreaker circuitBreaker =
+                circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
+        try {
+            Long result = circuitBreaker.executeSupplier(
+                    () -> executeRotateScript(memberId, deviceId, oldTokenHash, newTokenHash));
+            if (result != 0) {
+                log.info("DB 폴백에 없던 세션을 HALF_OPEN 재조회로 Redis에서 회전 성공 - memberId={}, deviceId={}",
+                        memberId, deviceId);
+            }
+            return result;
+        } catch (CallNotPermittedException e) {
+            // 재조회도 시험 호출 예산에 들지 못함 - DB 폴백과 동일하게 세션 없음으로 처리
+            return 0;
+        } catch (Exception e) {
+            log.warn("HALF_OPEN 재조회 중 Redis 호출 실패 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                    e.getMessage());
+            return 0;
+        }
+    }
+
+    private long applyFallbackRotate(Long memberId, String deviceId, String oldTokenHash, String newTokenHash,
+            boolean migrateToRedis) {
+        RefreshTokenFallbackStore.RotateResult result = fallbackStore.rotate(memberId, deviceId, oldTokenHash,
+                newTokenHash, jwtProperties.refreshTokenGraceSeconds());
+        if (migrateToRedis && result.code() == 1) {
+            log.info("DB 폴백 세션을 Redis로 이관 - memberId={}, deviceId={}", memberId, deviceId);
+            putInRedis(memberId, deviceId, result.value());
+            fallbackStore.delete(memberId, deviceId);
+        }
+        return result.code();
+    }
+
     // 특정 기기(deviceId)의 refresh token만 삭제 - 해당 기기 로그아웃
+    // 정상 상황에서는 세션이 Redis/DB 중 한 곳에만 존재하므로, Redis에서 실제로 지워졌다면(count > 0) DB엔
+    // 볼 것이 없다고 보고 DB 호출 자체를 생략한다 - Redis 장애가 없었던 대다수 로그아웃에서 매번 헛수고로
+    // DB를 왕복하던 비효율을 없앤다(phase21 §4-4/§4-5). Redis에 없었다면(count == 0, 장애 중 DB 폴백에만
+    // 있던 세션일 수 있음) 그때만 DB를 정리해 복구 후 되살아나는 것을 막는다(§2-4).
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "deleteFallback")
     public void delete(Long memberId, String deviceId) {
-        redisTemplate.opsForHash().delete(key(memberId), deviceId);
+        Long deletedCount = redisTemplate.opsForHash().delete(key(memberId), deviceId);
+        if (deletedCount == null || deletedCount == 0) {
+            deleteFromFallbackStoreQuietly(memberId, deviceId);
+        }
+    }
+
+    private void deleteFallback(Long memberId, String deviceId, Throwable t) {
+        log.warn("Redis 장애로 DB 폴백에서만 로그아웃 처리 - memberId={}, deviceId={}, cause={}", memberId, deviceId,
+                t.getMessage());
+        fallbackStore.delete(memberId, deviceId);
+    }
+
+    // Redis 삭제는 이미 성공했으므로 로그아웃의 주 목적은 달성한 상태 - DB 폴백 정리 실패가 이 예외를 삼켜
+    // 응답 실패로 번지는 것도, 서킷 브레이커가 이를 Redis 장애로 오인해 circuit을 여는 것도 막는다
+    private void deleteFromFallbackStoreQuietly(Long memberId, String deviceId) {
+        try {
+            fallbackStore.delete(memberId, deviceId);
+        } catch (Exception e) {
+            log.error("Redis 삭제 완료 후 DB 폴백 정리 중 오류 발생 - memberId={}, deviceId={}", memberId, deviceId, e);
+        }
     }
 
     // 회원의 모든 기기 refresh token 삭제 - 전체 기기 로그아웃
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "deleteAllFallback")
     public void deleteAll(Long memberId) {
         redisTemplate.delete(key(memberId));
+        deleteAllFromFallbackStoreQuietly(memberId);
+    }
+
+    private void deleteAllFallback(Long memberId, Throwable t) {
+        log.warn("Redis 장애로 DB 폴백에서만 전체 로그아웃 처리 - memberId={}, cause={}", memberId, t.getMessage());
+        fallbackStore.deleteAll(memberId);
+    }
+
+    private void deleteAllFromFallbackStoreQuietly(Long memberId) {
+        try {
+            fallbackStore.deleteAll(memberId);
+        } catch (Exception e) {
+            log.error("Redis 삭제 완료 후 DB 폴백 전체 정리 중 오류 발생 - memberId={}", memberId, e);
+        }
     }
 
     // memberId로 Redis Hash 키(ReT:{memberId}) 생성
