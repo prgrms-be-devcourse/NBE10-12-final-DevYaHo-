@@ -16,8 +16,6 @@ export type GroupBuyCardView = {
   currentQuantity: number;
   maxQuantity: number;
   daysLeft: number;
-  viewCount: number;
-  createdAt: string;
   producerName: string;
   category: string;
   icon: string;
@@ -46,21 +44,15 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     currentQuantity: summary.currentQuantity,
     maxQuantity: summary.maxQuantity,
     daysLeft: toDaysLeft(summary.endAt),
-    viewCount: summary.viewCount,
-    createdAt: summary.createdAt,
     category: summary.productCategory,
     ...catalog,
   };
 }
 
-// sort: Spring Pageable 형식("속성,방향", 예: "viewCount,desc") - 서버가 이 기준으로 정렬해서 내려주므로
-// size로 잘라도(예: 상위 4개) 순서가 항상 정확하다. 미지정 시 서버 기본 정렬(createdAt desc)을 따른다
-export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: string; size?: number }) {
+export function useGroupBuyList(status: GroupBuyStatus) {
   const [items, setItems] = useState<GroupBuyCardView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const sort = options?.sort;
-  const size = options?.size ?? 50;
 
   useEffect(() => {
     let ignore = false;
@@ -69,7 +61,7 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
       setLoading(true);
       setError(null);
       try {
-        const page = await listGroupBuys({ status, size, sort });
+        const page = await listGroupBuys({ status, size: 50 });
         const views = page.content.map(toCardView);
         if (!ignore) setItems(views);
       } catch (e) {
@@ -83,7 +75,7 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
     return () => {
       ignore = true;
     };
-  }, [status, sort, size]);
+  }, [status]);
 
   return { items, loading, error };
 }

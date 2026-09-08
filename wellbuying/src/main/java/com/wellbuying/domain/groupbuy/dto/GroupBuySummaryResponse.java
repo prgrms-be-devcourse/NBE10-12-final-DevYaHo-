@@ -17,9 +17,7 @@ public record GroupBuySummaryResponse(
         LocalDateTime endAt,
         int currentQuantity,
         int maxQuantity,
-        boolean suspended,
-        long viewCount,
-        LocalDateTime createdAt
+        boolean suspended
 ) {
 
     // product가 null이면(이론상 항상 존재하지만, 이 응답이 추가되기 전에 만들어진 레거시 행 대비) 빈 값으로 안전하게 처리
@@ -36,8 +34,6 @@ public record GroupBuySummaryResponse(
                 groupBuy.getEndAt(),
                 groupBuy.getCurrentQuantity(),
                 groupBuy.getMaxQuantity(),
-                groupBuy.isSuspended(),
-                groupBuy.getViewCount(),
-                groupBuy.getCreatedAt());
+                groupBuy.isSuspended());
     }
 }

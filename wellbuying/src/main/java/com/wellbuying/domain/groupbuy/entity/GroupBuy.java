@@ -54,11 +54,6 @@ public class GroupBuy {
     @Column(nullable = false)
     private boolean suspended;
 
-    // 홈 화면 "인기" 섹션 정렬용 - 상세 조회(GET /{id})마다 GroupBuyRepository.increaseViewCount()로
-    // 원자적 벌크 UPDATE되며, 참여 수량과 달리 값이 즉시 이 엔티티에 반영될 필요가 없어 dirty checking을 쓰지 않는다
-    @Column(name = "view_count", nullable = false)
-    private long viewCount;
-
     // 성사(SUCCESS) 확정 시점에는 채워지지 않는다 - GroupBuyFinalizationWorker가 참여자 최종가 반영 +
     // outbox 이벤트 기록을 마친 뒤에만 채운다. null이면 "성사는 됐지만 아직 확정 참여자 후속 처리 전"이라는 뜻
     @Column(name = "finalized_at")
@@ -195,10 +190,6 @@ public class GroupBuy {
 
     public boolean isSuspended() {
         return suspended;
-    }
-
-    public long getViewCount() {
-        return viewCount;
     }
 
     public LocalDateTime getFinalizedAt() {

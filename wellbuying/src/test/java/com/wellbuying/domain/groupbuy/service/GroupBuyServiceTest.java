@@ -213,19 +213,4 @@ class GroupBuyServiceTest {
                 .isEqualTo(ErrorCode.GROUP_BUY_CANCEL_NOT_ALLOWED);
         verify(groupBuyCounterRepository, never()).delete(anyLong());
     }
-
-    // 상세 조회 시마다 홈 화면 "인기" 정렬용 조회수를 원자적으로 1 증가시키는지 검증 (엔티티를 읽어 자바에서
-    // +1 하는 대신 GroupBuyRepository.increaseViewCount로 DB에 직접 반영하는지가 핵심)
-    @Test
-    void 상세_조회_시_조회수를_증가시킨다() {
-        GroupBuy groupBuy = GroupBuy.create(10L, 1L, "제목",
-                LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(8), 100, 10_000);
-        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
-        when(groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(1L)).thenReturn(List.of());
-        when(productRepository.findById(10L)).thenReturn(Optional.empty());
-
-        groupBuyService.getDetail(1L);
-
-        verify(groupBuyRepository, times(1)).increaseViewCount(1L);
-    }
 }
