@@ -16,22 +16,15 @@ class ProductSearchOutboxMetricsTest {
     private ProductSearchEventOutboxRepository outboxRepository;
 
     @Test
-    void pending_게이지가_리포지토리_count를_반환한다() {
-        when(outboxRepository.countByPublishedAtIsNullAndRetryCountLessThan(ProductSearchEventOutbox.MAX_RETRY_COUNT))
-                .thenReturn(5L);
+    void refresh_호출_시_pending과_dead_게이지가_스냅샷_값을_반환한다() {
+        when(outboxRepository.countStatusSnapshot(ProductSearchEventOutbox.MAX_RETRY_COUNT))
+                .thenReturn(new OutboxStatusCount(5, 2));
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        new ProductSearchOutboxMetrics(registry, outboxRepository);
+        ProductSearchOutboxMetrics metrics = new ProductSearchOutboxMetrics(registry, outboxRepository);
+
+        metrics.refresh();
 
         assertThat(registry.get("wellbuying.search.outbox.events").tag("status", "pending").gauge().value()).isEqualTo(5.0);
-    }
-
-    @Test
-    void dead_게이지가_리포지토리_count를_반환한다() {
-        when(outboxRepository.countByPublishedAtIsNullAndRetryCountGreaterThanEqual(ProductSearchEventOutbox.MAX_RETRY_COUNT))
-                .thenReturn(2L);
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        new ProductSearchOutboxMetrics(registry, outboxRepository);
-
         assertThat(registry.get("wellbuying.search.outbox.events").tag("status", "dead").gauge().value()).isEqualTo(2.0);
     }
 }

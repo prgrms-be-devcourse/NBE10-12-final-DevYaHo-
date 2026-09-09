@@ -2,26 +2,35 @@ package com.wellbuying.domain.product.search;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 검색 outbox 상태를 Prometheus Gauge로 노출. pending이 계속 늘면 릴레이가 막힌 것,
-// dead가 0이 아니면 재시도 한도를 넘긴 이벤트가 있어 수동 확인 필요.
-// Gauge는 scrape 시점마다 count 쿼리를 실행하지만 outbox 테이블이 작고 published_at 조건이라 부담 없음.
-// status 태그로 pending/dead 구분.
+// pending/dead 두 Gauge가 항상 같은 DB 스냅샷을 읽도록 AtomicReference<OutboxStatusCount>를
+// @Scheduled로 갱신한다. scrape마다 DB 쿼리 2회 → 15초마다 1회로 줄고, 지표 간 불일치 없음.
 @Component
 public class ProductSearchOutboxMetrics {
 
+    private final ProductSearchEventOutboxRepository outboxRepository;
+    private final AtomicReference<OutboxStatusCount> snapshot =
+            new AtomicReference<>(OutboxStatusCount.empty());
+
     public ProductSearchOutboxMetrics(MeterRegistry meterRegistry,
             ProductSearchEventOutboxRepository outboxRepository) {
-        Gauge.builder("wellbuying.search.outbox.events", outboxRepository,
-                r -> r.countByPublishedAtIsNullAndRetryCountLessThan(ProductSearchEventOutbox.MAX_RETRY_COUNT))
+        this.outboxRepository = outboxRepository;
+        Gauge.builder("wellbuying.search.outbox.events", snapshot, s -> s.get().pending())
                 .description("검색 outbox 이벤트 수 (status: pending=미반영, dead=재시도 한도 초과)")
                 .tag("status", "pending")
                 .register(meterRegistry);
-        Gauge.builder("wellbuying.search.outbox.events", outboxRepository,
-                r -> r.countByPublishedAtIsNullAndRetryCountGreaterThanEqual(ProductSearchEventOutbox.MAX_RETRY_COUNT))
+        Gauge.builder("wellbuying.search.outbox.events", snapshot, s -> s.get().dead())
                 .description("검색 outbox 이벤트 수 (status: pending=미반영, dead=재시도 한도 초과)")
                 .tag("status", "dead")
                 .register(meterRegistry);
+        refresh();
+    }
+
+    @Scheduled(fixedDelay = 15_000)
+    public void refresh() {
+        snapshot.set(outboxRepository.countStatusSnapshot(ProductSearchEventOutbox.MAX_RETRY_COUNT));
     }
 }

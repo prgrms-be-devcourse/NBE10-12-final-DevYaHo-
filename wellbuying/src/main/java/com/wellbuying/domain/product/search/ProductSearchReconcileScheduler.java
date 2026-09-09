@@ -6,8 +6,10 @@ import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ public class ProductSearchReconcileScheduler {
     private final Timer reconcileTimer;
     private final Counter reconciledDocuments;
     private final Counter reconcileFailures;
+    private final AtomicLong lastFailureId = new AtomicLong(-1);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
@@ -48,6 +51,9 @@ public class ProductSearchReconcileScheduler {
                 .description("보정 배치가 재색인한 누적 문서 수").register(meterRegistry);
         this.reconcileFailures = Counter.builder("wellbuying.search.reconcile.failures")
                 .description("보정 배치 실패 횟수 (예외로 중단된 실행 수)").register(meterRegistry);
+        Gauge.builder("wellbuying.search.reconcile.last_failure_id", lastFailureId, AtomicLong::get)
+                .description("보정 배치가 마지막으로 실패했을 때의 커서 ID (-1=아직 실패 없음)")
+                .register(meterRegistry);
     }
 
     @Scheduled(
@@ -78,6 +84,7 @@ public class ProductSearchReconcileScheduler {
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
         } catch (Exception e) {
             reconcileFailures.increment();
+            lastFailureId.set(lastId);
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
         } finally {
             sample.stop(reconcileTimer);

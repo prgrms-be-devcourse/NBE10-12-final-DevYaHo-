@@ -101,6 +101,8 @@ class ProductSearchReconcileSchedulerTest {
 
         assertThatCode(() -> scheduler.reconcile()).doesNotThrowAnyException();
         assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(1.0);
+        // saveAll throw 시점에 lastId 갱신(lastId = products.get(...)·getId()) 전이므로 lastId=0
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.last_failure_id").gauge().value()).isEqualTo(0.0);
     }
 
     private Product mockProduct(Long id) {
