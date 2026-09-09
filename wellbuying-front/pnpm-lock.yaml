@@ -17,6 +17,9 @@ importers:
       react:
         specifier: 19.2.8
         version: 19.2.8
+      react-daum-postcode:
+        specifier: ^4.0.0
+        version: 4.0.0(react@19.2.8)
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
@@ -1734,6 +1737,11 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
+
+  react-daum-postcode@4.0.0:
+    resolution: {integrity: sha512-2CGR8Aa/5637IKaplJXv5m9S/qQWWYBr30FhQ9mK9nXiisVbTvrpU9D4U1mgr8YYCKw2RgcK8daN+F+PJhW+ig==}
+    peerDependencies:
+      react: '>=16.8.0'
 
   react-dom@19.2.8:
     resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
@@ -3807,6 +3815,10 @@ snapshots:
   punycode@2.3.1: {}
 
   queue-microtask@1.2.3: {}
+
+  react-daum-postcode@4.0.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   react-dom@19.2.8(react@19.2.8):
     dependencies:
