@@ -67,7 +67,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
             } else if (primarySortVal.isLong()) {
                 primarySortStr = String.valueOf(primarySortVal.longValue());
             } else {
-                throw new IllegalStateException("Unexpected FieldValue kind for score: " + primarySortVal._kind());
+                throw new IllegalStateException("Unexpected FieldValue kind for primary sort field: " + primarySortVal._kind());
             }
             String idStr = String.valueOf(idVal.longValue());
             nextCursor = Cursor.encode(sort.name(), primarySortStr, idStr);
