@@ -15,6 +15,12 @@ public interface ProductSearchEventOutboxRepository extends JpaRepository<Produc
     // 재시도 한도를 넘긴 poison pill은 조회 대상에서 빠진다
     List<ProductSearchEventOutbox> findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(int retryCount, Limit limit);
 
+    // 운영 지표용 - 아직 반영되지 않은 이벤트 수
+    long countByPublishedAtIsNullAndRetryCountLessThan(int maxRetryCount);
+
+    // 운영 지표용 - 재시도 한도를 넘어 포기된 이벤트 수
+    long countByPublishedAtIsNullAndRetryCountGreaterThanEqual(int maxRetryCount);
+
     // 릴레이가 배치를 ES에 반영한 뒤 성공한 건들의 published_at을 한 번의 UPDATE로 채운다
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE ProductSearchEventOutbox e SET e.publishedAt = :publishedAt WHERE e.id IN :ids")
