@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectTaggingRequest;
@@ -79,8 +81,8 @@ class ProductImageEventListenerTest {
         when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
         when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
         when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
-                .thenThrow(new RuntimeException("s3 timeout"))
-                .thenThrow(new RuntimeException("s3 timeout"))
+                .thenThrow(SdkClientException.builder().message("s3 timeout").build())
+                .thenThrow(SdkClientException.builder().message("s3 timeout").build())
                 .thenReturn(null);
 
         productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg"));
@@ -94,7 +96,7 @@ class ProductImageEventListenerTest {
         when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
         when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
         when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
-                .thenThrow(new RuntimeException("s3 down"));
+                .thenThrow(SdkClientException.builder().message("s3 down").build());
 
         assertThatCode(() -> productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg")))
                 .doesNotThrowAnyException();
@@ -113,5 +115,21 @@ class ProductImageEventListenerTest {
         productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg"));
 
         verify(s3Client, times(1)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
+    }
+
+    // 스로틀링(429)은 4xx지만 일시적 오류이므로 재시도한다
+    @Test
+    void handleConfirmed_스로틀링_오류면_재시도한다() {
+        when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
+        when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
+        when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(429).awsErrorDetails(
+                        AwsErrorDetails.builder().errorCode("SlowDown").errorMessage("Too Many Requests").build()
+                ).build())
+                .thenReturn(null);
+
+        productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg"));
+
+        verify(s3Client, times(2)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
     }
 }

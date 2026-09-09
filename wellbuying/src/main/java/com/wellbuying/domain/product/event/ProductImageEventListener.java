@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectTaggingRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -85,12 +86,13 @@ public class ProductImageEventListener {
         }
     }
 
-    // 4xx(NoSuchKey, AccessDenied 등)는 재시도해도 결과가 같으므로 즉시 중단. 5xx·네트워크 오류만 재시도
+    // 재시도 대상: S3 5xx, 스로틀링(429/SlowDown), 네트워크 타임아웃 등 SDK 통신 오류.
+    // 4xx(NoSuchKey, AccessDenied 등)와 코드 버그(NPE 등)는 재시도해도 결과가 같으므로 즉시 중단
     private boolean isRetryable(Exception e) {
         if (e instanceof S3Exception s3Exception) {
-            return s3Exception.statusCode() >= 500;
+            return s3Exception.isThrottlingException() || s3Exception.statusCode() >= 500;
         }
-        return true;
+        return e instanceof SdkException;
     }
 
     // 재시도 대기. 인터럽트되면 false를 반환해 재시도를 중단한다
