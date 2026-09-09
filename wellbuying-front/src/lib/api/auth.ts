@@ -124,3 +124,15 @@ export function requestProfileImageUploadUrl(contentType: string): Promise<Profi
     { auth: true },
   );
 }
+
+export function sendPasswordReissueCode(email: string): Promise<void> {
+  return http.post("/api/auth/password-reissue/send", { email });
+}
+
+export function verifyPasswordReissueCode(email: string, code: string): Promise<void> {
+  return http.post("/api/auth/password-reissue/verify", { email, code });
+}
+
+export function resetPassword(email: string, newPassword: string): Promise<void> {
+  return http.post("/api/auth/password-reissue/reset", { email, newPassword });
+}
