@@ -335,7 +335,7 @@ class ProductServiceTest {
     // getPopularProducts() 호출 시 리포지토리 결과를 그대로 반환한다
     @Test
     void getPopularProducts_리포지토리_결과를_그대로_반환한다() {
-        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, productImageUploadService, eventPublisher, productImageRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, adminActionLogRepository, productImageUploadService, eventPublisher, productImageRepository);
         ProductSummaryResponse response = new ProductSummaryResponse(1L, "인기상품", 10000, "url", 999L);
         when(productRepository.findTopByViewCount(10)).thenReturn(List.of(response));
 
@@ -399,7 +399,7 @@ class ProductServiceTest {
 
     @Test
     void findDeleted_삭제된_상품을_DTO로_매핑해_반환한다() {
-        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, productImageUploadService, eventPublisher, productImageRepository);
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, adminActionLogRepository, productImageUploadService, eventPublisher, productImageRepository);
         Product product = Product.register(1L, 10L, "삭제된상품", "설명", 5000, "thumb.jpg");
         product.delete(99L, "이용약관 위반");
         Pageable pageable = PageRequest.of(0, 20);

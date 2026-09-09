@@ -13,7 +13,9 @@ public record ProductSearchRequest(
         String cursor,
 
         @Min(1) @Max(100)
-        Integer size
+        Integer size,
+
+        Boolean activeGroupBuyOnly
 ) {
     public ProductSearchRequest {
         if (sort == null) {
@@ -24,6 +26,9 @@ public record ProductSearchRequest(
         }
         if (size == null) {
             size = 20;
+        }
+        if (activeGroupBuyOnly == null) {
+            activeGroupBuyOnly = false;
         }
     }
 }

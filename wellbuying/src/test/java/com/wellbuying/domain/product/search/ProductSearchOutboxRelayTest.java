@@ -9,12 +9,16 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.service.GroupBuyService;
+import java.time.LocalDateTime;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchOutboxDispatcher.DispatchFailure;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,6 +45,9 @@ class ProductSearchOutboxRelayTest {
     @Mock
     private ProductSearchRepository productSearchRepository;
 
+    @Mock
+    private GroupBuyService groupBuyService;
+
     @InjectMocks
     private ProductSearchOutboxRelay relay;
 
@@ -66,7 +73,7 @@ class ProductSearchOutboxRelayTest {
         relay.relay();
 
         verify(productSearchRepository).deleteById(1L);
-        verify(productRepository, never()).findByIdAndDeletedAtIsNull(any());
+        verify(productRepository, never()).findByIdInAndDeletedAtIsNull(any());
         ArgumentCaptor<List<ProductSearchEventOutbox>> captor = ArgumentCaptor.forClass(List.class);
         verify(dispatcher).markPublished(captor.capture());
         assertThat(captor.getValue()).containsExactly(event);
@@ -79,8 +86,10 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
+        when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
 
         relay.relay();
 
@@ -96,7 +105,7 @@ class ProductSearchOutboxRelayTest {
         ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of());
 
         relay.relay();
 
@@ -117,8 +126,9 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(status);
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
 
         relay.relay();
 
@@ -135,8 +145,12 @@ class ProductSearchOutboxRelayTest {
         ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
-        when(productRepository.findByIdAndDeletedAtIsNull(1L))
-                .thenThrow(new RuntimeException("OpenSearch 연결 실패"));
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
+        when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
+        when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productSearchRepository.save(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         relay.relay();
 
@@ -146,6 +160,28 @@ class ProductSearchOutboxRelayTest {
         ArgumentCaptor<List<DispatchFailure>> failedCaptor = ArgumentCaptor.forClass(List.class);
         verify(dispatcher).recordFailures(failedCaptor.capture());
         assertThat(failedCaptor.getValue()).extracting(DispatchFailure::event).containsExactly(event);
+    }
+
+    // UPSERT 이벤트에서 공동구매 요약 Map에 해당 상품이 있으면 문서에 hasActiveGroupBuy=true와 요약 값이 반영되는지 검증
+    @Test
+    void relay_UPSERT_이벤트에_공동구매_요약이_있으면_문서에_반영된다() {
+        ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(List.of(event));
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
+        when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
+        GroupBuyProductSummaryResponse summary =
+                new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of(1L, summary));
+
+        relay.relay();
+
+        ArgumentCaptor<ProductSearchDocument> docCaptor = ArgumentCaptor.forClass(ProductSearchDocument.class);
+        verify(productSearchRepository).save(docCaptor.capture());
+        assertThat(docCaptor.getValue().hasActiveGroupBuy()).isTrue();
+        assertThat(docCaptor.getValue().currentUnitPrice()).isEqualTo(8000);
     }
 
     // 폴링 자체가 실패해도(DB 커넥션 문제 등) @Scheduled가 다음 주기에 재실행될 수 있도록

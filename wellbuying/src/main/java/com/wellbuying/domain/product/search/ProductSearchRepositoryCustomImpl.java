@@ -1,7 +1,9 @@
 package com.wellbuying.domain.product.search;
 
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
+import java.util.ArrayList;
 import java.util.List;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.SortOptions;
@@ -23,9 +25,9 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     @Override
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size, Boolean activeGroupBuyOnly) {
         NativeQueryBuilder builder = new NativeQueryBuilder()
-                .withQuery(buildQuery(keyword))
+                .withQuery(buildQuery(keyword, activeGroupBuyOnly))
                 .withSort(List.of(
                         SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
                         SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc)))
@@ -72,16 +74,18 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
 
     // productName/description에 대한 형태소 분석 기반 multi_match + status:APPROVED 필터
     // filter 컨텍스트로 분리하면 status 조건이 _score에 영향 없이 캐시 가능 → 관련도 정렬 정확도 유지
-    private Query buildQuery(String keyword) {
+    private Query buildQuery(String keyword, Boolean activeGroupBuyOnly) {
+        List<Query> filters = new ArrayList<>();
+        filters.add(Query.of(f -> f.term(t -> t.field("status").value(v -> v.stringValue(ProductStatus.APPROVED.name())))));
+        if (Boolean.TRUE.equals(activeGroupBuyOnly)) {
+            filters.add(Query.of(f -> f.term(t -> t.field("hasActiveGroupBuy").value(v -> v.booleanValue(true)))));
+        }
         return Query.of(q -> q
                 .bool(b -> b
                         .must(m -> m
                                 .multiMatch(mm -> mm
                                         .query(keyword)
                                         .fields("productName", "description")))
-                        .filter(f -> f
-                                .term(t -> t
-                                        .field("status")
-                                        .value(v -> v.stringValue("APPROVED"))))));
+                        .filter(filters)));
     }
 }

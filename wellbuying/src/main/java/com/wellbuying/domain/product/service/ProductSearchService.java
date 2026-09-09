@@ -17,8 +17,8 @@ public class ProductSearchService {
         this.productSearchRepository = productSearchRepository;
     }
 
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size, Boolean activeGroupBuyOnly) {
         sort.validateSupported();
-        return productSearchRepository.search(keyword, cursor, size);
+        return productSearchRepository.search(keyword, cursor, size, activeGroupBuyOnly);
     }
 }
