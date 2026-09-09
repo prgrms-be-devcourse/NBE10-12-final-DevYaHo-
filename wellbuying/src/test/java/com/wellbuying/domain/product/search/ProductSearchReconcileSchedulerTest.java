@@ -18,10 +18,11 @@ import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.List;
 import java.util.Map;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -40,8 +41,15 @@ class ProductSearchReconcileSchedulerTest {
     @Mock
     private GroupBuyService groupBuyService;
 
-    @InjectMocks
+    private SimpleMeterRegistry meterRegistry;
     private ProductSearchReconcileScheduler scheduler;
+
+    @BeforeEach
+    void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+        scheduler = new ProductSearchReconcileScheduler(
+                productRepository, productSearchRepository, groupBuyService, meterRegistry);
+    }
 
     @Test
     void reconcile_APPROVED_상품을_페이지_단위로_재색인한다() {
@@ -67,6 +75,10 @@ class ProductSearchReconcileSchedulerTest {
         List<List<ProductSearchDocument>> allCalls = captor.getAllValues();
         assertThat(allCalls.get(0)).allMatch(doc -> !doc.hasActiveGroupBuy());
         assertThat(allCalls.get(1)).allMatch(doc -> doc.hasActiveGroupBuy());
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.documents").counter().count()).isEqualTo(3.0);
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.duration").timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isZero();
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.last_success_timestamp_seconds").gauge().value()).isGreaterThan(0.0);
     }
 
     @Test
@@ -89,6 +101,8 @@ class ProductSearchReconcileSchedulerTest {
         when(productSearchRepository.saveAll(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         assertThatCode(() -> scheduler.reconcile()).doesNotThrowAnyException();
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.last_success_timestamp_seconds").gauge().value()).isEqualTo(0.0);
     }
 
     private Product mockProduct(Long id) {

@@ -5,6 +5,12 @@ import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -28,19 +34,34 @@ public class ProductSearchReconcileScheduler {
     private final ProductRepository productRepository;
     private final ProductSearchRepository productSearchRepository;
     private final GroupBuyService groupBuyService;
+    private final Timer reconcileTimer;
+    private final Counter reconciledDocuments;
+    private final Counter reconcileFailures;
+    private final AtomicLong lastSuccessTimestamp = new AtomicLong(0);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
-            GroupBuyService groupBuyService) {
+            GroupBuyService groupBuyService,
+            MeterRegistry meterRegistry) {
         this.productRepository = productRepository;
         this.productSearchRepository = productSearchRepository;
         this.groupBuyService = groupBuyService;
+        this.reconcileTimer = Timer.builder("wellbuying.search.reconcile.duration")
+                .description("검색 인덱스 정합성 보정 배치 1회 소요 시간").register(meterRegistry);
+        this.reconciledDocuments = Counter.builder("wellbuying.search.reconcile.documents")
+                .description("보정 배치가 재색인한 누적 문서 수").register(meterRegistry);
+        this.reconcileFailures = Counter.builder("wellbuying.search.reconcile.failures")
+                .description("보정 배치 실패 횟수 (예외로 중단된 실행 수)").register(meterRegistry);
+        Gauge.builder("wellbuying.search.reconcile.last_success_timestamp_seconds", lastSuccessTimestamp, AtomicLong::get)
+                .description("보정 배치가 마지막으로 정상 완료된 시점의 Epoch 초 (0=아직 성공 없음)")
+                .register(meterRegistry);
     }
 
     @Scheduled(
             fixedDelayString = "${search.reconcile.fixed-delay-ms:600000}",
             initialDelayString = "${search.reconcile.initial-delay-ms:600000}")
     public void reconcile() {
+        Timer.Sample sample = Timer.start();
         long lastId = 0L;
         int total = 0;
         try {
@@ -58,11 +79,16 @@ public class ProductSearchReconcileScheduler {
                         .toList();
                 productSearchRepository.saveAll(documents);
                 total += documents.size();
+                reconciledDocuments.increment(documents.size());
                 lastId = products.get(products.size() - 1).getId();
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
+            lastSuccessTimestamp.set(Instant.now().getEpochSecond());
         } catch (Exception e) {
+            reconcileFailures.increment();
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
+        } finally {
+            sample.stop(reconcileTimer);
         }
     }
 }
