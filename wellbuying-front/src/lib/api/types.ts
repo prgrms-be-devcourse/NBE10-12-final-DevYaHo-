@@ -70,7 +70,7 @@ export type SellerApplyRequest = {
 
 export type SellerSignupRequest = SignupRequest & SellerApplyRequest;
 
-export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
+export type SellerStatus = "PENDING" | "APPROVED" | "SUSPENDED" | "REJECTED";
 
 export type SellerInfoResponse = {
   id: number;
@@ -84,6 +84,7 @@ export type SellerInfoResponse = {
 export type MemberStatus = "ACTIVE" | "DORMANT" | "WITHDRAWN";
 
 // GET /api/admin/members 응답 - 관리자 회원 목록 조회
+// sellerId/sellerStatus는 role이 SELLER인 회원만 값이 채워짐 - 그 외에는 null
 export type MemberSummaryResponse = {
   id: number;
   email: string;
@@ -92,6 +93,8 @@ export type MemberSummaryResponse = {
   status: MemberStatus;
   phoneNumber: string | null;
   createdAt: string;
+  sellerId: number | null;
+  sellerStatus: SellerStatus | null;
 };
 
 export type ErrorResponse = {

@@ -8,6 +8,7 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -17,20 +18,27 @@ public class OAuth2AuthenticationFailureHandler implements AuthenticationFailure
 
     private static final Logger log = LoggerFactory.getLogger(OAuth2AuthenticationFailureHandler.class);
 
+    private static final String DEFAULT_ERROR_CODE = "oauth_login_failed";
+
     private final OAuthProperties oAuthProperties;
 
     public OAuth2AuthenticationFailureHandler(OAuthProperties oAuthProperties) {
         this.oAuthProperties = oAuthProperties;
     }
 
-    // 실패 사유(예외 메시지)를 그대로 노출하지 않기 위해 고정된 에러 코드만 담아 프론트 실패 페이지로 리다이렉트
-    // 프론트에는 노출하지 않는 실제 원인을 서버 로그에는 남겨야 장애 추적이 가능하다
+    // 예외 메시지 원문은 노출하지 않되, 우리가 이미 ErrorCode로 정의해둔 안전한 코드값은 그대로 넘겨
+    // 프론트가 구체적인 실패 사유를 보여줄 수 있게 한다. 서버 로그에는 원인 전체를 남긴다.
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
             AuthenticationException exception) throws IOException, ServletException {
         log.warn("소셜 로그인 실패: {}", exception.getMessage(), exception);
+        String errorCode = DEFAULT_ERROR_CODE;
+        if (exception instanceof OAuth2AuthenticationException oAuth2Exception
+                && oAuth2Exception.getError().getErrorCode() != null) {
+            errorCode = oAuth2Exception.getError().getErrorCode();
+        }
         String redirectUri = UriComponentsBuilder.fromUriString(oAuthProperties.failureRedirectUri())
-                .queryParam("error", "oauth_login_failed")
+                .queryParam("error", errorCode)
                 .build()
                 .toUriString();
         response.sendRedirect(redirectUri);

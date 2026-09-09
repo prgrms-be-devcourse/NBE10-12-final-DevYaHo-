@@ -28,7 +28,7 @@ import {
 } from "@/lib/api/auth";
 import { listMyAddresses, createMyAddress, deleteMyAddress } from "@/lib/api/address";
 import { ApiError } from "@/lib/api/http";
-import { clearTokens, getDeviceId } from "@/lib/auth/token-storage";
+import { clearTokens, getDeviceId, getCachedDevices, saveCachedDevices } from "@/lib/auth/token-storage";
 import type { DeviceSessionResponse, MemberResponse, OAuthProvider, BuyerAddressResponse } from "@/lib/api/types";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -142,8 +142,20 @@ function DeviceListSection() {
 
   useEffect(() => {
     getDevices()
-      .then(setDevices)
-      .catch(() => setDevices([]));
+      .then((data) => {
+        if (data && data.length > 0) {
+          saveCachedDevices(data);
+          setDevices(data);
+        } else {
+          // 백엔드 세션이 날아갔지만 JWT는 살아있어 빈 배열이 올 경우 캐시 사용
+          const cached = getCachedDevices();
+          setDevices(cached || []);
+        }
+      })
+      .catch(() => {
+        const cached = getCachedDevices();
+        setDevices(cached || []);
+      });
   }, []);
 
   if (!devices || devices.length === 0) return null;
@@ -213,6 +225,7 @@ function EditProfileModal({
           body: file,
           headers: {
             "Content-Type": file.type,
+            "x-amz-tagging": "pending=true",
           },
         });
         if (!uploadRes.ok) throw new Error("이미지 업로드에 실패했어요.");
@@ -364,14 +377,11 @@ function AddressSection() {
         <Modal open onClose={() => setShowAdd(false)} title="배송지 추가" width="400px">
           {isSearching ? (
             <div className="space-y-2">
-               <div className="relative overflow-hidden h-[400px]">
-                 <DaumPostcode 
-                   onComplete={handleCompletePostcode} 
-                   autoClose={false} 
-                   style={{ height: "430px", width: "100%" }} 
-                 />
-                 <div className="absolute bottom-0 left-0 right-0 h-10 bg-white z-10 pointer-events-none" />
-               </div>
+               <DaumPostcode 
+                 onComplete={handleCompletePostcode} 
+                 autoClose={false} 
+                 style={{ height: "400px", width: "100%" }} 
+               />
                <Button variant="secondary" className="w-full" onClick={() => setIsSearching(false)}>닫기</Button>
             </div>
           ) : (

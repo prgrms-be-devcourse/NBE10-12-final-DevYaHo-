@@ -11,6 +11,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.MemberStatus;
 import com.wellbuying.domain.member.entity.QMember;
 import com.wellbuying.domain.member.entity.Role;
+import com.wellbuying.domain.seller.entity.QSellerInfo;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Page;
@@ -21,6 +22,7 @@ import org.springframework.data.support.PageableExecutionUtils;
 public class MemberQueryRepositoryImpl implements MemberQueryRepository {
 
     private static final QMember member = QMember.member;
+    private static final QSellerInfo sellerInfo = QSellerInfo.sellerInfo;
 
     // MemberSummaryResponse에 노출되는 필드로만 정렬 허용 - 클라이언트가 임의 프로퍼티명을 넘겨 500/의도치 않은 정렬을 유발하지 못하도록 화이트리스트 적용
     private static final Set<String> ALLOWED_SORT_PROPERTIES =
@@ -43,8 +45,11 @@ public class MemberQueryRepositoryImpl implements MemberQueryRepository {
                         member.role,
                         member.status,
                         member.phoneNumber,
-                        member.createdAt))
+                        member.createdAt,
+                        sellerInfo.id,
+                        sellerInfo.status))
                 .from(member)
+                .leftJoin(sellerInfo).on(sellerInfo.memberId.eq(member.id))
                 .where(roleEq(role), statusEq(status))
                 .orderBy(sortOrders(pageable.getSort()))
                 .offset(pageable.getOffset())

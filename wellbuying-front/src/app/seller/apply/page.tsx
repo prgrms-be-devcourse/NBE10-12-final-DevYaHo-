@@ -6,10 +6,12 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { TextField } from "@/components/ui/TextField";
+import { SelectField } from "@/components/ui/SelectField";
 import { Banner } from "@/components/ui/Banner";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { sellerApply } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/http";
+import { BANK_OPTIONS, bankNameByCode } from "@/lib/constants/banks";
 
 function SellerApplyContent() {
   const { member } = useAuth();
@@ -28,6 +30,10 @@ function SellerApplyContent() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!bankCode) {
+      setError("은행을 선택해주세요.");
+      return;
+    }
     setSubmitting(true);
     try {
       await sellerApply({
@@ -77,19 +83,15 @@ function SellerApplyContent() {
           </Banner>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <TextField
-              label="은행 코드"
-              placeholder="예: 004"
+            <SelectField
+              label="은행"
+              placeholder="은행을 선택해주세요"
               value={bankCode}
-              onChange={(e) => setBankCode(e.target.value)}
-              required
-            />
-            <TextField
-              label="은행명"
-              placeholder="예: KB국민은행"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              required
+              onChange={(code) => {
+                setBankCode(code);
+                setBankName(bankNameByCode(code));
+              }}
+              options={BANK_OPTIONS}
             />
             <TextField
               label="계좌번호"
