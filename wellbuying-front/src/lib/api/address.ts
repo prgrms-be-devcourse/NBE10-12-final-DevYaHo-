@@ -13,3 +13,8 @@ export function createMyAddress(request: BuyerAddressCreateRequest): Promise<Buy
 export function deleteMyAddress(addressId: number): Promise<void> {
   return http.delete<void>(`/api/members/me/addresses/${addressId}`, { auth: true });
 }
+
+// 기존 기본 배송지는 자동으로 해제되고, 지정한 배송지가 새 기본 배송지가 된다
+export function setDefaultAddress(addressId: number): Promise<void> {
+  return http.patch<void>(`/api/members/me/addresses/${addressId}/default`, undefined, { auth: true });
+}

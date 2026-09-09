@@ -273,6 +273,7 @@ export type BuyerAddressResponse = {
   address: string;
   addressDetail: string | null;
   zipcode: string;
+  isDefault: boolean;
   createdAt: string;
 };
 
@@ -281,6 +282,8 @@ export type BuyerAddressCreateRequest = {
   addressDetail?: string;
   // 새 우편번호 체계 - 숫자 5자리 고정
   zipcode: string;
+  // 최초 등록이거나 true면 기본 배송지로 지정 - 기존 기본 배송지는 자동 해제된다
+  isDefault: boolean;
 };
 
 // 백엔드가 Page<T>를 그대로 직렬화하지 않고 Spring Data의 PagedModel(@EnableSpringDataWebSupport(VIA_DTO))로

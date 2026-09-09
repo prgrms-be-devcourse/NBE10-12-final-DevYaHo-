@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -54,6 +55,15 @@ public class BuyerAddressController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable Long addressId) {
         buyerAddressService.delete(member.memberId(), addressId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 기본 배송지 지정 - 기존 기본 배송지는 자동으로 해제된다
+    @Operation(summary = "기본 배송지 지정")
+    @PatchMapping("/{addressId}/default")
+    public ResponseEntity<Void> setDefault(@AuthenticationPrincipal AuthenticatedMember member,
+            @PathVariable Long addressId) {
+        buyerAddressService.setDefault(member.memberId(), addressId);
         return ResponseEntity.noContent().build();
     }
 }
