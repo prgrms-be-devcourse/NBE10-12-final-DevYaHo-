@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectTaggingRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 @ExtendWith(MockitoExtension.class)
 class ProductImageEventListenerTest {
@@ -99,5 +100,18 @@ class ProductImageEventListenerTest {
                 .doesNotThrowAnyException();
 
         verify(s3Client, times(3)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
+    }
+
+    // 4xx 오류는 재시도해도 결과가 같으므로 1회 만에 종료된다
+    @Test
+    void handleConfirmed_4xx_오류면_재시도하지_않는다() {
+        when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
+        when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
+        when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("NoSuchKey").build());
+
+        productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg"));
+
+        verify(s3Client, times(1)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
     }
 }

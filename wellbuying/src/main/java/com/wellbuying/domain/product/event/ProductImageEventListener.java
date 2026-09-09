@@ -11,6 +11,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectTaggingRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 // S3 정리 작업 중 handleOrphaned(삭제)는 best-effort - 실패해도 에러 로그만 남긴다 (비용 문제일 뿐 유실 아님)
 // handleConfirmed(태그 제거)는 실패 시 lifecycle rule로 24시간 뒤 이미지가 영구 삭제되므로 재시도한다
@@ -51,6 +52,10 @@ public class ProductImageEventListener {
                 s3Client.deleteObjectTagging(DeleteObjectTaggingRequest.builder().bucket(bucket).key(key).build());
                 return;
             } catch (Exception e) {
+                if (!isRetryable(e)) {
+                    log.error("상품 이미지 pending 태그 제거 실패 (재시도 불가 오류) - 수동 확인 필요: key={}", key, e);
+                    return;
+                }
                 if (attempt == MAX_CONFIRM_ATTEMPTS) {
                     log.error("상품 이미지 pending 태그 제거 최종 실패 - 24시간 내 수동 확인 필요: key={}, attempts={}",
                             key, attempt, e);
@@ -78,6 +83,14 @@ public class ProductImageEventListener {
         } catch (Exception e) {
             log.error("상품 이미지 삭제 실패: key={}", key, e);
         }
+    }
+
+    // 4xx(NoSuchKey, AccessDenied 등)는 재시도해도 결과가 같으므로 즉시 중단. 5xx·네트워크 오류만 재시도
+    private boolean isRetryable(Exception e) {
+        if (e instanceof S3Exception s3Exception) {
+            return s3Exception.statusCode() >= 500;
+        }
+        return true;
     }
 
     // 재시도 대기. 인터럽트되면 false를 반환해 재시도를 중단한다
