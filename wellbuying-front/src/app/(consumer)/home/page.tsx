@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownCircle,
@@ -33,24 +33,36 @@ const NEW_ARRIVAL_COUNT = 4;
 
 export default function HomePage() {
   const { items: ongoing, loading: ongoingLoading } = useGroupBuyList("ONGOING");
+  // 인기/신규/마감임박은 각각 다른 기준으로 정렬돼야 해서, 이미 받아온 ongoing 목록(서버 기본 정렬)을
+  // 그대로 재활용하지 않고 정렬 기준별로 따로 받아온다 - 전체 진행중 건수가 한 번에 받는 개수(50)보다
+  // 많아지면 클라이언트에서 재정렬해서는 진짜 상위 항목을 놓칠 수 있기 때문(서버가 정렬한 뒤 잘라줘야
+  // 정확하다). 목록 카드에 필요한 필드는 동일해 사이즈만 작게 준다
+  const { items: popularSource } = useGroupBuyList("ONGOING", { sort: "viewCount,desc", size: POPULAR_COUNT * 4 });
+  const { items: closingSource } = useGroupBuyList("ONGOING", { sort: "endAt,asc", size: CLOSING_SOON_COUNT * 4 });
+  const { items: newArrivalSource } = useGroupBuyList("ONGOING", {
+    sort: "createdAt,desc",
+    size: NEW_ARRIVAL_COUNT * 4,
+  });
   const { items: upcomingAll } = useGroupBuyList("READY");
   const [category, setCategory] = useState("전체");
   const [slide, setSlide] = useState(0);
 
-  const filtered = category === "전체" ? ongoing : ongoing.filter((item) => item.category === category);
+  const byCategory = useCallback(
+    (items: GroupBuyCardView[]) => (category === "전체" ? items : items.filter((item) => item.category === category)),
+    [category],
+  );
+
+  const filtered = byCategory(ongoing);
 
   const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
 
-  const popular = useMemo(
-    () => [...filtered].sort((a, b) => b.currentQuantity - a.currentQuantity).slice(0, POPULAR_COUNT),
-    [filtered],
-  );
+  const popular = useMemo(() => byCategory(popularSource).slice(0, POPULAR_COUNT), [popularSource, byCategory]);
 
   const notable = useMemo(() => filtered.slice(0, NOTABLE_COUNT), [filtered]);
 
   const closingSoon = useMemo(
-    () => [...filtered].sort((a, b) => a.daysLeft - b.daysLeft).slice(0, CLOSING_SOON_COUNT),
-    [filtered],
+    () => byCategory(closingSource).slice(0, CLOSING_SOON_COUNT),
+    [closingSource, byCategory],
   );
 
   const upcoming = useMemo(() => {
@@ -58,7 +70,10 @@ export default function HomePage() {
     return scheduled.slice(0, UPCOMING_COUNT);
   }, [upcomingAll, category]);
 
-  const newArrivals = useMemo(() => [...filtered].reverse().slice(0, NEW_ARRIVAL_COUNT), [filtered]);
+  const newArrivals = useMemo(
+    () => byCategory(newArrivalSource).slice(0, NEW_ARRIVAL_COUNT),
+    [newArrivalSource, byCategory],
+  );
 
   useEffect(() => {
     setSlide(0);
@@ -327,7 +342,8 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
         <p className="mt-0.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-bold text-wb-green">{item.currentQuantity.toLocaleString("ko-KR")}개</p>
+        <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
+        <p className="mt-0.5 text-xs text-wb-secondary">{item.currentQuantity.toLocaleString("ko-KR")}개 참여</p>
       </div>
     </Link>
   );

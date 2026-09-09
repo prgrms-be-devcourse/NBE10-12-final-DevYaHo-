@@ -1,6 +1,6 @@
 package com.wellbuying.domain.payment.event;
 
-import com.wellbuying.domain.payment.entity.Order;
+import com.wellbuying.domain.order.entity.Order;
 import java.time.LocalDateTime;
 
 // 결제 승인 성공 - notification(구매 완료 안내), settlement(정산 대상 적재)이 구독한다

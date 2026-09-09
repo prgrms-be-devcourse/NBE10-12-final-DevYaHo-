@@ -1,5 +1,6 @@
 package com.wellbuying.domain.groupbuy.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.document;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
@@ -22,7 +23,9 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyEventOutboxRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
+import com.wellbuying.domain.groupbuy.service.GroupBuyFinalizationWorker;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -69,6 +72,12 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private GroupBuyCounterRepository groupBuyCounterRepository;
+
+    @Autowired
+    private GroupBuyFinalizationWorker groupBuyFinalizationWorker;
+
+    @Autowired
+    private GroupBuyEventOutboxRepository groupBuyEventOutboxRepository;
 
     @Autowired
     private ProductRepository productRepository;
@@ -239,7 +248,8 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("priceTiers[].thresholdQuantity").description("구간 기준 수량"),
                                 fieldWithPath("priceTiers[].unitPrice").description("구간 단가"),
                                 fieldWithPath("createdAt").description("생성 일시"),
-                                fieldWithPath("suspended").description("판매정지 여부"))));
+                                fieldWithPath("suspended").description("판매정지 여부"),
+                                fieldWithPath("viewCount").description("조회수"))));
     }
 
     // 목록 조회 응답이 PagedModel 형태(content + page 메타데이터)로 직렬화되는지 검증
@@ -271,6 +281,8 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("content[].currentQuantity").description("현재 누적 참여 수량"),
                                 fieldWithPath("content[].maxQuantity").description("최대 수량"),
                                 fieldWithPath("content[].suspended").description("판매정지 여부"),
+                                fieldWithPath("content[].viewCount").description("조회수"),
+                                fieldWithPath("content[].createdAt").description("생성 일시"),
                                 fieldWithPath("page.size").description("페이지 크기"),
                                 fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
                                 fieldWithPath("page.totalElements").description("전체 요소 수"),
@@ -362,7 +374,9 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
     }
 
     // 매진으로 공동구매가 성사되면, 먼저 참여해 더 비싼 구간에 있었던 참여자에게도 최종(가장 낮은) 구간 단가가
-    // 실제 DB/HTTP 응답까지 소급 적용되는지 end-to-end로 검증
+    // 실제 DB/HTTP 응답까지 소급 적용되는지 end-to-end로 검증. 최종가 반영/이벤트 발행은 매진을 트리거한
+    // 요청이 직접 하지 않고 GroupBuyFinalizationWorker가 별도 스케줄 틱에서 처리하므로, 트리거 응답 시점에는
+    // 아직 null이고(assertion 참고) 워커를 명시로 한 번 돌려줘야 소급 반영된 값을 확인할 수 있다
     @Test
     void 매진으로_성사되면_먼저_참여한_사람에게도_최종가가_소급_적용된다() throws Exception {
         Member seller = saveSeller("groupbuy-final-price-seller@example.com");
@@ -386,22 +400,36 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.appliedPrice").value(nullValue()));
 
-        // 나머지 50개가 채워져 100개(10,000원 구간)로 매진 - 이 참여로 즉시 성사된다
+        // 나머지 50개가 채워져 100개(10,000원 구간)로 매진 - 이 참여로 즉시 SUCCESS로 확정되지만,
+        // 최종가는 트리거 응답 시점엔 아직 반영 전이라 null이다(워커가 뒤이어 처리)
         mockMvc.perform(post("/api/groupBuys/{id}/part", groupBuy.getId())
                         .with(authentication(authOf(lastBuyer)))
                         .contentType("application/json")
                         .content("{\"quantity\": 50, \"buyerAddressId\": " + lastBuyerAddress.getId() + "}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.appliedPrice").value(10_000));
+                .andExpect(jsonPath("$.appliedPrice").value(nullValue()));
+        mockMvc.perform(get("/api/groupBuys/{id}/status", groupBuy.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        // GroupBuyFinalizationWorker를 명시로 한 번 실행 - 실제로는 3초 주기 스케줄러가 이 시점을 대신한다
+        groupBuyFinalizationWorker.finalizeSucceededGroupBuys();
 
         // 먼저 참여했던 사람도 최종가(10,000원)로 소급 적용됐는지 확인
         mockMvc.perform(get("/api/groupBuys/{id}/part/me", groupBuy.getId())
                         .with(authentication(authOf(earlyBuyer))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.part.appliedPrice").value(10_000));
-        mockMvc.perform(get("/api/groupBuys/{id}/status", groupBuy.getId()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        // finalized_at이 실제로 DB에 반영돼(=워커가 다시 집지 않아) 워커를 한 번 더 돌려도 outbox 이벤트가
+        // 중복 발행되지 않는지 검증 - finalizeSucceeded()에서 markFinalized()를 clearAutomatically 호출보다
+        // 뒤에 두면 detached 엔티티라 mutation이 DB에 반영되지 않아, 워커가 이 건을 매 틱 다시 집어 이벤트를
+        // 무한정 중복 발행하는 회귀가 있었다 (참여자 2명 기준 이벤트는 정확히 2건이어야 한다)
+        long outboxCountAfterFirstRun = groupBuyEventOutboxRepository.countByGroupBuyId(groupBuy.getId());
+        groupBuyFinalizationWorker.finalizeSucceededGroupBuys();
+        assertThat(groupBuyEventOutboxRepository.countByGroupBuyId(groupBuy.getId()))
+                .isEqualTo(outboxCountAfterFirstRun)
+                .isEqualTo(2);
     }
 
     // 잔여 수량을 초과하는 참여 신청은 409와 GROUPBUY_409_SOLD_OUT을 반환하는지 검증

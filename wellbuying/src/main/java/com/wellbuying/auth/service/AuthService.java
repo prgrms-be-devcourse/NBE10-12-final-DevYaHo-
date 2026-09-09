@@ -1,10 +1,6 @@
 package com.wellbuying.auth.service;
 
-import com.wellbuying.auth.dto.DeviceSessionResponse;
-import com.wellbuying.auth.dto.LoginRequest;
-import com.wellbuying.auth.dto.LoginResponse;
-import com.wellbuying.auth.dto.ReissueRequest;
-import com.wellbuying.auth.dto.ReissueResponse;
+import com.wellbuying.auth.dto.*;
 import com.wellbuying.auth.jwt.TokenProvider;
 import com.wellbuying.auth.oauth.OAuthExchangeCodeRepository;
 import com.wellbuying.auth.oauth.OAuthExchangePayload;
@@ -25,12 +21,15 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AuthService {
@@ -45,11 +44,12 @@ public class AuthService {
     private final OAuthExchangeCodeRepository oAuthExchangeCodeRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final EmailVerificationService emailVerificationService;
+    private final TransactionTemplate transactionTemplate;
 
     public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
             TokenProvider tokenProvider, RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
             OAuthExchangeCodeRepository oAuthExchangeCodeRepository, ApplicationEventPublisher eventPublisher,
-            EmailVerificationService emailVerificationService) {
+            EmailVerificationService emailVerificationService, PlatformTransactionManager transactionManager) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
@@ -58,30 +58,45 @@ public class AuthService {
         this.oAuthExchangeCodeRepository = oAuthExchangeCodeRepository;
         this.eventPublisher = eventPublisher;
         this.emailVerificationService = emailVerificationService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     // 이메일/비밀번호 검증(소셜 전용 계정, 비밀번호 불일치 예외 처리) 후 토큰 발급하고 refresh token 해시를 Redis에 저장
     // 휴면 대상 회원은 토큰 발급 전에 차단 - 배치가 아직 처리하지 못한 대상(status=ACTIVE지만 6개월 경과)도 이 시점에 즉시 markDormant()로 전환
-    // DormantMemberException 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로 noRollbackFor 지정
-    // (다른 BusinessException 하위 타입은 대상이 아니므로, 이 메서드에 새 예외를 추가해도 기존처럼 정상 롤백된다)
-    @Transactional(noRollbackFor = DormantMemberException.class)
+    // DB 조회/검증(STEP1)만 짧은 트랜잭션으로 끝내 커넥션을 바로 반납하고, Redis 호출(STEP2, issueTokens())은 트랜잭션
+    // 밖에서 실행한다 - Redis가 느려지거나 장애가 나도 DB 커넥션을 붙잡아두지 않기 위함(phase21 §4-3).
+    // DormantMemberException 발생 시에도 markDormant()로 전환된 상태가 커밋되어야 하므로, 이 메서드 자체는 @Transactional을
+    // 쓰지 않고 TransactionTemplate 콜백 안에서 이 예외를 캐치해 rollbackOnly를 걸지 않고 정상 반환(커밋)한 뒤
+    // execute() 밖에서 다시 던져 @Transactional(noRollbackFor = ...)와 동일한 효과를 재현한다.
+    // (다른 BusinessException 하위 타입은 대상이 아니므로 그대로 던지면 트랜잭션이 롤백된다)
     public LoginResponse login(LoginRequest request, String requestDeviceId) {
-        Member member = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
-                .orElseThrow(() -> {
-                    log.warn("로그인 실패: 존재하지 않는 이메일");
-                    return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
-                });
-        if (member.isSocialOnly()) {
-            throw new BusinessException(ErrorCode.SOCIAL_ONLY_ACCOUNT);
+        AtomicReference<DormantMemberException> dormantException = new AtomicReference<>();
+        Member member = transactionTemplate.execute(status -> {
+            Member m = memberRepository.findByEmailAndDeletedAtIsNull(request.email())
+                    .orElseThrow(() -> {
+                        log.warn("로그인 실패: 존재하지 않는 이메일");
+                        return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+                    });
+            if (m.isSocialOnly()) {
+                throw new BusinessException(ErrorCode.SOCIAL_ONLY_ACCOUNT);
+            }
+            if (!passwordEncoder.matches(request.password(), m.getPassword())) {
+                log.warn("로그인 실패: 비밀번호 불일치 - memberId={}", m.getId());
+                throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+            }
+            try {
+                m.validateNotDormant();
+            } catch (DormantMemberException e) {
+                dormantException.set(e);
+            }
+            return m;
+        });
+        if (dormantException.get() != null) {
+            throw dormantException.get();
         }
-        if (!passwordEncoder.matches(request.password(), member.getPassword())) {
-            log.warn("로그인 실패: 비밀번호 불일치 - memberId={}", member.getId());
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
-        }
-        member.validateNotDormant();
-
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
     }
+
 
     // 이메일 인증코드 검증 성공 시 휴면 계정을 즉시 재활성화하고 로그인 토큰까지 함께 발급
     @Transactional
@@ -94,6 +109,20 @@ public class AuthService {
         }
         member.reactivate();
         return issueTokens(member.getId(), member.getRole(), requestDeviceId);
+    }
+
+    // 비밀번호 재발급 - verify 단계에서 남긴 verified 플래그를 확인·소비한 뒤 비밀번호를 교체하고,
+    // 계정 탈취 가능성을 전제로 기존에 로그인되어 있던 모든 기기 세션을 무효화한다
+    @Transactional
+    public void resetPassword(String email, String newPassword) {
+        emailVerificationService.assertPasswordReissueVerified(email);
+        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (passwordEncoder.matches(newPassword, member.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_SAME_AS_OLD);
+        }
+        member.changePassword(passwordEncoder.encode(newPassword));
+        logoutAll(member.getId());
     }
 
     // access/refresh 토큰을 발급하고 refresh token 해시를 Redis에 저장 (비밀번호 로그인/소셜 로그인 공용)
@@ -125,9 +154,10 @@ public class AuthService {
     }
 
     // refresh token 검증 후 Lua 스크립트로 rotate하여 access/refresh 토큰을 재발급 (RTR) - role은 DB에서 최신값을 다시 조회해 반영
-    @Transactional(readOnly = true)
-    public ReissueResponse reissue(ReissueRequest request) {
-        Claims claims = tokenProvider.parseClaims(request.refreshToken());
+    // DB 조회(회원 존재 검증)와 Redis 호출(rotate)이 뒤섞여 있던 기존 readOnly 트랜잭션을 제거했다 - Redis 장애/지연 시에도
+    // DB 커넥션을 붙잡아두지 않기 위함(phase21 §4-3). 폴백이 필요한 구간은 RefreshTokenFallbackStore가 자체 트랜잭션으로 처리한다.
+    public ReissueResponse reissue(String refreshToken) {
+        Claims claims = tokenProvider.parseClaims(refreshToken);
         Long memberId = tokenProvider.getMemberId(claims);
         String deviceId = tokenProvider.getDeviceId(claims);
 
@@ -135,7 +165,7 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         eventPublisher.publishEvent(new MemberLoginEvent(memberId));
 
-        String oldTokenHash = tokenHasher.hash(request.refreshToken());
+        String oldTokenHash = tokenHasher.hash(refreshToken);
         String newAccessToken = tokenProvider.createAccessToken(memberId, member.getRole(), deviceId);
         String newRefreshToken = tokenProvider.createRefreshToken(memberId, deviceId);
         String newTokenHash = tokenHasher.hash(newRefreshToken);

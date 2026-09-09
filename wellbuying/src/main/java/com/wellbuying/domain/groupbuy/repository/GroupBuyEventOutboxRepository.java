@@ -18,6 +18,10 @@ public interface GroupBuyEventOutboxRepository extends JpaRepository<GroupBuyEve
 
     void deleteByGroupBuyIdIn(List<Long> groupBuyIds);
 
+    // 공동구매 1건에 기록된 이벤트 총 건수 - GroupBuyFinalizationWorker가 같은 건을 중복 처리하지 않는지
+    // (finalized_at이 제대로 반영돼 재방문하지 않는지) 검증하는 용도
+    long countByGroupBuyId(Long groupBuyId);
+
     // GroupBuyOutboxRelay가 배치를 병렬 발행한 뒤 성공한 건들의 published_at을 한 번의 UPDATE로 채운다 -
     // 건마다 개별 save()를 호출하면 그만큼 개별 UPDATE 왕복이 발생하므로 벌크로 묶는다
     @Modifying(clearAutomatically = true, flushAutomatically = true)

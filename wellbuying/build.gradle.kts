@@ -41,6 +41,9 @@ dependencies {
     runtimeOnly("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    // Redis 장애 시 login()/reissue()/logout() DB 폴백 전환용 서킷 브레이커 (phase21 §2-3)
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.3.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.3.0")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.kafka:spring-kafka")
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
@@ -50,6 +53,8 @@ dependencies {
         exclude(group = "org.opensearch.client", module = "opensearch-rest-high-level-client")
     }
     implementation("org.opensearch.client:opensearch-java:3.7.0")
+    implementation(platform("software.amazon.awssdk:bom:2.54.13"))  // https://mvnrepository.com/artifact/software.amazon.awssdk/bom 에서 최신 버전 확인 후 필요시 교체
+    implementation("software.amazon.awssdk:s3")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-restdocs")
     testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-client-test")
@@ -61,6 +66,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-kafka")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-minio")
     testImplementation("org.opensearch:opensearch-testcontainers:4.1.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("io.github.openfeign.querydsl:querydsl-jpa:$querydslVersion")

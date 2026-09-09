@@ -17,6 +17,12 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     // 목록/검색 - 상태별 필터링
     Page<GroupBuy> findByStatus(GroupBuyStatus status, Pageable pageable);
 
+    // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
+    boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
+
+    // 검색 색인(OpenSearch) 배치 갱신용 - 여러 상품의 지정된 상태 공동구매를 한 번의 IN 쿼리로 조회 (상품 수만큼 개별 호출하지 않는다)
+    List<GroupBuy> findByProductIdInAndStatusIn(List<Long> productIds, List<GroupBuyStatus> statuses);
+
     // 생산자별 조회 - GroupBuySeedRunner가 이전에 시딩한 자기 소유 데이터를 정리할 때 사용
     List<GroupBuy> findByProducerId(Long producerId);
 
@@ -32,7 +38,15 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     List<GroupBuy> findByStatusAndStartAtLessThanEqual(GroupBuyStatus status, LocalDateTime now, Limit limit);
 
     // 마감 시각이 지난 ONGOING 공동구매 조회 - GroupBuyLifecycleScheduler가 SUCCESS/FAILED로 확정할 대상 (limit 설명은 위와 동일)
-    List<GroupBuy> findByStatusAndEndAtLessThanEqual(GroupBuyStatus status, LocalDateTime now, Limit limit);
+    // 정렬 기준(end_at 오름차순)이 없으면 밀렸을 때(BATCH_LIMIT 초과) 어떤 순서로 처리될지 보장이 없어,
+    // 먼저 마감된 건이 오히려 더 오래 기다릴 수 있다 - 가장 오래 대기 중인 건부터 처리되도록 명시한다
+    List<GroupBuy> findByStatusAndEndAtLessThanEqualOrderByEndAtAsc(GroupBuyStatus status, LocalDateTime now,
+            Limit limit);
+
+    // 성사(SUCCESS)됐지만 아직 참여자 최종가 반영/outbox 이벤트 기록이 안 된 건 조회 - GroupBuyFinalizationWorker의 처리 대상.
+    // 트리거한 요청/틱은 status만 SUCCESS로 확정하고 곧바로 반환하며, 참여자 수(N)에 비례해 느려지는 무거운
+    // 후속 작업은 이 워커가 별도 트랜잭션·별도 스케줄 틱에서 나눠 처리한다 (limit 설명은 위와 동일)
+    List<GroupBuy> findByStatusAndFinalizedAtIsNullOrderByIdAsc(GroupBuyStatus status, Limit limit);
 
     // 참여 시 누적 수량을 원자적으로 증가시킨다 - "읽은 값 + delta를 자바에서 계산해 덮어쓰는" 방식이 아니라
     // DB가 직접 current_quantity = current_quantity + :quantity 를 한 문장으로 처리하므로, 동시에 여러 참여가
@@ -46,4 +60,10 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE GroupBuy g SET g.currentQuantity = GREATEST(g.currentQuantity - :quantity, 0) WHERE g.id = :id")
     void decreaseQuantity(@Param("id") Long id, @Param("quantity") int quantity);
+
+    // 상세 조회(GET /{id}) 시마다 조회수를 원자적으로 증가시킨다 - increaseQuantity와 동일한 이유로
+    // 엔티티를 읽어 자바에서 +1 하는 대신 DB에 직접 반영한다(동시 조회가 몰려도 갱신 유실 없음)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE GroupBuy g SET g.viewCount = g.viewCount + 1 WHERE g.id = :id")
+    void increaseViewCount(@Param("id") Long id);
 }

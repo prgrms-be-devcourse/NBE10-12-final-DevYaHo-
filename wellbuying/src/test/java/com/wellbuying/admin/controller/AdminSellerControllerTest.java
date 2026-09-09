@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.restdocs.test.autoconfigure.AutoConfigureRestDocs;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -71,6 +72,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/approve", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/seller-approve-success"));
@@ -87,6 +90,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/reject", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 미비\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/seller-reject-success"));
@@ -103,6 +108,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/approve", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 확인 완료\"}")
                         .with(authentication(authOf(buyer))))
                 .andExpect(status().isForbidden());
     }
@@ -123,6 +130,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         Member admin = saveMember("admin-not-found@example.com", Role.ADMIN);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/approve", 999_999L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("SELLER_404_NOT_FOUND"))
@@ -142,6 +151,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         sellerInfoRepository.save(sellerInfo);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/approve", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SELLER_409_ALREADY_PROCESSED"));
@@ -157,6 +168,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         sellerInfoRepository.save(sellerInfo);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"약관 위반\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/seller-suspend-success"));
@@ -174,6 +187,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"약관 위반\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SELLER_409_NOT_APPROVED"));
@@ -189,6 +204,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         sellerInfoRepository.save(sellerInfo);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"약관 위반\"}")
                         .with(authentication(authOf(buyer))))
                 .andExpect(status().isForbidden());
     }
@@ -204,6 +221,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         sellerInfoRepository.save(sellerInfo);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/reactivate", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"소명 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/seller-reactivate-success"));
@@ -223,6 +242,8 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
         sellerInfoRepository.save(sellerInfo);
 
         mockMvc.perform(post("/api/admin/sellers/{sellerId}/reactivate", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"소명 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SELLER_409_NOT_SUSPENDED"));
@@ -265,5 +286,78 @@ class AdminSellerControllerTest extends AbstractIntegrationTest {
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400_INVALID_INPUT"));
+    }
+
+    // 셀러 전환(승인/거절) 이력 조회가 승인 처리 결과를 targetLabel(사업자명)/adminName과 함께 반환하는지 검증
+    @Test
+    void 관리자가_셀러_전환_이력_조회에_성공한다() throws Exception {
+        Member admin = saveMember("admin-conversion-log@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-conversion-log@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/approve", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"서류 확인 완료\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/sellers/action-logs/conversion")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].targetId").value(sellerInfo.getId()))
+                .andExpect(jsonPath("$.content[0].targetLabel").value("웰바잉스토어"))
+                .andExpect(jsonPath("$.content[0].action").value("APPROVE"))
+                .andExpect(jsonPath("$.content[0].reason").value("서류 확인 완료"))
+                .andDo(document("admin/seller-conversion-action-log-list-success",
+                        responseFields(
+                                fieldWithPath("content[].id").description("이력 ID"),
+                                fieldWithPath("content[].targetId").description("셀러 신청(SellerInfo) ID"),
+                                fieldWithPath("content[].targetLabel").description("사업자명"),
+                                fieldWithPath("content[].adminId").description("처리한 관리자 ID"),
+                                fieldWithPath("content[].adminName").description("처리한 관리자 이름"),
+                                fieldWithPath("content[].action").description("처리 액션(APPROVE/REJECT)"),
+                                fieldWithPath("content[].reason").description("처리 사유"),
+                                fieldWithPath("content[].occurredAt").description("처리 일시"),
+                                fieldWithPath("page.size").description("페이지 크기"),
+                                fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
+                                fieldWithPath("page.totalElements").description("전체 개수"),
+                                fieldWithPath("page.totalPages").description("전체 페이지 수"))));
+    }
+
+    // 셀러 정지/정지복귀 이력 조회가 정지 처리 결과를 반환하는지 검증 (전환 이력과는 별개 조회)
+    @Test
+    void 관리자가_셀러_정지_이력_조회에_성공한다() throws Exception {
+        Member admin = saveMember("admin-suspension-log@example.com", Role.ADMIN);
+        Member applicant = saveMember("seller-suspension-log@example.com", Role.BUYER);
+        SellerInfo sellerInfo = savePendingSellerInfo(applicant.getId());
+        sellerInfo.approve();
+        sellerInfoRepository.save(sellerInfo);
+
+        mockMvc.perform(post("/api/admin/sellers/{sellerId}/suspend", sellerInfo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"약관 위반\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/sellers/action-logs/suspension")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].targetId").value(sellerInfo.getId()))
+                .andExpect(jsonPath("$.content[0].action").value("SUSPEND"))
+                .andExpect(jsonPath("$.content[0].reason").value("약관 위반"))
+                .andDo(document("admin/seller-suspension-action-log-list-success",
+                        responseFields(
+                                fieldWithPath("content[].id").description("이력 ID"),
+                                fieldWithPath("content[].targetId").description("셀러 신청(SellerInfo) ID"),
+                                fieldWithPath("content[].targetLabel").description("사업자명"),
+                                fieldWithPath("content[].adminId").description("처리한 관리자 ID"),
+                                fieldWithPath("content[].adminName").description("처리한 관리자 이름"),
+                                fieldWithPath("content[].action").description("처리 액션(SUSPEND/REACTIVATE)"),
+                                fieldWithPath("content[].reason").description("처리 사유"),
+                                fieldWithPath("content[].occurredAt").description("처리 일시"),
+                                fieldWithPath("page.size").description("페이지 크기"),
+                                fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
+                                fieldWithPath("page.totalElements").description("전체 개수"),
+                                fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
 }

@@ -2,6 +2,11 @@ package com.wellbuying.domain.seller.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.entity.AdminActionLog;
+import com.wellbuying.domain.admin.entity.AdminActionTargetType;
+import com.wellbuying.domain.admin.entity.AdminActionType;
+import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.member.service.EmailVerificationService;
@@ -12,7 +17,10 @@ import com.wellbuying.domain.seller.dto.SellerInfoResponse;
 import com.wellbuying.domain.seller.dto.SellerSignupRequest;
 import com.wellbuying.domain.seller.dto.SellerSignupResponse;
 import com.wellbuying.domain.seller.repository.SellerInfoRepository;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -30,13 +38,16 @@ public class SellerInfoService {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailVerificationService emailVerificationService;
+    private final AdminActionLogRepository adminActionLogRepository;
 
     public SellerInfoService(SellerInfoRepository sellerInfoRepository, MemberRepository memberRepository,
-            PasswordEncoder passwordEncoder, EmailVerificationService emailVerificationService) {
+            PasswordEncoder passwordEncoder, EmailVerificationService emailVerificationService,
+            AdminActionLogRepository adminActionLogRepository) {
         this.sellerInfoRepository = sellerInfoRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailVerificationService = emailVerificationService;
+        this.adminActionLogRepository = adminActionLogRepository;
     }
 
     // 기존 회원의 셀러 신청 - 신청 이력이 없으면 PENDING으로 신규 생성, REJECTED(거절) 이력이 있으면 재신청으로 갱신, 그 외(PENDING/APPROVED/SUSPENDED) 이력이 있으면 예외
@@ -86,37 +97,74 @@ public class SellerInfoService {
 
     // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED(SellerInfo.approve()가 검증), 통과하면 SELLER_INFO를 APPROVED로 전환하고 MEMBERS.role을 SELLER로 변경
     @Transactional
-    public void approve(Long sellerId, Long adminId) {
+    public void approve(Long sellerId, Long adminId, String reason) {
         SellerInfo sellerInfo = findSellerInfo(sellerId);
         sellerInfo.approve();
         Member member = memberRepository.findByIdAndDeletedAtIsNull(sellerInfo.getMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         member.activateAsSeller();
         log.info("셀러 승인: adminId={}, sellerId={}, memberId={}", adminId, sellerId, sellerInfo.getMemberId());
+        recordAction(sellerId, adminId, AdminActionType.APPROVE, reason);
     }
 
     // 셀러 거절 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED(SellerInfo.reject()가 검증), 통과하면 SELLER_INFO를 REJECTED로 전환 (role은 변경하지 않음)
     @Transactional
-    public void reject(Long sellerId, Long adminId) {
+    public void reject(Long sellerId, Long adminId, String reason) {
         SellerInfo sellerInfo = findSellerInfo(sellerId);
         sellerInfo.reject();
         log.info("셀러 거절: adminId={}, sellerId={}, memberId={}", adminId, sellerId, sellerInfo.getMemberId());
+        recordAction(sellerId, adminId, AdminActionType.REJECT, reason);
     }
 
     // 셀러 정지 - APPROVED 상태가 아니면 SELLER_NOT_APPROVED(SellerInfo.suspend()가 검증), 통과하면 SELLER_INFO를 SUSPENDED로 전환 (role은 변경하지 않음)
     @Transactional
-    public void suspend(Long sellerId, Long adminId) {
+    public void suspend(Long sellerId, Long adminId, String reason) {
         SellerInfo sellerInfo = findSellerInfo(sellerId);
         sellerInfo.suspend();
         log.info("셀러 정지: adminId={}, sellerId={}, memberId={}", adminId, sellerId, sellerInfo.getMemberId());
+        recordAction(sellerId, adminId, AdminActionType.SUSPEND, reason);
     }
 
     // 셀러 정지 복귀 - SUSPENDED 상태가 아니면 SELLER_NOT_SUSPENDED(SellerInfo.reactivate()가 검증), 통과하면 SELLER_INFO를 다시 APPROVED로 전환
     @Transactional
-    public void reactivate(Long sellerId, Long adminId) {
+    public void reactivate(Long sellerId, Long adminId, String reason) {
         SellerInfo sellerInfo = findSellerInfo(sellerId);
         sellerInfo.reactivate();
         log.info("셀러 정지 복귀: adminId={}, sellerId={}, memberId={}", adminId, sellerId, sellerInfo.getMemberId());
+        recordAction(sellerId, adminId, AdminActionType.REACTIVATE, reason);
+    }
+
+    // 셀러 전환 이력(승인/거절) 조회 - "승인 대기 요청 처리" 화면에서 사용
+    @Transactional(readOnly = true)
+    public Page<AdminActionLogResponse> listConversionActionLogs(Pageable pageable) {
+        return listActionLogs(List.of(AdminActionType.APPROVE, AdminActionType.REJECT), pageable);
+    }
+
+    // 셀러 정지/정지복귀 이력 조회 - 승인 대기 요청 처리와는 별개인 "활성 셀러 관리" 화면에서 사용
+    @Transactional(readOnly = true)
+    public Page<AdminActionLogResponse> listSuspensionActionLogs(Pageable pageable) {
+        return listActionLogs(List.of(AdminActionType.SUSPEND, AdminActionType.REACTIVATE), pageable);
+    }
+
+    // 회사명(대상 라벨) + 관리자 이름을 함께 보여주기 위해 배치 조회 후 조합
+    private Page<AdminActionLogResponse> listActionLogs(List<AdminActionType> actions, Pageable pageable) {
+        Page<AdminActionLog> page = adminActionLogRepository.findAllByTargetTypeAndActionInOrderByOccurredAtDesc(
+                AdminActionTargetType.SELLER_INFO, actions, pageable);
+        List<Long> sellerIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
+        Map<Long, String> companyNamesById = sellerInfoRepository.findAllById(sellerIds).stream()
+                .collect(Collectors.toMap(SellerInfo::getId,
+                        seller -> seller.getCompanyName() != null ? seller.getCompanyName() : ""));
+        List<Long> adminIds = page.getContent().stream().map(AdminActionLog::getAdminId).distinct().toList();
+        Map<Long, String> adminNamesById = memberRepository.findAllById(adminIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getName));
+        return page.map(actionLog -> AdminActionLogResponse.of(actionLog,
+                companyNamesById.getOrDefault(actionLog.getTargetId(), ""),
+                adminNamesById.getOrDefault(actionLog.getAdminId(), "")));
+    }
+
+    private void recordAction(Long sellerId, Long adminId, AdminActionType action, String reason) {
+        adminActionLogRepository.save(
+                AdminActionLog.record(AdminActionTargetType.SELLER_INFO, sellerId, adminId, action, reason));
     }
 
     private SellerInfo findSellerInfo(Long sellerId) {

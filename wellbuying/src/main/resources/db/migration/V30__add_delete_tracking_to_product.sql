@@ -1,0 +1,2 @@
+ALTER TABLE product ADD COLUMN deleted_by BIGINT NULL;
+ALTER TABLE product ADD COLUMN delete_reason VARCHAR(500) NULL;

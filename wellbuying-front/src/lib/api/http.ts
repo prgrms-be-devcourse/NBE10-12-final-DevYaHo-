@@ -1,7 +1,7 @@
 import {
   clearTokens,
   getAccessToken,
-  getRefreshToken,
+  getDeviceId,
   saveTokens,
 } from "@/lib/auth/token-storage";
 import type { ErrorResponse, ReissueResponse } from "@/lib/api/types";
@@ -32,18 +32,20 @@ type RequestOptions = {
 let refreshing: Promise<boolean> | null = null;
 
 async function reissueTokens(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+  // refreshToken은 httpOnly 쿠키로만 오가므로 JS에서 읽을 수 없다 - credentials: "include"로 브라우저가
+  // 자동으로 실어 보내게 하고, X-Device-Id는 백엔드가 CSRF 방어용으로 필수 요구한다(phase25 §2-4)
+  const deviceId = getDeviceId();
+  if (!deviceId) return false;
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/reissue`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
+      headers: { "X-Device-Id": deviceId },
     });
     if (!response.ok) return false;
     const data: ReissueResponse = await response.json();
-    saveTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+    saveTokens({ accessToken: data.accessToken });
     return true;
   } catch {
     return false;
@@ -79,6 +81,7 @@ async function request<T>(
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
+    credentials: "include",
     headers: finalHeaders,
     body: body === undefined ? undefined : JSON.stringify(body),
   });

@@ -4,6 +4,7 @@ import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.docu
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.restdocs.payload.PayloadDocumentation.responseFields;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.restdocs.test.autoconfigure.AutoConfigureRestDocs;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -75,6 +77,8 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
         Product product = savePendingProduct(seller.getId());
 
         mockMvc.perform(post("/api/admin/products/{productId}/approve", product.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/product-approve-success"));
@@ -91,6 +95,8 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
         Product product = savePendingProduct(seller.getId());
 
         mockMvc.perform(post("/api/admin/products/{productId}/reject", product.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 미흡\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/product-reject-success"));
@@ -106,6 +112,8 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
         Product product = savePendingProduct(seller.getId());
 
         mockMvc.perform(post("/api/admin/products/{productId}/approve", product.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 확인 완료\"}")
                         .with(authentication(authOf(seller))))
                 .andExpect(status().isForbidden());
     }
@@ -126,6 +134,8 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
         Member admin = saveMember("admin-product-not-found@example.com", Role.ADMIN);
 
         mockMvc.perform(post("/api/admin/products/{productId}/approve", 999_999L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRODUCT_404_NOT_FOUND"))
@@ -133,6 +143,23 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 삭제된 상품 이력을 관리자가 조회하면 200과 삭제 정보를 반환하는지 검증
+    @Test
+    void 관리자가_삭제된_상품_이력을_조회한다() throws Exception {
+        Member admin = saveMember("admin-deleted-list@example.com", Role.ADMIN);
+        Member seller = saveMember("seller-deleted-list@example.com", Role.SELLER);
+        Product product = savePendingProduct(seller.getId());
+        product.delete(admin.getId(), "이용약관 위반");
+        productRepository.save(product);
+
+        mockMvc.perform(get("/api/admin/products/deleted")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].productName").value("테스트상품"))
+                .andExpect(jsonPath("$.content[0].deleteReason").value("이용약관 위반"))
+                .andDo(document("admin/product-deleted-list"));
     }
 
     // 이미 처리된(APPROVED) 상품을 다시 승인 시도하면 409와 PRODUCT_409_ALREADY_PROCESSED를 반환하는지 검증
@@ -145,8 +172,46 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
         productRepository.save(product);
 
         mockMvc.perform(post("/api/admin/products/{productId}/approve", product.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("PRODUCT_409_ALREADY_PROCESSED"));
+    }
+
+    // 상품 승인/거절 이력 조회가 승인 처리 결과를 targetLabel(상품명)/adminName과 함께 반환하는지 검증
+    @Test
+    void 관리자가_상품_이력_조회에_성공한다() throws Exception {
+        Member admin = saveMember("admin-product-action-log@example.com", Role.ADMIN);
+        Member seller = saveMember("seller-product-action-log@example.com", Role.SELLER);
+        Product product = savePendingProduct(seller.getId());
+
+        mockMvc.perform(post("/api/admin/products/{productId}/approve", product.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"상품 정보 확인 완료\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/products/action-logs")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].targetId").value(product.getId()))
+                .andExpect(jsonPath("$.content[0].targetLabel").value("테스트상품"))
+                .andExpect(jsonPath("$.content[0].action").value("APPROVE"))
+                .andExpect(jsonPath("$.content[0].reason").value("상품 정보 확인 완료"))
+                .andDo(document("admin/product-action-log-list-success",
+                        responseFields(
+                                fieldWithPath("content[].id").description("이력 ID"),
+                                fieldWithPath("content[].targetId").description("상품 ID"),
+                                fieldWithPath("content[].targetLabel").description("상품명"),
+                                fieldWithPath("content[].adminId").description("처리한 관리자 ID"),
+                                fieldWithPath("content[].adminName").description("처리한 관리자 이름"),
+                                fieldWithPath("content[].action").description("처리 액션(APPROVE/REJECT)"),
+                                fieldWithPath("content[].reason").description("처리 사유"),
+                                fieldWithPath("content[].occurredAt").description("처리 일시"),
+                                fieldWithPath("page.size").description("페이지 크기"),
+                                fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
+                                fieldWithPath("page.totalElements").description("전체 개수"),
+                                fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
 }

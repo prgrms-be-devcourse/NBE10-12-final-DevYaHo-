@@ -1,26 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Home, PackageCheck, Truck } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Home, PackageCheck, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
+import { OrderThumbnail } from "@/components/consumer/OrderThumbnail";
+import { Banner } from "@/components/ui/Banner";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/Tag";
-import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
-import {
-  DELIVERY_STATES,
-  DELIVERY_STATE_LABEL,
-  PAYMENT_METHOD_LABEL,
-  PAYMENT_STATE_LABEL,
-  won,
-} from "@/lib/mock/types";
+import { ApiError } from "@/lib/api/http";
+import { getMyOrder } from "@/lib/api/orders";
+import type { OrderDetailResponse, OrderStatus } from "@/lib/api/types";
+import { formatDateTime, won } from "@/lib/format";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order/orderStatus";
 
-const DELIVERY_ICONS = {
-  preparing: PackageCheck,
-  shipping: Truck,
-  delivered: Home,
-  confirmed: CheckCircle2,
-} as const;
+// 승인이 끝난 주문의 진행 단계. 배송 상태(PREPARING~)는 shipping 도메인이 붙기 전까지는 PAID에 머무른다
+const STEPS: { status: OrderStatus; label: string; icon: LucideIcon }[] = [
+  { status: "PAID", label: "결제 완료", icon: ShoppingBag },
+  { status: "PREPARING", label: "상품 준비", icon: PackageCheck },
+  { status: "SHIPPING", label: "배송 중", icon: Truck },
+  { status: "DELIVERED", label: "배송 완료", icon: Home },
+  { status: "CONFIRMED", label: "구매 확정", icon: CheckCircle2 },
+];
+
+const PG_PROVIDER_LABEL: Record<string, string> = {
+  TOSS: "토스페이먼츠",
+};
 
 export function OrderDetailModal({
   orderId,
@@ -31,41 +34,64 @@ export function OrderDetailModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const { orders, dealById, confirmPurchase, cancelOrRefund, advanceDelivery } = useDemoStore();
-  const [showCancel, setShowCancel] = useState(false);
+  const [detail, setDetail] = useState<OrderDetailResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const order = orderId ? orders.find((item) => item.id === orderId) : null;
-  if (!order) return null;
-  const deal = dealById(order.dealId)!;
-  const reachedIndex = DELIVERY_STATES.indexOf(order.deliveryState);
-  const total = order.unitPrice * order.quantity;
-  const isPreparing = order.deliveryState === "preparing";
+  useEffect(() => {
+    if (!open || !orderId) return;
+    const id = orderId;
+    let cancelled = false;
+    async function loadDetail() {
+      setLoading(true);
+      setError(null);
+      setDetail(null);
+      try {
+        const res = await getMyOrder(id);
+        if (!cancelled) setDetail(res);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof ApiError ? e.message : "결제 정보를 불러오지 못했어요.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, orderId]);
+
+  const stepIndex = detail ? STEPS.findIndex((s) => s.status === detail.status) : -1;
+  const showStepper = detail?.paymentStatus === "APPROVED" && stepIndex >= 0;
+  const itemAmount = detail?.unitPrice != null ? detail.unitPrice * detail.quantity : detail?.totalPrice ?? 0;
 
   return (
-    <>
-      <Modal open={open} onClose={onClose} title="주문 상세" subtitle={order.orderNumber} width="600px">
+    <Modal open={open} onClose={onClose} title="결제 상세" subtitle={orderId ?? undefined} width="600px">
+      {loading && <p className="py-6 text-sm text-wb-secondary">불러오는 중...</p>}
+      {error && <Banner tone="error">{error}</Banner>}
+
+      {detail && (
         <div className="space-y-5">
           <div className="flex items-center gap-3.5 rounded-xl bg-wb-canvas p-3.5">
-            <div className="min-w-0 flex-1">
-              <StatusPill tone={order.paymentState === "approved" ? "green" : "orange"}>
-                {order.paymentState === "approved" ? DELIVERY_STATE_LABEL[order.deliveryState] : PAYMENT_STATE_LABEL[order.paymentState]}
-              </StatusPill>
-              <p className="mt-1.5 truncate text-sm font-bold">{deal.title}</p>
-              <p className="text-xs text-wb-secondary">
-                {order.quantity}개 · {PAYMENT_METHOD_LABEL[order.paymentMethod]}
-              </p>
+            <OrderThumbnail url={detail.thumbnailUrl} alt={detail.productName} className="h-16 w-16 shrink-0" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <StatusPill tone={ORDER_STATUS_TONE[detail.status]}>{ORDER_STATUS_LABEL[detail.status]}</StatusPill>
+              <p className="truncate text-sm font-bold">{detail.productName || detail.groupBuyTitle}</p>
+              {detail.groupBuyTitle && (
+                <p className="truncate text-xs text-wb-secondary">{detail.groupBuyTitle}</p>
+              )}
             </div>
           </div>
 
-          {order.paymentState === "approved" && (
+          {showStepper && (
             <div className="rounded-xl bg-wb-canvas p-4">
-              <p className="mb-4 text-sm font-bold">배송 현황</p>
+              <p className="mb-4 text-sm font-bold">진행 현황</p>
               <div className="flex items-center">
-                {DELIVERY_STATES.map((state, index) => {
-                  const Icon = DELIVERY_ICONS[state];
-                  const reached = index <= reachedIndex;
+                {STEPS.map((step, index) => {
+                  const Icon = step.icon;
+                  const reached = index <= stepIndex;
                   return (
-                    <div key={state} className="flex flex-1 flex-col items-center gap-1.5">
+                    <div key={step.status} className="flex flex-1 flex-col items-center gap-1.5">
                       <div
                         className={`flex h-8 w-8 items-center justify-center rounded-full ${
                           reached ? "bg-wb-light-green text-wb-green" : "bg-wb-surface text-wb-secondary"
@@ -74,9 +100,11 @@ export function OrderDetailModal({
                         <Icon className="h-3.5 w-3.5" />
                       </div>
                       <span
-                        className={`text-center text-[10px] font-semibold ${reached ? "text-wb-green" : "text-wb-secondary"}`}
+                        className={`text-center text-[10px] font-semibold ${
+                          reached ? "text-wb-green" : "text-wb-secondary"
+                        }`}
                       >
-                        {DELIVERY_STATE_LABEL[state]}
+                        {step.label}
                       </span>
                     </div>
                   );
@@ -87,8 +115,18 @@ export function OrderDetailModal({
 
           <div className="space-y-2.5 rounded-xl bg-wb-canvas p-4 text-sm">
             <div className="flex justify-between">
+              <span className="text-wb-secondary">수량</span>
+              <span className="font-bold">{detail.quantity}개</span>
+            </div>
+            {detail.unitPrice != null && (
+              <div className="flex justify-between">
+                <span className="text-wb-secondary">개당 가격</span>
+                <span className="font-bold">{won(detail.unitPrice)}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
               <span className="text-wb-secondary">상품 금액</span>
-              <span className="font-bold">{won(total)}</span>
+              <span className="font-bold">{won(itemAmount)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-wb-secondary">배송비</span>
@@ -96,56 +134,37 @@ export function OrderDetailModal({
             </div>
             <div className="flex justify-between border-t border-wb-line pt-2.5 text-base font-bold">
               <span>총 결제 금액</span>
-              <span>{won(total)}</span>
+              <span>{won(detail.totalPrice)}</span>
             </div>
           </div>
 
-          {order.paymentState === "approved" ? (
-            order.deliveryState === "delivered" ? (
-              <div className="space-y-2">
-                <Button className="w-full" onClick={() => confirmPurchase(order.id)}>
-                  구매 확정
-                </Button>
-                <Button variant="secondary" className="w-full text-red-600" onClick={() => setShowCancel(true)}>
-                  환불 요청
-                </Button>
-              </div>
-            ) : order.deliveryState === "confirmed" ? (
-              <p className="rounded-xl bg-wb-light-green/50 p-3.5 text-sm font-semibold text-wb-green">
-                구매가 확정되었습니다.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                <p className="rounded-xl bg-wb-light-green/40 p-3.5 text-xs text-wb-secondary">
-                  {isPreparing
-                    ? "생산자가 상품을 준비하고 있어요."
-                    : "상품이 배송 중이에요. 배송 완료 후 구매를 확정할 수 있어요."}
-                </p>
-                <Button variant="secondary" className="w-full" onClick={() => advanceDelivery(order.id)}>
-                  {isPreparing ? "배송 시작 (데모)" : "배송 완료 처리 (데모)"}
-                </Button>
-                <Button variant="secondary" className="w-full text-red-600" onClick={() => setShowCancel(true)}>
-                  {isPreparing ? "주문·결제 취소" : "환불 요청"}
-                </Button>
-              </div>
-            )
-          ) : (
-            <p className="rounded-xl bg-wb-orange/10 p-3.5 text-sm font-semibold text-wb-orange">
-              {PAYMENT_STATE_LABEL[order.paymentState]}
+          <dl className="space-y-2.5 rounded-xl bg-wb-canvas p-4 text-sm">
+            <Row label="배송지" value={detail.shippingAddress} />
+            <Row
+              label="결제 수단"
+              value={detail.pgProvider ? PG_PROVIDER_LABEL[detail.pgProvider] ?? detail.pgProvider : "-"}
+            />
+            <Row label="승인 일시" value={detail.approvedAt ? formatDateTime(detail.approvedAt) : "-"} />
+            <Row label="주문번호" value={detail.orderId} />
+            {detail.pgTransactionId && <Row label="거래번호" value={detail.pgTransactionId} />}
+          </dl>
+
+          {detail.status === "PAYMENT_FAILED" && (
+            <p className="rounded-xl bg-red-600/10 p-3.5 text-sm font-semibold text-red-600 dark:text-red-400">
+              결제가 실패한 주문입니다.
             </p>
           )}
         </div>
-      </Modal>
+      )}
+    </Modal>
+  );
+}
 
-      <ConfirmDialog
-        open={showCancel}
-        onClose={() => setShowCancel(false)}
-        onConfirm={() => cancelOrRefund(order.id)}
-        title={isPreparing ? "주문을 취소할까요?" : "환불을 요청할까요?"}
-        message="처리 후에는 되돌릴 수 없어요."
-        confirmLabel={isPreparing ? "주문 취소" : "환불 요청"}
-        destructive
-      />
-    </>
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="shrink-0 text-wb-secondary">{label}</dt>
+      <dd className="break-all text-right font-medium">{value}</dd>
+    </div>
   );
 }

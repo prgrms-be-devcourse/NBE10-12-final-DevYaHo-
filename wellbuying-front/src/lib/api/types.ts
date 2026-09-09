@@ -7,16 +7,15 @@ export type LoginRequest = {
   password: string;
 };
 
+// refreshToken은 httpOnly 쿠키(Set-Cookie)로만 내려가고 응답 JSON에는 담기지 않는다(phase25)
 export type LoginResponse = {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresIn: number;
   deviceId: string;
 };
 
 export type ReissueResponse = {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresIn: number;
 };
 
@@ -164,13 +163,14 @@ export type GroupBuySummaryResponse = {
   currentQuantity: number;
   maxQuantity: number;
   suspended: boolean;
+  viewCount: number;
+  createdAt: string;
 };
 
 export type GroupBuyPartCreateRequest = {
   quantity: number;
-  address: string;
-  addressDetail?: string;
-  zipcode: string;
+  // 회원 주소록(GET /api/members/me/addresses)에 등록된 배송지 항목의 ID
+  buyerAddressId: number;
 };
 
 export type GroupBuySuspensionStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -255,15 +255,29 @@ export type GroupBuyPartResponse = {
   quantity: number;
   appliedPrice: number | null;
   status: GroupBuyPartStatus;
-  address: string | null;
-  addressDetail: string | null;
-  zipcode: string | null;
+  buyerAddressId: number | null;
   createdAt: string;
 };
 
 export type GroupBuyPartMeResponse = {
   participated: boolean;
   part: GroupBuyPartResponse | null;
+};
+
+// 회원 배송지 주소록 - 공동구매 참여 시 buyerAddressId로 참조한다
+export type BuyerAddressResponse = {
+  id: number;
+  address: string;
+  addressDetail: string | null;
+  zipcode: string;
+  createdAt: string;
+};
+
+export type BuyerAddressCreateRequest = {
+  address: string;
+  addressDetail?: string;
+  // 새 우편번호 체계 - 숫자 5자리 고정
+  zipcode: string;
 };
 
 // 백엔드가 Page<T>를 그대로 직렬화하지 않고 Spring Data의 PagedModel(@EnableSpringDataWebSupport(VIA_DTO))로
@@ -303,4 +317,58 @@ export type BillingKeyResponse = {
   registered: boolean;
   cardCompany: string | null;
   cardLast4: string | null;
+};
+
+// 주문/결제 내역 (order 도메인 - GET /api/orders/me)
+// 배송 상태(PREPARING~DELIVERED)는 shipping 도메인이 채우기 전까지 나타나지 않는다
+export type OrderStatus =
+  | "PENDING"
+  | "PAID"
+  | "PAYMENT_FAILED"
+  | "PREPARING"
+  | "SHIPPING"
+  | "DELIVERED"
+  | "CONFIRMED"
+  | "CANCELED";
+
+export type PaymentStatus = "READY" | "APPROVED" | "CANCELED" | "FAILED" | "REFUNDED";
+
+export type OrderSummaryResponse = {
+  orderId: string;
+  groupBuyId: number | null;
+  groupBuyTitle: string;
+  productName: string;
+  thumbnailUrl: string | null;
+  quantity: number;
+  totalPrice: number;
+  status: OrderStatus;
+  createdAt: string;
+};
+
+export type OrderDetailResponse = {
+  orderId: string;
+  groupBuyId: number | null;
+  groupBuyTitle: string;
+  productName: string;
+  thumbnailUrl: string | null;
+  quantity: number;
+  // group_buy_part.appliedPrice - 결제된 건이면 항상 채워지지만 이론상 성사 전 상태 대비 nullable
+  unitPrice: number | null;
+  totalPrice: number;
+  status: OrderStatus;
+  shippingAddress: string;
+  pgProvider: string | null;
+  pgTransactionId: string | null;
+  paymentStatus: PaymentStatus | null;
+  approvedAt: string | null;
+  createdAt: string;
+};
+
+export type ProfileImageUploadUrlRequest = {
+  contentType: string;
+};
+
+export type ProfileImageUploadUrlResponse = {
+  uploadUrl: string;
+  profileImageUrl: string;
 };

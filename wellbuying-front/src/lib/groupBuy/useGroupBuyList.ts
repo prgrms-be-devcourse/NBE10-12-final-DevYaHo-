@@ -16,6 +16,8 @@ export type GroupBuyCardView = {
   currentQuantity: number;
   maxQuantity: number;
   daysLeft: number;
+  viewCount: number;
+  createdAt: string;
   producerName: string;
   category: string;
   icon: string;
@@ -44,15 +46,28 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     currentQuantity: summary.currentQuantity,
     maxQuantity: summary.maxQuantity,
     daysLeft: toDaysLeft(summary.endAt),
+    viewCount: summary.viewCount,
+    createdAt: summary.createdAt,
     category: summary.productCategory,
     ...catalog,
   };
 }
 
-export function useGroupBuyList(status: GroupBuyStatus) {
+// sort: Spring Pageable 형식("속성,방향", 예: "viewCount,desc") - 서버가 이 기준으로 정렬해서 내려주므로
+// size로 잘라도(예: 상위 4개) 순서가 항상 정확하다. 미지정 시 서버 기본 정렬(createdAt desc)을 따른다
+export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: string; size?: number }) {
   const [items, setItems] = useState<GroupBuyCardView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const sort = options?.sort;
+  const size = options?.size ?? 50;
+
+  // sort/size/status가 바뀌면 이전 조건으로 보던 페이지 번호는 더 이상 의미가 없으므로 1페이지로 되돌린다
+  useEffect(() => {
+    setPage(0);
+  }, [status, sort, size]);
 
   useEffect(() => {
     let ignore = false;
@@ -61,9 +76,11 @@ export function useGroupBuyList(status: GroupBuyStatus) {
       setLoading(true);
       setError(null);
       try {
-        const page = await listGroupBuys({ status, size: 50 });
-        const views = page.content.map(toCardView);
-        if (!ignore) setItems(views);
+        const result = await listGroupBuys({ status, size, sort, page });
+        if (!ignore) {
+          setItems(result.content.map(toCardView));
+          setTotalPages(result.page.totalPages);
+        }
       } catch (e) {
         if (!ignore) setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
       } finally {
@@ -75,7 +92,7 @@ export function useGroupBuyList(status: GroupBuyStatus) {
     return () => {
       ignore = true;
     };
-  }, [status]);
+  }, [status, sort, size, page]);
 
-  return { items, loading, error };
+  return { items, loading, error, page, totalPages, setPage };
 }

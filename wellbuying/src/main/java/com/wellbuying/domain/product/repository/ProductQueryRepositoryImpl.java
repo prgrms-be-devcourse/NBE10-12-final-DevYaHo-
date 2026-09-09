@@ -3,8 +3,6 @@ package com.wellbuying.domain.product.repository;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.Expressions;
-import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.entity.ProductSortType;
@@ -40,11 +38,12 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
-                        coalesceViewCount()))
+                        productCount.viewCount))
                 .from(product)
-                .leftJoin(productCount).on(productCount.productId.eq(product.id))
+                .join(productCount).on(productCount.productId.eq(product.id))
                 .where(
                         product.status.eq(ProductStatus.APPROVED),
+                        product.deletedAt.isNull(),
                         categoryEq(condition.categoryId()),
                         priceGoe(condition.minPrice()),
                         priceLoe(condition.maxPrice()),
@@ -64,6 +63,30 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
+    // 메인 페이지 홈에 노출할 조회수 기준 인기 상품 목록 - 캐싱 대상이라 커서 없이 고정 개수만 반환
+    @Override
+    public List<ProductSummaryResponse> findTopByViewCount(int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("조회 개수(limit)는 1 이상이어야 합니다: " + limit);
+        }
+        return queryFactory
+                .select(Projections.constructor(ProductSummaryResponse.class,
+                        product.id,
+                        product.productName,
+                        product.startPrice,
+                        product.thumbnailUrl,
+                        productCount.viewCount))
+                .from(product)
+                .join(productCount).on(productCount.productId.eq(product.id))
+                .where(
+                        product.status.eq(ProductStatus.APPROVED),
+                        product.deletedAt.isNull()
+                )
+                .orderBy(productCount.viewCount.desc(), product.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
     // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
     @Override
     public Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable) {
@@ -76,7 +99,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.status,
                         product.createdAt))
                 .from(product)
-                .where(product.sellerId.eq(sellerId))
+                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull())
                 .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize() + 1L)
@@ -114,8 +137,8 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 Cursor c = Cursor.decode(resolved.name(), cursor, 2);
                 long viewCount = c.getLong(0);
                 long id = c.getLong(1);
-                yield coalesceViewCount().lt(viewCount)
-                        .or(coalesceViewCount().eq(viewCount).and(product.id.lt(id)));
+                yield productCount.viewCount.lt(viewCount)
+                        .or(productCount.viewCount.eq(viewCount).and(product.id.lt(id)));
             }
             case PRICE_ASC -> {
                 Cursor c = Cursor.decode(resolved.name(), cursor, 2);
@@ -139,7 +162,7 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         ProductSortType resolved = sortType != null ? sortType : ProductSortType.LATEST;
         return switch (resolved) {
             case POPULAR -> new OrderSpecifier<?>[] {
-                    coalesceViewCount().desc(),
+                    productCount.viewCount.desc(),
                     product.id.desc()
             };
             case PRICE_ASC -> new OrderSpecifier<?>[] {
@@ -156,10 +179,6 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
     private BooleanExpression categoryEq(Long categoryId) {
         return categoryId != null ? product.categoryId.eq(categoryId) : null;
-    }
-
-    private static NumberExpression<Long> coalesceViewCount() {
-        return Expressions.numberTemplate(Long.class, "coalesce({0}, 0)", productCount.viewCount);
     }
 
     private BooleanExpression priceGoe(Integer minPrice) {
