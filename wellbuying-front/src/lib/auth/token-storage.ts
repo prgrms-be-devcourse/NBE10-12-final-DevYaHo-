@@ -1,3 +1,5 @@
+import type { DeviceSessionResponse } from "@/lib/api/types";
+
 const ACCESS_TOKEN_KEY = "wb.accessToken";
 const DEVICE_ID_KEY = "wb.deviceId";
 
@@ -36,7 +38,7 @@ export function clearTokens(): void {
 
 const DEVICES_CACHE_KEY = "wb.devicesCache";
 
-export function getCachedDevices(): Record<string, unknown>[] | null {
+export function getCachedDevices(): DeviceSessionResponse[] | null {
   if (!isBrowser()) return null;
   const data = window.localStorage.getItem(DEVICES_CACHE_KEY);
   if (!data) return null;
@@ -47,7 +49,7 @@ export function getCachedDevices(): Record<string, unknown>[] | null {
   }
 }
 
-export function saveCachedDevices(devices: Record<string, unknown>[]): void {
+export function saveCachedDevices(devices: DeviceSessionResponse[]): void {
   if (!isBrowser()) return;
   window.localStorage.setItem(DEVICES_CACHE_KEY, JSON.stringify(devices));
 }
