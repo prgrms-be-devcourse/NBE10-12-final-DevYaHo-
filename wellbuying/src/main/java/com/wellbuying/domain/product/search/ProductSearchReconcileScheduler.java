@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,7 @@ public class ProductSearchReconcileScheduler {
                 lastId = products.get(products.size() - 1).getId();
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
-            lastSuccessTimestamp.set(System.currentTimeMillis() / 1000);
+            lastSuccessTimestamp.set(Instant.now().getEpochSecond());
         } catch (Exception e) {
             reconcileFailures.increment();
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);

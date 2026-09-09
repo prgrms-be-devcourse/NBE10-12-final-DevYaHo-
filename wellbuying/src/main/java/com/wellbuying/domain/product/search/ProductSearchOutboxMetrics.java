@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 // pending/dead 두 Gauge가 항상 같은 DB 스냅샷을 읽도록 AtomicReference<OutboxStatusCount>를
 // @Scheduled로 갱신한다. scrape마다 DB 쿼리 2회 → 15초마다 1회로 줄고, 지표 간 불일치 없음.
@@ -34,13 +33,12 @@ public class ProductSearchOutboxMetrics {
                 .register(meterRegistry);
     }
 
-    @Transactional(readOnly = true)
     @Scheduled(fixedDelay = 15_000, initialDelay = 1_000)
     public void refresh() {
         try {
             snapshot.set(outboxRepository.countStatusSnapshot(ProductSearchEventOutbox.MAX_RETRY_COUNT));
         } catch (Exception e) {
-            log.warn("검색 outbox 상태 지표 갱신 실패 (이전 값 유지): {}", e.getMessage());
+            log.warn("검색 outbox 상태 지표 갱신 실패 (이전 값 유지)", e);
         }
     }
 }
