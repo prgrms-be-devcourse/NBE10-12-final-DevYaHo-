@@ -9,6 +9,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
+import com.wellbuying.domain.product.dto.ProductDeletedAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
@@ -225,6 +226,12 @@ public class ProductService {
                 .filter(productImageUploadService::isOurBucketUrl)
                 .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
         productImageRepository.deleteByProductId(productId);
+    }
+
+    // 삭제 이력 조회 - deletedAt이 있는 상품만, 최근 삭제순 정렬은 컨트롤러 Pageable로 처리
+    @Transactional(readOnly = true)
+    public Page<ProductDeletedAdminResponse> findDeleted(Pageable pageable) {
+        return productRepository.findByDeletedAtIsNotNull(pageable).map(ProductDeletedAdminResponse::of);
     }
 
     // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단
