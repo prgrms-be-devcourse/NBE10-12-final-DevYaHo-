@@ -9,9 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +18,7 @@ import org.springframework.stereotype.Component;
 // 검색 문서의 공동구매 요약이 최신으로 유지되지 않는다. 주기적으로 APPROVED 상품 전체를 재색인해
 // 공동구매 요약을 갱신하고, 그 과정에서 PostgreSQL↔OpenSearch 간 어긋난 문서도 함께 보정한다.
 // 페이지 단위로 처리해 한 번에 많은 메모리를 쓰지 않으며, 실패해도 다음 주기에 다시 시도한다.
+// OFFSET 대신 id 커서로 순차 조회해 count 쿼리와 뒤 페이지 지연을 피한다.
 @Component
 public class ProductSearchReconcileScheduler {
 
@@ -42,14 +41,12 @@ public class ProductSearchReconcileScheduler {
             fixedDelayString = "${search.reconcile.fixed-delay-ms:600000}",
             initialDelayString = "${search.reconcile.initial-delay-ms:600000}")
     public void reconcile() {
-        int page = 0;
+        long lastId = 0L;
         int total = 0;
         try {
-            Page<Product> result;
-            do {
-                result = productRepository.findByStatusAndDeletedAtIsNull(
-                        ProductStatus.APPROVED, PageRequest.of(page, PAGE_SIZE, Sort.by("id")));
-                List<Product> products = result.getContent();
+            while (true) {
+                List<Product> products = productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                        ProductStatus.APPROVED, lastId, PageRequest.of(0, PAGE_SIZE));
                 if (products.isEmpty()) {
                     break;
                 }
@@ -61,11 +58,11 @@ public class ProductSearchReconcileScheduler {
                         .toList();
                 productSearchRepository.saveAll(documents);
                 total += documents.size();
-                page++;
-            } while (result.hasNext());
+                lastId = products.get(products.size() - 1).getId();
+            }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
         } catch (Exception e) {
-            log.error("검색 인덱스 정합성 보정 실패: page={}, 지금까지 {}건 처리", page, total, e);
+            log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
         }
     }
 }

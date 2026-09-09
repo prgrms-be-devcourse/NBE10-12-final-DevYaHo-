@@ -1,8 +1,9 @@
 package com.wellbuying.domain.product.search;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,13 +23,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class ProductSearchReconcileSchedulerTest {
+
+    private static final PageRequest LIMIT = PageRequest.of(0, 500);
 
     @Mock
     private ProductRepository productRepository;
@@ -47,18 +47,12 @@ class ProductSearchReconcileSchedulerTest {
         Product p1 = mockProduct(1L);
         Product p2 = mockProduct(2L);
         Product p3 = mockProduct(3L);
-        PageRequest req0 = PageRequest.of(0, 500, Sort.by("id"));
-        PageRequest req1 = PageRequest.of(1, 500, Sort.by("id"));
-        @SuppressWarnings("unchecked")
-        Page<Product> page0 = mock(Page.class);
-        when(page0.getContent()).thenReturn(List.of(p1, p2));
-        when(page0.hasNext()).thenReturn(true);
-        @SuppressWarnings("unchecked")
-        Page<Product> page1 = mock(Page.class);
-        when(page1.getContent()).thenReturn(List.of(p3));
-        when(page1.hasNext()).thenReturn(false);
-        when(productRepository.findByStatusAndDeletedAtIsNull(ProductStatus.APPROVED, req0)).thenReturn(page0);
-        when(productRepository.findByStatusAndDeletedAtIsNull(ProductStatus.APPROVED, req1)).thenReturn(page1);
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1, p2));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 2L, LIMIT)).thenReturn(List.of(p3));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 3L, LIMIT)).thenReturn(List.of());
         GroupBuyProductSummaryResponse summary =
                 new GroupBuyProductSummaryResponse(GroupBuyStatus.ONGOING, 8000, 5, 10);
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L, 2L))).thenReturn(Map.of());
@@ -76,9 +70,8 @@ class ProductSearchReconcileSchedulerTest {
 
     @Test
     void reconcile_APPROVED_상품이_없으면_색인하지_않는다() {
-        PageRequest req0 = PageRequest.of(0, 500, Sort.by("id"));
-        when(productRepository.findByStatusAndDeletedAtIsNull(ProductStatus.APPROVED, req0))
-                .thenReturn(new PageImpl<>(List.of(), req0, 0));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of());
 
         scheduler.reconcile();
 
@@ -89,9 +82,8 @@ class ProductSearchReconcileSchedulerTest {
     @Test
     void reconcile_중간_페이지_실패시_예외를_밖으로_던지지_않는다() {
         Product p1 = mockProduct(1L);
-        PageRequest req0 = PageRequest.of(0, 500, Sort.by("id"));
-        when(productRepository.findByStatusAndDeletedAtIsNull(ProductStatus.APPROVED, req0))
-                .thenReturn(new PageImpl<>(List.of(p1), req0, 1));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
         when(productSearchRepository.saveAll(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
