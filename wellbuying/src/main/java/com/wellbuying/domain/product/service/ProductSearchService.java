@@ -42,7 +42,7 @@ public class ProductSearchService {
 
     // 자동완성은 실패해도 화면 흐름을 막을 필요가 없으므로 503 대신 빈 목록으로 대체
     private List<ProductAutocompleteResponse> autocompleteFallback(String keyword, Throwable t) {
-        log.warn("자동완성 폴백 동작: keyword={}, cause={}", keyword, t.getClass().getSimpleName());
+        log.warn("자동완성 폴백 동작: keyword={}, cause={}, message={}", keyword, t.getClass().getSimpleName(), t.getMessage());
         return List.of();
     }
 

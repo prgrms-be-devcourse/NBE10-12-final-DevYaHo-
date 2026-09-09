@@ -16,6 +16,7 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.opensearch.client.json.JsonData;
 import org.opensearch.data.client.osc.NativeQuery;
 import org.opensearch.data.client.osc.NativeQueryBuilder;
+import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 
 public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositoryCustom {
 
@@ -74,9 +75,11 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     private static final int AUTOCOMPLETE_LIMIT = 8;
+    private static final String[] AUTOCOMPLETE_FIELDS = {"id", "productName"};
 
     // 자동완성 - 매핑 변경/재색인 없이 기존 productName 필드에 match_phrase_prefix로 접두어 매칭.
-    // 커서 페이지네이션 없음(개수 고정), 상태 APPROVED 필터만 적용
+    // 커서 페이지네이션 없음(개수 고정), 상태 APPROVED 필터만 적용.
+    // SourceFilter로 id/productName만 가져와 페이로드 절감, maxExpansions로 확장 범위 제한
     @Override
     public List<ProductAutocompleteResponse> autocomplete(String keyword) {
         Query query = Query.of(q -> q
@@ -84,12 +87,14 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
                         .must(m -> m
                                 .matchPhrasePrefix(mpp -> mpp
                                         .field("productName")
-                                        .query(keyword)))
+                                        .query(keyword)
+                                        .maxExpansions(10)))
                         .filter(f -> f
                                 .term(t -> t.field("status").value(v -> v.stringValue(ProductStatus.APPROVED.name()))))));
 
         NativeQuery nativeQuery = new NativeQueryBuilder()
                 .withQuery(query)
+                .withSourceFilter(new FetchSourceFilter(true, AUTOCOMPLETE_FIELDS, null))
                 .withPageable(PageRequest.of(0, AUTOCOMPLETE_LIMIT))
                 .build();
 

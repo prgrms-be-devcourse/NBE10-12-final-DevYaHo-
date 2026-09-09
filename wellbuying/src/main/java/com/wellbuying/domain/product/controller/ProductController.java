@@ -221,6 +221,6 @@ public class ProductController {
     @GetMapping("/search/autocomplete")
     public List<ProductAutocompleteResponse> autocomplete(
             @RequestParam @NotBlank(message = "검색 키워드는 필수입니다.") String keyword) {
-        return productSearchService.autocomplete(keyword);
+        return productSearchService.autocomplete(keyword.trim());
     }
 }
