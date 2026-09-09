@@ -1,5 +1,6 @@
 package com.wellbuying.domain.product.search;
 
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
 import java.util.ArrayList;
@@ -75,7 +76,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     // filter 컨텍스트로 분리하면 status 조건이 _score에 영향 없이 캐시 가능 → 관련도 정렬 정확도 유지
     private Query buildQuery(String keyword, Boolean activeGroupBuyOnly) {
         List<Query> filters = new ArrayList<>();
-        filters.add(Query.of(f -> f.term(t -> t.field("status").value(v -> v.stringValue("APPROVED")))));
+        filters.add(Query.of(f -> f.term(t -> t.field("status").value(v -> v.stringValue(ProductStatus.APPROVED.name())))));
         if (Boolean.TRUE.equals(activeGroupBuyOnly)) {
             filters.add(Query.of(f -> f.term(t -> t.field("hasActiveGroupBuy").value(v -> v.booleanValue(true)))));
         }
