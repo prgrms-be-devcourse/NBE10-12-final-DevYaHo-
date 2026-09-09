@@ -4,12 +4,19 @@ import com.wellbuying.domain.product.search.ProductSearchRepository;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.search.SearchSortType;
 import com.wellbuying.global.dto.CursorPageResponse;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+// OpenSearch 장애 시 서킷브레이커로 차단하고 503 폴백. 상품 목록/상세/인기상품은 PostgreSQL 경로라 영향 없음
 @Service
-@Transactional(readOnly = true)
 public class ProductSearchService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductSearchService.class);
+    private static final String CIRCUIT_BREAKER_NAME = "openSearchProductSearch";
 
     private final ProductSearchRepository productSearchRepository;
 
@@ -17,8 +24,22 @@ public class ProductSearchService {
         this.productSearchRepository = productSearchRepository;
     }
 
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "searchFallback")
     public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size) {
         sort.validateSupported();
         return productSearchRepository.search(keyword, cursor, size);
+    }
+
+    // 정렬 검증 등 요청 자체가 잘못된 경우는 그대로 전달 — 서킷 실패로도 집계되지 않음(yaml ignore-exceptions)
+    private CursorPageResponse<ProductSearchResponse> searchFallback(String keyword, SearchSortType sort,
+            String cursor, int size, BusinessException e) {
+        throw e;
+    }
+
+    // OpenSearch 장애(연결 실패, 타임아웃) 또는 서킷 open(CallNotPermittedException) 시 503으로 응답
+    private CursorPageResponse<ProductSearchResponse> searchFallback(String keyword, SearchSortType sort,
+            String cursor, int size, Exception e) {
+        log.warn("검색 폴백 동작: keyword={}, cause={}", keyword, e.getClass().getSimpleName());
+        throw new BusinessException(ErrorCode.SEARCH_UNAVAILABLE);
     }
 }

@@ -60,6 +60,7 @@ public enum ErrorCode {
     BILLING_KEY_ISSUE_FAILED(HttpStatus.BAD_GATEWAY, "PAYMENT_502_BILLING_KEY_ISSUE_FAILED", "카드 등록에 실패했습니다. 다시 시도해주세요."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "COMMON_400_INVALID_CURSOR", "유효하지 않은 커서입니다."),
     SEARCH_SORT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "SEARCH_400_SORT_NOT_SUPPORTED", "지원하지 않는 정렬 방식입니다."),
+    SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "SEARCH_503_UNAVAILABLE", "검색 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_404_NOT_FOUND", "존재하지 않는 알림입니다."),
     COMMON_403_FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_403_FORBIDDEN", "접근 권한이 없습니다."),
     COMMON_404_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_404_NOT_FOUND", "요청하신 리소스를 찾을 수 없습니다."),
