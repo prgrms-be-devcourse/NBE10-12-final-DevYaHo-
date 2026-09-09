@@ -29,7 +29,7 @@ public class ProductSearchService {
     public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size,
             Boolean activeGroupBuyOnly) {
         sort.validateSupported();
-        return productSearchRepository.search(keyword, cursor, size, activeGroupBuyOnly);
+        return productSearchRepository.search(keyword, sort, cursor, size, activeGroupBuyOnly);
     }
 
     // 정렬 검증 등 요청 자체가 잘못된 경우는 그대로 전달 — 서킷 실패로도 집계되지 않음(yaml ignore-exceptions)

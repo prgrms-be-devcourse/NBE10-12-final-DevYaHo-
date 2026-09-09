@@ -25,20 +25,24 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     @Override
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size, Boolean activeGroupBuyOnly) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size, Boolean activeGroupBuyOnly) {
+        List<SortOptions> sortOptions = sort == SearchSortType.POPULAR
+                ? List.of(
+                        SortOptions.of(s -> s.field(f -> f.field("viewCount").order(SortOrder.Desc))),
+                        SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc))))
+                : List.of(
+                        SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
+                        SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc))));
         NativeQueryBuilder builder = new NativeQueryBuilder()
                 .withQuery(buildQuery(keyword, activeGroupBuyOnly))
-                .withSort(List.of(
-                        SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
-                        SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc)))
-                ))
+                .withSort(sortOptions)
                 .withPageable(PageRequest.of(0, size + 1));
 
         if (cursor != null) {
-            Cursor c = Cursor.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
-            double score = c.getDouble(0);
+            Cursor c = Cursor.decode(sort.name(), cursor, 2);
+            Object cursorValue = sort == SearchSortType.POPULAR ? c.getLong(0) : c.getDouble(0);
             long id = c.getLong(1);
-            builder = builder.withSearchAfter(List.of(score, id));
+            builder = builder.withSearchAfter(List.of(cursorValue, id));
         }
 
         SearchHits<ProductSearchDocument> hits = operations.search(builder.build(), ProductSearchDocument.class);
@@ -66,7 +70,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
                 throw new IllegalStateException("Unexpected FieldValue kind for score: " + scoreVal._kind());
             }
             String idStr = String.valueOf(idVal.longValue());
-            nextCursor = Cursor.encode(SearchSortType.RELEVANCE.name(), scoreStr, idStr);
+            nextCursor = Cursor.encode(sort.name(), scoreStr, idStr);
         }
 
         return new CursorPageResponse<>(content, nextCursor, hasNext);

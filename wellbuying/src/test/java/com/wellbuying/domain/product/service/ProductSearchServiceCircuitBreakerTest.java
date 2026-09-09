@@ -39,7 +39,7 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
 
     @Test
     void search_OpenSearch_예외면_SEARCH_UNAVAILABLE로_변환한다() {
-        when(productSearchRepository.search(any(), any(), anyInt(), any()))
+        when(productSearchRepository.search(any(), any(), any(), anyInt(), any()))
                 .thenThrow(new RuntimeException("connection refused"));
 
         assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, false))
@@ -54,13 +54,13 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, false))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SEARCH_UNAVAILABLE);
-        verify(productSearchRepository, never()).search(any(), any(), anyInt(), any());
+        verify(productSearchRepository, never()).search(any(), any(), any(), anyInt(), any());
     }
 
     // 잘못된 커서 등 요청 오류(BusinessException)는 503으로 바뀌지 않고 그대로 나가며, 서킷 실패로도 집계되지 않는다
     @Test
     void search_BusinessException은_그대로_던지고_서킷_실패로_집계하지_않는다() {
-        when(productSearchRepository.search(any(), any(), anyInt(), any()))
+        when(productSearchRepository.search(any(), any(), any(), anyInt(), any()))
                 .thenThrow(new BusinessException(ErrorCode.INVALID_CURSOR));
 
         assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, "bad-cursor", 20, false))

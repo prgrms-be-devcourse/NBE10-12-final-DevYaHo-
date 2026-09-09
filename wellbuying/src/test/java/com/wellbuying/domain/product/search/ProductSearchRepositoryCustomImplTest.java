@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.global.dto.CursorPageResponse;
+import com.wellbuying.domain.product.search.SearchSortType;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -47,7 +48,7 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
     void search_키워드가_productName에_포함된_APPROVED_상품을_반환한다() {
         // "유기농 비타민C"는 성능테스트 데이터에 없는 조합 — 관련도 오염 방지
         CursorPageResponse<ProductSearchResponse> result =
-                productSearchRepository.search("유기농 비타민C", null, 20, null);
+                productSearchRepository.search("유기농 비타민C", SearchSortType.RELEVANCE, null, 20, null);
 
         List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).contains("유기농 비타민C 1000mg");
@@ -56,7 +57,7 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
     @Test
     void search_키워드가_description에만_있어도_반환된다() {
         CursorPageResponse<ProductSearchResponse> result =
-                productSearchRepository.search("비타민", null, 20, null);
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, null, 20, null);
 
         List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         // 오메가3 상품은 productName에 '비타민'이 없지만 description에 '비타민D'가 있어 매칭돼야 한다
@@ -66,7 +67,7 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
     @Test
     void search_PENDING_상품은_결과에서_제외된다() {
         CursorPageResponse<ProductSearchResponse> result =
-                productSearchRepository.search("콜라겐", null, 20, null);
+                productSearchRepository.search("콜라겐", SearchSortType.RELEVANCE, null, 20, null);
 
         List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).doesNotContain("콜라겐 파우더");
@@ -75,7 +76,7 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
     @Test
     void search_REJECTED_상품은_결과에서_제외된다() {
         CursorPageResponse<ProductSearchResponse> result =
-                productSearchRepository.search("마그네슘", null, 20, null);
+                productSearchRepository.search("마그네슘", SearchSortType.RELEVANCE, null, 20, null);
 
         List<String> names = result.content().stream().map(ProductSearchResponse::productName).toList();
         assertThat(names).doesNotContain("마그네슘 400mg");
@@ -86,14 +87,14 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
     void search_커서로_다음_페이지를_조회하면_결과가_겹치지_않는다() {
         // 비타민 키워드로 APPROVED 문서 2건이 매칭되므로 size=1이면 hasNext=true
         CursorPageResponse<ProductSearchResponse> first =
-                productSearchRepository.search("비타민", null, 1, null);
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, null, 1, null);
 
         assertThat(first.hasNext()).isTrue();
         assertThat(first.content()).hasSize(1);
         assertThat(first.nextCursor()).isNotNull();
 
         CursorPageResponse<ProductSearchResponse> second =
-                productSearchRepository.search("비타민", first.nextCursor(), 1, null);
+                productSearchRepository.search("비타민", SearchSortType.RELEVANCE, first.nextCursor(), 1, null);
 
         assertThat(second.content()).isNotEmpty();
         assertThat(second.content().get(0).productName())
@@ -107,7 +108,7 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
         operations.indexOps(ProductSearchDocument.class).refresh();
         try {
             CursorPageResponse<ProductSearchResponse> result =
-                    productSearchRepository.search("액티브공동구매상품", null, 20, true);
+                    productSearchRepository.search("액티브공동구매상품", SearchSortType.RELEVANCE, null, 20, true);
 
             assertThat(result.content()).hasSize(1);
             assertThat(result.content().get(0).hasActiveGroupBuy()).isTrue();
@@ -116,8 +117,33 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
         }
     }
 
+    @Test
+    void search_POPULAR_정렬시_조회수_내림차순으로_반환된다() {
+        long base = TEST_ID_BASE + 20;
+        productSearchRepository.saveAll(List.of(
+                doc(base + 1, "파퓰러정렬테스트상품", "설명", "APPROVED", 5L),
+                doc(base + 2, "파퓰러정렬테스트상품", "설명", "APPROVED", 20L),
+                doc(base + 3, "파퓰러정렬테스트상품", "설명", "APPROVED", 10L)
+        ));
+        operations.indexOps(ProductSearchDocument.class).refresh();
+        try {
+            CursorPageResponse<ProductSearchResponse> result =
+                    productSearchRepository.search("파퓰러정렬테스트", SearchSortType.POPULAR, null, 20, null);
+
+            assertThat(result.content()).extracting(ProductSearchResponse::viewCount)
+                    .containsExactly(20L, 10L, 5L);
+        } finally {
+            productSearchRepository.deleteAllById(List.of(base + 1, base + 2, base + 3));
+        }
+    }
+
     private ProductSearchDocument doc(long id, String name, String description, String status) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
+                false, null, null, null, null, null, null, null);
+    }
+
+    private ProductSearchDocument doc(long id, String name, String description, String status, long viewCount) {
+        return new ProductSearchDocument(id, name, description, 1L, status, 10000, viewCount, "url", 1L, LocalDateTime.now(),
                 false, null, null, null, null, null, null, null);
     }
 
