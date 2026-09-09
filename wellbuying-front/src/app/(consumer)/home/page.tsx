@@ -18,7 +18,6 @@ import {
 import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
-import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
 import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
@@ -38,30 +37,15 @@ export default function HomePage() {
   // 그대로 재활용하지 않고 정렬 기준별로 따로 받아온다 - 전체 진행중 건수가 한 번에 받는 개수(50)보다
   // 많아지면 클라이언트에서 재정렬해서는 진짜 상위 항목을 놓칠 수 있기 때문(서버가 정렬한 뒤 잘라줘야
   // 정확하다). 목록 카드에 필요한 필드는 동일해 사이즈만 작게 준다
-  const {
-    items: popularSource,
-    hasMore: popularHasMore,
-    loadingMore: popularLoadingMore,
-    loadMore: loadMorePopular,
-  } = useGroupBuyList("ONGOING", { sort: "viewCount,desc", size: POPULAR_COUNT * 4 });
-  const {
-    items: closingSource,
-    hasMore: closingHasMore,
-    loadingMore: closingLoadingMore,
-    loadMore: loadMoreClosing,
-  } = useGroupBuyList("ONGOING", { sort: "endAt,asc", size: CLOSING_SOON_COUNT * 4 });
-  const {
-    items: newArrivalSource,
-    hasMore: newArrivalHasMore,
-    loadingMore: newArrivalLoadingMore,
-    loadMore: loadMoreNewArrival,
-  } = useGroupBuyList("ONGOING", { sort: "createdAt,desc", size: NEW_ARRIVAL_COUNT * 4 });
+  const { items: popularSource } = useGroupBuyList("ONGOING", { sort: "viewCount,desc", size: POPULAR_COUNT * 4 });
+  const { items: closingSource } = useGroupBuyList("ONGOING", { sort: "endAt,asc", size: CLOSING_SOON_COUNT * 4 });
+  const { items: newArrivalSource } = useGroupBuyList("ONGOING", {
+    sort: "createdAt,desc",
+    size: NEW_ARRIVAL_COUNT * 4,
+  });
   const { items: upcomingAll } = useGroupBuyList("READY");
   const [category, setCategory] = useState("전체");
   const [slide, setSlide] = useState(0);
-  const [popularVisible, setPopularVisible] = useState(POPULAR_COUNT);
-  const [closingVisible, setClosingVisible] = useState(CLOSING_SOON_COUNT);
-  const [newArrivalVisible, setNewArrivalVisible] = useState(NEW_ARRIVAL_COUNT);
 
   const byCategory = useCallback(
     (items: GroupBuyCardView[]) => (category === "전체" ? items : items.filter((item) => item.category === category)),
@@ -72,51 +56,28 @@ export default function HomePage() {
 
   const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
 
-  const popularFiltered = useMemo(() => byCategory(popularSource), [popularSource, byCategory]);
-  const popular = useMemo(() => popularFiltered.slice(0, popularVisible), [popularFiltered, popularVisible]);
+  const popular = useMemo(() => byCategory(popularSource).slice(0, POPULAR_COUNT), [popularSource, byCategory]);
 
   const notable = useMemo(() => filtered.slice(0, NOTABLE_COUNT), [filtered]);
 
-  const closingFiltered = useMemo(() => byCategory(closingSource), [closingSource, byCategory]);
-  const closingSoon = useMemo(() => closingFiltered.slice(0, closingVisible), [closingFiltered, closingVisible]);
+  const closingSoon = useMemo(
+    () => byCategory(closingSource).slice(0, CLOSING_SOON_COUNT),
+    [closingSource, byCategory],
+  );
 
   const upcoming = useMemo(() => {
     const scheduled = category === "전체" ? upcomingAll : upcomingAll.filter((item) => item.category === category);
     return scheduled.slice(0, UPCOMING_COUNT);
   }, [upcomingAll, category]);
 
-  const newArrivalFiltered = useMemo(() => byCategory(newArrivalSource), [newArrivalSource, byCategory]);
   const newArrivals = useMemo(
-    () => newArrivalFiltered.slice(0, newArrivalVisible),
-    [newArrivalFiltered, newArrivalVisible],
+    () => byCategory(newArrivalSource).slice(0, NEW_ARRIVAL_COUNT),
+    [newArrivalSource, byCategory],
   );
 
   useEffect(() => {
     setSlide(0);
-    setPopularVisible(POPULAR_COUNT);
-    setClosingVisible(CLOSING_SOON_COUNT);
-    setNewArrivalVisible(NEW_ARRIVAL_COUNT);
   }, [category]);
-
-  // 이미 받아온 버퍼(카테고리 필터링 후) 안에 더 보여줄 항목이 남아있으면 그것부터 보여주고,
-  // 버퍼가 바닥나면 그때 서버에서 다음 페이지를 이어받는다
-  function showMorePopular() {
-    const next = popularVisible + POPULAR_COUNT;
-    setPopularVisible(next);
-    if (next > popularFiltered.length && popularHasMore) loadMorePopular();
-  }
-
-  function showMoreClosing() {
-    const next = closingVisible + CLOSING_SOON_COUNT;
-    setClosingVisible(next);
-    if (next > closingFiltered.length && closingHasMore) loadMoreClosing();
-  }
-
-  function showMoreNewArrival() {
-    const next = newArrivalVisible + NEW_ARRIVAL_COUNT;
-    setNewArrivalVisible(next);
-    if (next > newArrivalFiltered.length && newArrivalHasMore) loadMoreNewArrival();
-  }
 
   useEffect(() => {
     if (promoDeals.length <= 1) return;
@@ -169,16 +130,6 @@ export default function HomePage() {
                   <PopularDealRow key={item.id} item={item} rank={index + 1} />
                 ))}
               </div>
-              {(popularFiltered.length > popularVisible || popularHasMore) && (
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  loading={popularLoadingMore}
-                  onClick={showMorePopular}
-                >
-                  더보기
-                </Button>
-              )}
             </div>
           </section>
 
@@ -210,11 +161,6 @@ export default function HomePage() {
                 <GroupBuyCard key={item.id} item={item} />
               ))}
             </div>
-            {(closingFiltered.length > closingVisible || closingHasMore) && (
-              <Button variant="secondary" className="w-full" loading={closingLoadingMore} onClick={showMoreClosing}>
-                더보기
-              </Button>
-            )}
           </section>
 
           <section className="space-y-3">
@@ -230,16 +176,6 @@ export default function HomePage() {
                 <GroupBuyCard key={item.id} item={item} />
               ))}
             </div>
-            {(newArrivalFiltered.length > newArrivalVisible || newArrivalHasMore) && (
-              <Button
-                variant="secondary"
-                className="w-full"
-                loading={newArrivalLoadingMore}
-                onClick={showMoreNewArrival}
-              >
-                더보기
-              </Button>
-            )}
           </section>
 
           {upcoming.length > 0 && (
