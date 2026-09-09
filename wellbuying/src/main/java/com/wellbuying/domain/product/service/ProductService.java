@@ -64,7 +64,7 @@ public class ProductService {
 
     // 메인 페이지 홈 노출용 - 자주 조회되지만 자주 안 바뀌는 데이터라 캐싱
     // (CategoryService.getCategoryTree()와 동일 패턴, 캐시 무효화는 TTL로만 처리)
-    @Cacheable("popularProducts")
+    @Cacheable(value = "popularProducts", key = "'top10'")
     @Transactional(readOnly = true)
     public List<ProductSummaryResponse> getPopularProducts() {
         return productRepository.findTopByViewCount(POPULAR_PRODUCT_LIMIT);
