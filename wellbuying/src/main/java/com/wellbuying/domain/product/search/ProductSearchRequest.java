@@ -27,5 +27,8 @@ public record ProductSearchRequest(
         if (size == null) {
             size = 20;
         }
+        if (activeGroupBuyOnly == null) {
+            activeGroupBuyOnly = false;
+        }
     }
 }
