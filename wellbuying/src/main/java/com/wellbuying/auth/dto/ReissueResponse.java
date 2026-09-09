@@ -1,4 +1,7 @@
 package com.wellbuying.auth.dto;
 
-public record ReissueResponse(String accessToken, String refreshToken, long accessTokenExpiresIn) {
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+// refreshToken은 JSON 응답에는 노출하지 않고 AuthController가 httpOnly 쿠키를 만들 때만 사용한다
+public record ReissueResponse(String accessToken, @JsonIgnore String refreshToken, long accessTokenExpiresIn) {
 }

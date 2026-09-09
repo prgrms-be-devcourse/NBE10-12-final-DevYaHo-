@@ -77,5 +77,8 @@ public abstract class AbstractIntegrationTest {
         registry.add("aws.s3.access-key", MINIO::getUserName);
         registry.add("aws.s3.secret-key", MINIO::getPassword);
         registry.add("aws.s3.bucket", () -> TEST_BUCKET);
+        // application-local.yaml의 cookie-secure=false(브라우저 수동 테스트용 오버라이드)는 무시하고
+        // 운영 동작(Secure 쿠키)을 기준으로 검증/문서화한다
+        registry.add("jwt.cookie-secure", () -> true);
     }
 }

@@ -111,6 +111,8 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(corsProperties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Device-Id"));
+        // refresh token을 httpOnly 쿠키로 내려보내므로 브라우저가 쿠키를 실어 보내려면 필요 (allowedOrigins가 와일드카드가 아니라 호환됨)
+        configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
