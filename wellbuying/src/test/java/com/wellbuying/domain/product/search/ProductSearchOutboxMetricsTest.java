@@ -22,7 +22,7 @@ class ProductSearchOutboxMetricsTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         new ProductSearchOutboxMetrics(registry, outboxRepository);
 
-        assertThat(registry.get("wellbuying.search.outbox.pending").gauge().value()).isEqualTo(5.0);
+        assertThat(registry.get("wellbuying.search.outbox.events").tag("status", "pending").gauge().value()).isEqualTo(5.0);
     }
 
     @Test
@@ -32,6 +32,6 @@ class ProductSearchOutboxMetricsTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         new ProductSearchOutboxMetrics(registry, outboxRepository);
 
-        assertThat(registry.get("wellbuying.search.outbox.dead").gauge().value()).isEqualTo(2.0);
+        assertThat(registry.get("wellbuying.search.outbox.events").tag("status", "dead").gauge().value()).isEqualTo(2.0);
     }
 }

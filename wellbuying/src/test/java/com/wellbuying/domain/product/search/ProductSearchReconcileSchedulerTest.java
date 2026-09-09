@@ -76,6 +76,8 @@ class ProductSearchReconcileSchedulerTest {
         assertThat(allCalls.get(0)).allMatch(doc -> !doc.hasActiveGroupBuy());
         assertThat(allCalls.get(1)).allMatch(doc -> doc.hasActiveGroupBuy());
         assertThat(meterRegistry.get("wellbuying.search.reconcile.documents").counter().count()).isEqualTo(3.0);
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.duration").timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isZero();
     }
 
     @Test
@@ -98,6 +100,7 @@ class ProductSearchReconcileSchedulerTest {
         when(productSearchRepository.saveAll(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         assertThatCode(() -> scheduler.reconcile()).doesNotThrowAnyException();
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(1.0);
     }
 
     private Product mockProduct(Long id) {

@@ -33,6 +33,7 @@ public class ProductSearchReconcileScheduler {
     private final GroupBuyService groupBuyService;
     private final Timer reconcileTimer;
     private final Counter reconciledDocuments;
+    private final Counter reconcileFailures;
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
@@ -45,6 +46,8 @@ public class ProductSearchReconcileScheduler {
                 .description("검색 인덱스 정합성 보정 배치 1회 소요 시간").register(meterRegistry);
         this.reconciledDocuments = Counter.builder("wellbuying.search.reconcile.documents")
                 .description("보정 배치가 재색인한 누적 문서 수").register(meterRegistry);
+        this.reconcileFailures = Counter.builder("wellbuying.search.reconcile.failures")
+                .description("보정 배치 실패 횟수 (예외로 중단된 실행 수)").register(meterRegistry);
     }
 
     @Scheduled(
@@ -74,6 +77,7 @@ public class ProductSearchReconcileScheduler {
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
         } catch (Exception e) {
+            reconcileFailures.increment();
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
         } finally {
             sample.stop(reconcileTimer);
