@@ -1,9 +1,11 @@
 package com.wellbuying.domain.product.service;
 
+import com.wellbuying.domain.product.search.ProductAutocompleteResponse;
 import com.wellbuying.domain.product.search.ProductSearchFilter;
 import com.wellbuying.domain.product.search.ProductSearchRepository;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.search.SearchSortType;
+import java.util.List;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
@@ -31,6 +33,17 @@ public class ProductSearchService {
             ProductSearchFilter filter) {
         sort.validateSupported();
         return productSearchRepository.search(keyword, cursor, size, filter);
+    }
+
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "autocompleteFallback")
+    public List<ProductAutocompleteResponse> autocomplete(String keyword) {
+        return productSearchRepository.autocomplete(keyword);
+    }
+
+    // 자동완성은 실패해도 화면 흐름을 막을 필요가 없으므로 503 대신 빈 목록으로 대체
+    private List<ProductAutocompleteResponse> autocompleteFallback(String keyword, Throwable t) {
+        log.warn("자동완성 폴백 동작: keyword={}, cause={}", keyword, t.getClass().getSimpleName());
+        return List.of();
     }
 
     // 정렬 검증 등 요청 자체가 잘못된 경우는 그대로 전달 — 서킷 실패로도 집계되지 않음(yaml ignore-exceptions)

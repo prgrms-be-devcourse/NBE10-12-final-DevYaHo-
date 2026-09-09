@@ -73,6 +73,32 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
         return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
+    private static final int AUTOCOMPLETE_LIMIT = 8;
+
+    // 자동완성 - 매핑 변경/재색인 없이 기존 productName 필드에 match_phrase_prefix로 접두어 매칭.
+    // 커서 페이지네이션 없음(개수 고정), 상태 APPROVED 필터만 적용
+    @Override
+    public List<ProductAutocompleteResponse> autocomplete(String keyword) {
+        Query query = Query.of(q -> q
+                .bool(b -> b
+                        .must(m -> m
+                                .matchPhrasePrefix(mpp -> mpp
+                                        .field("productName")
+                                        .query(keyword)))
+                        .filter(f -> f
+                                .term(t -> t.field("status").value(v -> v.stringValue(ProductStatus.APPROVED.name()))))));
+
+        NativeQuery nativeQuery = new NativeQueryBuilder()
+                .withQuery(query)
+                .withPageable(PageRequest.of(0, AUTOCOMPLETE_LIMIT))
+                .build();
+
+        return operations.search(nativeQuery, ProductSearchDocument.class).getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .map(ProductAutocompleteResponse::from)
+                .toList();
+    }
+
     // productName/description에 대한 형태소 분석 기반 multi_match + status:APPROVED 필터
     // filter 컨텍스트로 분리하면 status 조건이 _score에 영향 없이 캐시 가능 → 관련도 정렬 정확도 유지
     private Query buildQuery(String keyword, ProductSearchFilter filter) {

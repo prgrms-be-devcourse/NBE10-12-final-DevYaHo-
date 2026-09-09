@@ -15,6 +15,7 @@ import com.wellbuying.domain.product.dto.ProductMineResponse;
 import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.entity.ImageType;
+import com.wellbuying.domain.product.search.ProductAutocompleteResponse;
 import com.wellbuying.domain.product.search.ProductSearchRequest;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.service.ProductImageService;
@@ -29,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
@@ -213,5 +215,12 @@ public class ProductController {
     @GetMapping("/search")
     public CursorPageResponse<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
         return productSearchService.search(request.keyword(), request.sort(), request.cursor(), request.size(), request.toFilter());
+    }
+
+    // 검색창 자동완성 - 상품명 접두어 일치, 최대 8건, 필터/페이지네이션 없음
+    @GetMapping("/search/autocomplete")
+    public List<ProductAutocompleteResponse> autocomplete(
+            @RequestParam @NotBlank(message = "검색 키워드는 필수입니다.") String keyword) {
+        return productSearchService.autocomplete(keyword);
     }
 }

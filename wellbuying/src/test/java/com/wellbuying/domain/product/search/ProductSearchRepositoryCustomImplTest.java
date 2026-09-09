@@ -3,6 +3,7 @@ package com.wellbuying.domain.product.search;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.AbstractIntegrationTest;
+import com.wellbuying.domain.product.search.ProductAutocompleteResponse;
 import com.wellbuying.domain.product.search.ProductSearchFilter;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.time.LocalDateTime;
@@ -149,6 +150,21 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
             assertThat(result.content().get(0).id()).isEqualTo(id15k);
         } finally {
             productSearchRepository.deleteAllById(List.of(id5k, id15k, id30k));
+        }
+    }
+
+    @Test
+    void autocomplete_접두어로_APPROVED_상품명을_반환한다() {
+        long id = TEST_ID_BASE + 30;
+        productSearchRepository.save(doc(id, "오토컴플릿전용상품 비타민B", "면역력 개선", "APPROVED"));
+        operations.indexOps(ProductSearchDocument.class).refresh();
+        try {
+            List<ProductAutocompleteResponse> result = productSearchRepository.autocomplete("오토컴플릿전용상품 비타");
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).productName()).isEqualTo("오토컴플릿전용상품 비타민B");
+        } finally {
+            productSearchRepository.deleteById(id);
         }
     }
 
