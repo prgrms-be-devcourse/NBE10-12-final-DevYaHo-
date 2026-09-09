@@ -20,6 +20,9 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
     boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
 
+    // 검색 색인(OpenSearch) 배치 갱신용 - 여러 상품의 지정된 상태 공동구매를 한 번의 IN 쿼리로 조회 (상품 수만큼 개별 호출하지 않는다)
+    List<GroupBuy> findByProductIdInAndStatusIn(List<Long> productIds, List<GroupBuyStatus> statuses);
+
     // 생산자별 조회 - GroupBuySeedRunner가 이전에 시딩한 자기 소유 데이터를 정리할 때 사용
     List<GroupBuy> findByProducerId(Long producerId);
 

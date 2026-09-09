@@ -8,6 +8,7 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyDetailResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPriceResponse;
+import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyStatusResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuySummaryResponse;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyUpdateRequest;
@@ -32,8 +33,10 @@ import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -168,6 +171,38 @@ public class GroupBuyService {
                     : "기타";
             return GroupBuySummaryResponse.of(groupBuy, product, categoryName);
         });
+    }
+
+    // 검색 색인(OpenSearch)용 - 상품별 "진행 중"(READY/ONGOING) 공동구매 요약을 배치 조회한다 (상품 수만큼 개별
+    // 조회하지 않고 IN 쿼리 한 번으로 처리). 한 상품에 진행 중인 공동구매가 여러 건 있는 경우(도메인 모델상
+    // 생성 시점에 막고 있지 않다) ONGOING을 READY보다 대표로 우선하고, 같은 상태끼리는 더 최근에(id가 큰 쪽)
+    // 개설된 건을 고른다. 진행 중인 공동구매가 없는 상품은 결과 Map에서 아예 빠진다.
+    @Transactional(readOnly = true)
+    public Map<Long, GroupBuyProductSummaryResponse> getActiveSummariesByProductIds(List<Long> productIds) {
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        List<GroupBuy> activeGroupBuys = groupBuyRepository.findByProductIdInAndStatusIn(productIds,
+                List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING));
+
+        Comparator<GroupBuy> representativePriority = Comparator
+                .comparing((GroupBuy g) -> g.getStatus() == GroupBuyStatus.ONGOING)
+                .thenComparing(GroupBuy::getId);
+        Map<Long, GroupBuy> representativeByProductId = activeGroupBuys.stream()
+                .collect(Collectors.toMap(GroupBuy::getProductId, Function.identity(),
+                        BinaryOperator.maxBy(representativePriority)));
+
+        List<Long> groupBuyIds = representativeByProductId.values().stream().map(GroupBuy::getId).toList();
+        Map<Long, List<GroupBuyPrice>> priceTiersByGroupBuyId = groupBuyPriceRepository.findByGroupBuyIdIn(
+                groupBuyIds).stream().collect(Collectors.groupingBy(GroupBuyPrice::getGroupBuyId));
+
+        return representativeByProductId.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> {
+                    GroupBuy groupBuy = entry.getValue();
+                    List<GroupBuyPrice> priceTiers = priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of());
+                    int unitPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
+                    return GroupBuyProductSummaryResponse.of(groupBuy, unitPrice);
+                }));
     }
 
     // 판매정지 요청 - 본인 소유의 ONGOING 공동구매만, 이미 처리 대기 중인 요청이 있으면 중복 요청 불가
