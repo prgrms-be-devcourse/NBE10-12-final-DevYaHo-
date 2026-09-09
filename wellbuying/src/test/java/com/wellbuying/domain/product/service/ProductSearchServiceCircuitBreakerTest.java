@@ -1,5 +1,6 @@
 package com.wellbuying.domain.product.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -54,5 +55,18 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SEARCH_UNAVAILABLE);
         verify(productSearchRepository, never()).search(any(), any(), anyInt(), any());
+    }
+
+    // 잘못된 커서 등 요청 오류(BusinessException)는 503으로 바뀌지 않고 그대로 나가며, 서킷 실패로도 집계되지 않는다
+    @Test
+    void search_BusinessException은_그대로_던지고_서킷_실패로_집계하지_않는다() {
+        when(productSearchRepository.search(any(), any(), anyInt(), any()))
+                .thenThrow(new BusinessException(ErrorCode.INVALID_CURSOR));
+
+        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, "bad-cursor", 20, false))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_CURSOR);
+        assertThat(circuitBreakerRegistry.circuitBreaker("openSearchProductSearch").getMetrics().getNumberOfFailedCalls())
+                .isZero();
     }
 }

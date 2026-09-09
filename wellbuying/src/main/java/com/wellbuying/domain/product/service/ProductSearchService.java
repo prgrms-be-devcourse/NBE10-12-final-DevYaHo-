@@ -6,6 +6,7 @@ import com.wellbuying.domain.product.search.SearchSortType;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +40,12 @@ public class ProductSearchService {
 
     // OpenSearch 장애(연결 실패, 타임아웃) 또는 서킷 open(CallNotPermittedException) 시 503으로 응답
     private CursorPageResponse<ProductSearchResponse> searchFallback(String keyword, SearchSortType sort,
-            String cursor, int size, Boolean activeGroupBuyOnly, Exception e) {
-        log.warn("검색 폴백 동작: keyword={}, cause={}", keyword, e.getClass().getSimpleName());
+            String cursor, int size, Boolean activeGroupBuyOnly, Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            log.warn("검색 서킷 OPEN - OpenSearch 호출 없이 즉시 차단: keyword={}", keyword);
+        } else {
+            log.error("검색 OpenSearch 호출 실패 - 503 폴백: keyword={}", keyword, t);
+        }
         throw new BusinessException(ErrorCode.SEARCH_UNAVAILABLE);
     }
 }
