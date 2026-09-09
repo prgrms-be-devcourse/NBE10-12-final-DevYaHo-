@@ -50,10 +50,17 @@ services:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
       - wellbuying-kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # 이 이미지는 kafka-topics.sh가 PATH에 없어 전체 경로로 호출해야 한다
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Kafka 토픽/파티션/메시지/컨슈머 그룹을 브라우저에서 볼 수 있는 웹 UI (http://localhost:8090)
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    # latest는 팀원마다 받는 시점에 따라 버전이 달라질 수 있어 고정한다
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: wellbuying-kafka-ui
     ports:
       - "8090:8080"
@@ -61,7 +68,8 @@ services:
       KAFKA_CLUSTERS_0_NAME: wellbuying
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
 
   opensearch:
     build:
