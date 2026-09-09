@@ -99,4 +99,56 @@ class GroupBuyOutboxRelayTest {
 
         org.assertj.core.api.Assertions.assertThatCode(() -> relay.relay()).doesNotThrowAnyException();
     }
+
+    // 한 라운드가 BATCH_LIMIT(200)만큼 꽉 차면 다음 3초 틱을 기다리지 않고 이번 틱 안에서 곧바로 다음 라운드를
+    // 이어서 처리하는지 검증 - 마지막 라운드가 꽉 차지 않은 순간(더 이상 남지 않음) 멈춘다
+    @SuppressWarnings("unchecked")
+    @Test
+    void 라운드가_가득_차면_같은_틱_안에서_다음_라운드를_이어서_처리한다() {
+        List<GroupBuyEventOutbox> fullRound = java.util.stream.IntStream.rangeClosed(1, 200)
+                .mapToObj(i -> eventWithId((long) i))
+                .toList();
+        List<GroupBuyEventOutbox> partialRound = List.of(eventWithId(201L));
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(fullRound, partialRound);
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.relay();
+
+        verify(outboxRepository, org.mockito.Mockito.times(2))
+                .findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any());
+        ArgumentCaptor<List<GroupBuyEventOutbox>> succeededCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dispatcher, org.mockito.Mockito.times(2)).markPublished(succeededCaptor.capture());
+        assertThat(succeededCaptor.getAllValues().get(0)).hasSize(200);
+        assertThat(succeededCaptor.getAllValues().get(1)).hasSize(1);
+    }
+
+    // 한 라운드에서 단 한 건도 발행에 성공하지 못하면(브로커 다운 등 광범위한 장애) 다음 라운드로 이어가지
+    // 않고 그 틱을 종료하는지 검증 - 계속 이어가면 브로커가 회복될 때까지 같은 건들을 한 틱 안에서
+    // 최대 10번(MAX_ROUNDS_PER_TICK)까지 재시도해 retryCount 재시도 예산(MAX_RETRY_COUNT=5)을
+    // 원래 의도(3초 주기로 최소 15초에 걸친 재시도)보다 훨씬 빨리 소진시키게 된다
+    @SuppressWarnings("unchecked")
+    @Test
+    void 라운드_전체가_실패하면_같은_틱_안에서_재시도하지_않는다() {
+        List<GroupBuyEventOutbox> fullRound = java.util.stream.IntStream.rangeClosed(1, 200)
+                .mapToObj(i -> eventWithId((long) i))
+                .toList();
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(fullRound);
+        CompletableFuture<SendResult<String, String>> brokerDown = new CompletableFuture<>();
+        brokerDown.completeExceptionally(new RuntimeException("브로커 연결 불가"));
+        when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(brokerDown);
+
+        relay.relay();
+
+        verify(outboxRepository, org.mockito.Mockito.times(1))
+                .findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any());
+        ArgumentCaptor<List<GroupBuyEventOutbox>> succeededCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dispatcher, org.mockito.Mockito.times(1)).markPublished(succeededCaptor.capture());
+        assertThat(succeededCaptor.getValue()).isEmpty();
+        ArgumentCaptor<List<DispatchFailure>> failedCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dispatcher, org.mockito.Mockito.times(1)).recordFailures(failedCaptor.capture());
+        assertThat(failedCaptor.getValue()).hasSize(200);
+    }
 }
