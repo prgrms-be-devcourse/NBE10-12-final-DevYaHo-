@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { TextField } from "@/components/ui/TextField";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import DaumPostcode from "react-daum-postcode";
 import {
   getDevices,
   getSocialAccounts,
@@ -18,10 +19,13 @@ import {
   unlinkProvider,
   updateProfile,
   withdraw,
+  getSellerInfo,
+  requestProfileImageUploadUrl,
 } from "@/lib/api/auth";
+import { listMyAddresses, createMyAddress, deleteMyAddress } from "@/lib/api/address";
 import { ApiError } from "@/lib/api/http";
 import { clearTokens, getDeviceId } from "@/lib/auth/token-storage";
-import type { DeviceSessionResponse, MemberResponse, OAuthProvider } from "@/lib/api/types";
+import type { DeviceSessionResponse, MemberResponse, OAuthProvider, BuyerAddressResponse } from "@/lib/api/types";
 
 const ROLE_LABEL: Record<string, string> = {
   BUYER: "구매자",
@@ -176,20 +180,45 @@ function EditProfileModal({
   onSaved: (member: MemberResponse) => void;
 }) {
   const [name, setName] = useState(initialName);
-  const [profileImageUrl, setProfileImageUrl] = useState(initialProfileImageUrl);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>(initialProfileImageUrl);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+  }, [file]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const updated = await updateProfile({ name, profileImageUrl: profileImageUrl || undefined });
+      let finalImageUrl = initialProfileImageUrl;
+      if (file) {
+        const { uploadUrl, profileImageUrl } = await requestProfileImageUploadUrl(file.type);
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+            "x-amz-tagging": "pending=true",
+          },
+        });
+        if (!uploadRes.ok) throw new Error("이미지 업로드에 실패했어요.");
+        finalImageUrl = profileImageUrl;
+      }
+
+      const updated = await updateProfile({ name, profileImageUrl: finalImageUrl || undefined });
       onSaved(updated);
       onClose();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "정보 수정에 실패했어요.");
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "정보 수정에 실패했어요.");
     } finally {
       setSubmitting(false);
     }
@@ -198,12 +227,26 @@ function EditProfileModal({
   return (
     <Modal open onClose={onClose} title="정보 수정" width="380px">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex flex-col items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl || "https://api.dicebear.com/9.x/notionists/svg?seed=fallback"}
+            alt="프로필 미리보기"
+            className="h-24 w-24 rounded-full border border-wb-line object-cover"
+          />
+          <input
+            type="file"
+            accept="image/jpeg, image/png, image/webp"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+          <Button type="button" variant="secondary" className="px-3 py-1 text-xs" onClick={() => fileInputRef.current?.click()}>
+            이미지 변경
+          </Button>
+        </div>
+        
         <TextField label="이름" value={name} onChange={(e) => setName(e.target.value)} required />
-        <TextField
-          label="프로필 이미지 URL (선택)"
-          value={profileImageUrl}
-          onChange={(e) => setProfileImageUrl(e.target.value)}
-        />
         {error && <Banner tone="error">{error}</Banner>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -215,6 +258,183 @@ function EditProfileModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+function AddressSection() {
+  const [addresses, setAddresses] = useState<BuyerAddressResponse[] | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  const [zipcode, setZipcode] = useState("");
+  const [address, setAddress] = useState("");
+  const [addressDetail, setAddressDetail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+
+  const load = () => {
+    listMyAddresses().then(setAddresses).catch(() => setAddresses([]));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  async function handleAdd(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await createMyAddress({ address, addressDetail, zipcode });
+      setZipcode("");
+      setAddress("");
+      setAddressDetail("");
+      setShowAdd(false);
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "배송지 추가에 실패했어요.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function performDelete() {
+    if (deleteTarget === null) return;
+    try {
+      await deleteMyAddress(deleteTarget);
+      load();
+    } catch (e) {
+      alert("삭제 실패");
+    } finally {
+      setDeleteTarget(null);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleCompletePostcode = (data: any) => {
+    setZipcode(data.zonecode);
+    setAddress(data.address);
+    setIsSearching(false);
+  };
+
+  if (!addresses) return null;
+
+  return (
+    <div className="space-y-3 border-t border-wb-line pt-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">나의 배송지</h2>
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => setShowAdd(true)}>
+          + 추가
+        </Button>
+      </div>
+
+      {addresses.length === 0 ? (
+        <p className="text-xs text-wb-secondary">등록된 배송지가 없어요.</p>
+      ) : (
+        <ul className="space-y-2">
+          {addresses.map((addr) => (
+            <li key={addr.id} className="flex flex-col gap-1 rounded-lg border border-wb-line bg-wb-canvas px-3 py-2 text-sm">
+              <div className="flex justify-between">
+                <span className="font-semibold">[{addr.zipcode}]</span>
+                <button onClick={() => setDeleteTarget(addr.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+              </div>
+              <span className="text-wb-ink">{addr.address} {addr.addressDetail}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showAdd && (
+        <Modal open onClose={() => setShowAdd(false)} title="배송지 추가" width="400px">
+          {isSearching ? (
+            <div className="space-y-2">
+               <div className="relative overflow-hidden h-[400px]">
+                 <DaumPostcode 
+                   onComplete={handleCompletePostcode} 
+                   autoClose={false} 
+                   style={{ height: "430px", width: "100%" }} 
+                 />
+                 <div className="absolute bottom-0 left-0 right-0 h-10 bg-white z-10 pointer-events-none" />
+               </div>
+               <Button variant="secondary" className="w-full" onClick={() => setIsSearching(false)}>닫기</Button>
+            </div>
+          ) : (
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <TextField label="우편번호" value={zipcode} readOnly required />
+                </div>
+                <Button type="button" variant="secondary" onClick={() => setIsSearching(true)} className="h-11">
+                  우편번호 검색
+                </Button>
+              </div>
+              <TextField label="주소" value={address} readOnly required />
+              <TextField label="상세주소" value={addressDetail} onChange={(e) => setAddressDetail(e.target.value)} />
+              
+              {error && <Banner tone="error">{error}</Banner>}
+              
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setShowAdd(false)}>취소</Button>
+                <Button type="submit" loading={loading} disabled={zipcode.length === 0 || address.length === 0}>저장</Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={performDelete}
+        title="배송지 삭제"
+        message="이 배송지를 정말 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        destructive
+      />
+    </div>
+  );
+}
+
+function SellerApplicationSection() {
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSellerInfo()
+      .then((info) => setStatus(info.status))
+      .catch(() => {
+        // 404 or other error means not applied
+        setStatus("NONE");
+      });
+  }, []);
+
+  if (status === null) return null; // loading
+
+  if (status === "PENDING") {
+    return (
+      <div className="rounded-lg border border-wb-line bg-wb-canvas px-3 py-2.5 text-center text-sm font-semibold text-wb-orange">
+        생산자 심사 진행 중
+      </div>
+    );
+  }
+
+  if (status === "TERMINATED") {
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-center text-sm">
+        <span className="font-semibold text-red-600">생산자 신청이 반려되었어요.</span>
+        <Link href="/seller/apply" className="text-xs font-semibold text-wb-green hover:underline">
+          다시 신청하기
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href="/seller/apply"
+      className="block rounded-lg border border-wb-line bg-wb-canvas px-3 py-2.5 text-center text-sm font-semibold text-wb-green hover:bg-wb-light-green/40"
+    >
+      생산자로 신청하기
+    </Link>
   );
 }
 
@@ -262,14 +482,22 @@ export function ProfileContent({ showHeader = true }: { showHeader?: boolean } =
     <>
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
-          {showHeader ? (
-            <div>
-              <h1 className="text-xl font-semibold">내 정보</h1>
-              <p className="text-xs text-wb-secondary">계정 정보와 세션을 관리해요.</p>
-            </div>
-          ) : (
-            <div />
-          )}
+          <div className="flex items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={member.profileImageUrl || "https://api.dicebear.com/9.x/notionists/svg?seed=fallback"}
+              alt="프로필 이미지"
+              className="h-12 w-12 rounded-full border border-wb-line object-cover"
+            />
+            {showHeader ? (
+              <div>
+                <h1 className="text-xl font-semibold">내 정보</h1>
+                <p className="text-xs text-wb-secondary">계정 정보와 세션을 관리해요.</p>
+              </div>
+            ) : (
+              <div />
+            )}
+          </div>
           <Button variant="secondary" className="shrink-0 px-3 py-1.5 text-xs" onClick={() => setEditOpen(true)}>
             정보 수정
           </Button>
@@ -290,18 +518,13 @@ export function ProfileContent({ showHeader = true }: { showHeader?: boolean } =
           </div>
         </dl>
 
-        {member.role === "BUYER" && (
-          <Link
-            href="/seller/apply"
-            className="block rounded-lg border border-wb-line bg-wb-canvas px-3 py-2.5 text-center text-sm font-semibold text-wb-green hover:bg-wb-light-green/40"
-          >
-            생산자로 신청하기
-          </Link>
-        )}
+        {member.role === "BUYER" && <SellerApplicationSection />}
 
         {error && <Banner tone="error">{error}</Banner>}
 
-        <div className="flex gap-2">
+        <AddressSection />
+
+        <div className="flex gap-2 border-t border-wb-line pt-5">
           <Button
             variant="secondary"
             className="flex-1"

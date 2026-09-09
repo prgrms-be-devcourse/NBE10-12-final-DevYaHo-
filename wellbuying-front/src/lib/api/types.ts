@@ -363,3 +363,12 @@ export type OrderDetailResponse = {
   approvedAt: string | null;
   createdAt: string;
 };
+
+export type ProfileImageUploadUrlRequest = {
+  contentType: string;
+};
+
+export type ProfileImageUploadUrlResponse = {
+  uploadUrl: string;
+  profileImageUrl: string;
+};

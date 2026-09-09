@@ -12,6 +12,8 @@ import type {
   SocialAccountsResponse,
   SocialLinkResponse,
   UpdateMemberRequest,
+  SellerInfoResponse,
+  ProfileImageUploadUrlResponse,
 } from "@/lib/api/types";
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -109,4 +111,16 @@ export function unlinkProvider(provider: OAuthProvider): Promise<void> {
 
 export function getDevices(): Promise<DeviceSessionResponse[]> {
   return http.get<DeviceSessionResponse[]>("/api/auth/devices", { auth: true });
+}
+
+export function getSellerInfo(): Promise<SellerInfoResponse> {
+  return http.get<SellerInfoResponse>("/api/members/me/seller-info", { auth: true });
+}
+
+export function requestProfileImageUploadUrl(contentType: string): Promise<ProfileImageUploadUrlResponse> {
+  return http.post<ProfileImageUploadUrlResponse>(
+    "/api/members/me/profile-image/upload-url",
+    { contentType },
+    { auth: true },
+  );
 }
