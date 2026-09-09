@@ -1,5 +1,6 @@
 package com.wellbuying.domain.product.search;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -34,6 +35,14 @@ public record ProductSearchRequest(
         if (activeGroupBuyOnly == null) {
             activeGroupBuyOnly = false;
         }
+    }
+
+    @AssertTrue(message = "최소 가격은 최대 가격보다 클 수 없습니다.")
+    public boolean isValidPriceRange() {
+        if (minPrice != null && maxPrice != null) {
+            return minPrice <= maxPrice;
+        }
+        return true;
     }
 
     public ProductSearchFilter toFilter() {
