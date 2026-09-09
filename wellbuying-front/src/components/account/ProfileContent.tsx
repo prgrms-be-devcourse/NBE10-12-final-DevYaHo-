@@ -3,6 +3,7 @@
 import { FormEvent, Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Banner } from "@/components/ui/Banner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -176,6 +177,7 @@ function EditProfileModal({
   initialName,
   initialProfileImageUrl,
   onSaved,
+  onRequestPasswordReset,
 }: {
   onClose: () => void;
   initialName: string;
@@ -211,7 +213,6 @@ function EditProfileModal({
           body: file,
           headers: {
             "Content-Type": file.type,
-            "x-amz-tagging": "pending=true",
           },
         });
         if (!uploadRes.ok) throw new Error("이미지 업로드에 실패했어요.");
@@ -232,12 +233,18 @@ function EditProfileModal({
     <Modal open onClose={onClose} title="정보 수정" width="380px">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl || "https://api.dicebear.com/9.x/notionists/svg?seed=fallback"}
-            alt="프로필 미리보기"
-            className="h-24 w-24 rounded-full border border-wb-line object-cover"
-          />
+          {previewUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={previewUrl}
+              alt="프로필 미리보기"
+              className="h-24 w-24 rounded-full border border-wb-line object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border border-wb-line bg-wb-canvas text-wb-secondary">
+              <User className="h-10 w-10" />
+            </div>
+          )}
           <input
             type="file"
             accept="image/jpeg, image/png, image/webp"
@@ -313,7 +320,7 @@ function AddressSection() {
       await deleteMyAddress(deleteTarget);
       load();
     } catch (e) {
-      alert("삭제 실패");
+      setError(e instanceof ApiError ? e.message : "배송지 삭제에 실패했어요.");
     } finally {
       setDeleteTarget(null);
     }
@@ -597,12 +604,18 @@ export function ProfileContent({ showHeader = true }: { showHeader?: boolean } =
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={member.profileImageUrl || "https://api.dicebear.com/9.x/notionists/svg?seed=fallback"}
-              alt="프로필 이미지"
-              className="h-12 w-12 rounded-full border border-wb-line object-cover"
-            />
+            {member.profileImageUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={member.profileImageUrl}
+                alt="프로필 이미지"
+                className="h-12 w-12 rounded-full border border-wb-line object-cover"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-wb-line bg-wb-canvas text-wb-secondary">
+                <User className="h-6 w-6" />
+              </div>
+            )}
             {showHeader ? (
               <div>
                 <h1 className="text-xl font-semibold">내 정보</h1>
