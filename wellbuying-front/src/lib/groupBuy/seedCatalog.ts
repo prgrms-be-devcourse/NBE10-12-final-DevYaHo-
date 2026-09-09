@@ -68,62 +68,6 @@ const CATALOG: Record<string, GroupBuyCatalogEntry> = {
     summary: "이중 진공 구조라 아침에 담은 온도가 저녁까지 유지돼요.",
     detail: "식품용 스테인리스 원판을 사용하고, 뚜껑 실링을 이중으로 처리했습니다.",
   },
-  "제주 유기농 감귤": {
-    producerName: "제주 감귤말농장",
-    icon: "leaf",
-    tint: "citrus",
-    summary: "당도가 오른 만큼만 수확해 보내는 제주 유기농 감귤이에요.",
-    detail: "화학 비료 없이 키운 감귤을 주문 들어온 물량만큼 그날 선별합니다.",
-  },
-  "리넨 반팔 셔츠": {
-    producerName: "스튜디오 리넨웍스",
-    icon: "shirt",
-    tint: "sky",
-    summary: "구김이 적고 통기성이 좋은 여름용 리넨 반팔 셔츠예요.",
-    detail: "린넨 100% 원단을 워싱 가공해 첫 세탁부터 편하게 입을 수 있습니다.",
-  },
-  "핸드메이드 도자기 머그": {
-    producerName: "아틀리에 흙",
-    icon: "palette",
-    tint: "sand",
-    summary: "하나하나 물레로 빚어 미세하게 다른 표정을 가진 머그예요.",
-    detail: "식품안전 유약을 사용했고, 전자레인지와 식기세척기에도 사용할 수 있습니다.",
-  },
-  "저온숙성 원목 도마": {
-    producerName: "목공방 결",
-    icon: "package",
-    tint: "herb",
-    summary: "칼자국이 남아도 위생적인 저온숙성 원목 도마예요.",
-    detail: "원목을 저온에서 오래 건조시켜 뒤틀림과 갈라짐을 줄였습니다.",
-  },
-  "무항생제 유정란": {
-    producerName: "청정목장 이현수",
-    icon: "gift",
-    tint: "berry",
-    summary: "산란 당일 세척·포장해 바로 보내는 무항생제 유정란이에요.",
-    detail: "항생제 없이 방사 사육한 닭이 낳은 달걀만 선별해 보냅니다.",
-  },
-  "삼베 매트리스 커버": {
-    producerName: "직물공방 결이",
-    icon: "droplet",
-    tint: "ocean",
-    summary: "통풍이 잘 되어 여름철 쾌적하게 쓸 수 있는 삼베 커버예요.",
-    detail: "국내산 삼베 원단을 사용해 습기를 빠르게 흡수하고 발산합니다.",
-  },
-  "울 혼방 니트 가디건": {
-    producerName: "니트하우스 온",
-    icon: "sparkles",
-    tint: "citrus",
-    summary: "가볍게 걸치기 좋은 울 혼방 니트 가디건이에요.",
-    detail: "보풀이 적은 혼방사를 사용해 오래 입어도 태가 유지됩니다.",
-  },
-  "천연 왁스 캔들 세트": {
-    producerName: "왁스랩 소소",
-    icon: "coffee",
-    tint: "sand",
-    summary: "은은한 조도로 공간 분위기를 바꿔주는 천연 왁스 캔들이에요.",
-    detail: "콩기름과 밀랍을 섞은 천연 왁스로 만들어 그을음이 적습니다.",
-  },
 };
 
 const DEFAULT_ENTRY: GroupBuyCatalogEntry = {
