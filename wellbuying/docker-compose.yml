@@ -37,15 +37,39 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # PLAINTEXT(9092)는 호스트 머신(./gradlew bootRun으로 뜨는 앱)용, INTERNAL(29092)은 같은 docker
+      # 네트워크 위의 다른 컨테이너(kafka-ui 등)용 - advertised listener가 "localhost"면 컨테이너
+      # 입장에선 자기 자신을 가리키게 돼서 브로커에 못 붙는다
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
       - wellbuying-kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # 이 이미지는 kafka-topics.sh가 PATH에 없어 전체 경로로 호출해야 한다
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka 토픽/파티션/메시지/컨슈머 그룹을 브라우저에서 볼 수 있는 웹 UI (http://localhost:8090)
+  kafka-ui:
+    # latest는 팀원마다 받는 시점에 따라 버전이 달라질 수 있어 고정한다
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: wellbuying-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: wellbuying
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
 
   opensearch:
     build:
