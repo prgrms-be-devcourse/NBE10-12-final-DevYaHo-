@@ -36,7 +36,7 @@ public class ProductSearchReconcileScheduler {
     private final Timer reconcileTimer;
     private final Counter reconciledDocuments;
     private final Counter reconcileFailures;
-    private final AtomicLong lastFailureId = new AtomicLong(-1);
+    private final AtomicLong lastSuccessTimestamp = new AtomicLong(0);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
@@ -51,8 +51,8 @@ public class ProductSearchReconcileScheduler {
                 .description("보정 배치가 재색인한 누적 문서 수").register(meterRegistry);
         this.reconcileFailures = Counter.builder("wellbuying.search.reconcile.failures")
                 .description("보정 배치 실패 횟수 (예외로 중단된 실행 수)").register(meterRegistry);
-        Gauge.builder("wellbuying.search.reconcile.last_failure_id", lastFailureId, AtomicLong::get)
-                .description("보정 배치가 마지막으로 실패했을 때의 커서 ID (-1=아직 실패 없음)")
+        Gauge.builder("wellbuying.search.reconcile.last_success_timestamp_seconds", lastSuccessTimestamp, AtomicLong::get)
+                .description("보정 배치가 마지막으로 정상 완료된 시점의 Epoch 초 (0=아직 성공 없음)")
                 .register(meterRegistry);
     }
 
@@ -82,9 +82,9 @@ public class ProductSearchReconcileScheduler {
                 lastId = products.get(products.size() - 1).getId();
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
+            lastSuccessTimestamp.set(System.currentTimeMillis() / 1000);
         } catch (Exception e) {
             reconcileFailures.increment();
-            lastFailureId.set(lastId);
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
         } finally {
             sample.stop(reconcileTimer);
