@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
+import java.time.LocalDateTime;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
@@ -54,7 +55,7 @@ class ProductSearchReconcileSchedulerTest {
         when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
                 ProductStatus.APPROVED, 3L, LIMIT)).thenReturn(List.of());
         GroupBuyProductSummaryResponse summary =
-                new GroupBuyProductSummaryResponse(GroupBuyStatus.ONGOING, 8000, 5, 10);
+                new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L, 2L))).thenReturn(Map.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(3L))).thenReturn(Map.of(3L, summary));
 

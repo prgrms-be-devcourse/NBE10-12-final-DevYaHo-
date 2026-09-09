@@ -8,6 +8,7 @@ import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
 class ProductSearchDocumentTest {
@@ -32,22 +33,25 @@ class ProductSearchDocumentTest {
         assertThat(doc.hasActiveGroupBuy()).isFalse();
         assertThat(doc.groupBuyStatus()).isNull();
         assertThat(doc.currentUnitPrice()).isNull();
-        assertThat(doc.participantCount()).isNull();
+        assertThat(doc.currentQuantity()).isNull();
         assertThat(doc.targetQuantity()).isNull();
     }
 
     @Test
     void of_summary가_있으면_hasActiveGroupBuy가_true이고_요약_값이_매핑된다() {
         GroupBuyProductSummaryResponse summary =
-                new GroupBuyProductSummaryResponse(GroupBuyStatus.ONGOING, 8000, 5, 10);
+                new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
 
         ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), summary);
 
         assertThat(doc.hasActiveGroupBuy()).isTrue();
         assertThat(doc.groupBuyStatus()).isEqualTo("ONGOING");
         assertThat(doc.currentUnitPrice()).isEqualTo(8000);
-        assertThat(doc.participantCount()).isEqualTo(5);
+        assertThat(doc.currentQuantity()).isEqualTo(5);
         assertThat(doc.targetQuantity()).isEqualTo(10);
+        assertThat(doc.groupBuyId()).isEqualTo(100L);
+        assertThat(doc.maxQuantity()).isEqualTo(100);
+        assertThat(doc.endAt()).isEqualTo(LocalDateTime.of(2026, 9, 30, 23, 59));
     }
 
     @Test

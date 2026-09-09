@@ -118,12 +118,18 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
 
     private ProductSearchDocument doc(long id, String name, String description, String status) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
-                false, null, null, null, null);
+                false, null, null, null, null, null, null, null);
     }
 
     private ProductSearchDocument doc(long id, String name, String description, String status, boolean hasActiveGroupBuy) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
-                hasActiveGroupBuy, hasActiveGroupBuy ? "ONGOING" : null,
-                hasActiveGroupBuy ? 8000 : null, hasActiveGroupBuy ? 5 : null, hasActiveGroupBuy ? 10 : null);
+                hasActiveGroupBuy,
+                hasActiveGroupBuy ? 100L : null,
+                hasActiveGroupBuy ? "ONGOING" : null,
+                hasActiveGroupBuy ? 8000 : null,
+                hasActiveGroupBuy ? 5 : null,
+                hasActiveGroupBuy ? 10 : null,
+                hasActiveGroupBuy ? 100 : null,
+                hasActiveGroupBuy ? LocalDateTime.of(2026, 9, 30, 23, 59) : null);
     }
 }

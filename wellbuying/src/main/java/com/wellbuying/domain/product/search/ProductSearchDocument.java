@@ -24,10 +24,13 @@ public record ProductSearchDocument(
         @Field(type = FieldType.Long) Long sellerId,
         @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis) LocalDateTime createdAt,
         @Field(type = FieldType.Boolean) Boolean hasActiveGroupBuy,
+        @Field(type = FieldType.Long) Long groupBuyId,
         @Field(type = FieldType.Keyword) String groupBuyStatus,
         @Field(type = FieldType.Integer) Integer currentUnitPrice,
-        @Field(type = FieldType.Integer) Integer participantCount,
-        @Field(type = FieldType.Integer) Integer targetQuantity
+        @Field(type = FieldType.Integer) Integer currentQuantity,
+        @Field(type = FieldType.Integer) Integer targetQuantity,
+        @Field(type = FieldType.Integer) Integer maxQuantity,
+        @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis) LocalDateTime endAt
 ) {
     public static ProductSearchDocument of(Product product) {
         return of(product, null);
@@ -47,10 +50,13 @@ public record ProductSearchDocument(
                 product.getSellerId(),
                 product.getCreatedAt(),
                 hasActive,
+                hasActive ? summary.groupBuyId() : null,
                 hasActive ? summary.groupBuyStatus().name() : null,
                 hasActive ? summary.currentUnitPrice() : null,
-                hasActive ? summary.participantCount() : null,
-                hasActive ? summary.targetQuantity() : null
+                hasActive ? summary.currentQuantity() : null,
+                hasActive ? summary.targetQuantity() : null,
+                hasActive ? summary.maxQuantity() : null,
+                hasActive ? summary.endAt() : null
         );
     }
 }

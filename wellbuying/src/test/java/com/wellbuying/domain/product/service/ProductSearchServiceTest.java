@@ -24,7 +24,7 @@ class ProductSearchServiceTest {
     @Test
     void search_파라미터를_리포지토리에_그대로_위임하고_결과를_반환한다() {
         ProductSearchService service = new ProductSearchService(productSearchRepository);
-        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null);
+        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null);
         CursorPageResponse<ProductSearchResponse> mockPage = new CursorPageResponse<>(List.of(response), null, false);
         when(productSearchRepository.search("비타민", null, 20, null)).thenReturn(mockPage);
 
