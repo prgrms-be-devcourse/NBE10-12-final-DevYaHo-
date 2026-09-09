@@ -119,7 +119,10 @@ public class GroupBuyService {
 
     // 상세 조회마다 조회수를 증가시키므로 readOnly가 아니다(응답 자체는 증가 전 값을 담는다 -
     // 매진 즉시 확정 시 currentQuantity를 응답 이후에 반영하는 것과 같은 이유로, 정확히 +1된 값을
-    // 이번 응답에 반영하는 것보다 조회 경로를 단순하게 유지하는 쪽을 택했다)
+    // 이번 응답에 반영하는 것보다 조회 경로를 단순하게 유지하는 쪽을 택했다).
+    // increaseViewCount()는 clearAutomatically=true라 호출 즉시 영속성 컨텍스트를 비우므로,
+    // 반드시 응답 생성(DTO 변환)을 끝낸 뒤 마지막에 호출해야 한다 - 순서를 바꾸거나 호출 이후
+    // groupBuy를 재참조하면 준영속 상태로 LazyInitializationException이 날 수 있다.
     @Transactional
     public GroupBuyDetailResponse getDetail(Long groupBuyId) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
@@ -186,7 +189,7 @@ public class GroupBuyService {
                 List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING));
 
         Comparator<GroupBuy> representativePriority = Comparator
-                .comparing((GroupBuy g) -> g.getStatus() == GroupBuyStatus.ONGOING)
+                .comparing((GroupBuy g) -> getStatusPriority(g.getStatus()))
                 .thenComparing(GroupBuy::getId);
         Map<Long, GroupBuy> representativeByProductId = activeGroupBuys.stream()
                 .collect(Collectors.toMap(GroupBuy::getProductId, Function.identity(),
@@ -203,6 +206,15 @@ public class GroupBuyService {
                     int unitPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
                     return GroupBuyProductSummaryResponse.of(groupBuy, unitPrice);
                 }));
+    }
+
+    // getActiveSummariesByProductIds가 대표 공동구매를 고를 때 쓰는 상태 우선순위 - 숫자가 클수록 대표로 우선
+    private static int getStatusPriority(GroupBuyStatus status) {
+        return switch (status) {
+            case ONGOING -> 2;
+            case READY -> 1;
+            default -> 0;
+        };
     }
 
     // 판매정지 요청 - 본인 소유의 ONGOING 공동구매만, 이미 처리 대기 중인 요청이 있으면 중복 요청 불가
