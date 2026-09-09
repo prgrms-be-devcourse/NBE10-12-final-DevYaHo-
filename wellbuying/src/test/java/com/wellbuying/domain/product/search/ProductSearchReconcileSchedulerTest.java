@@ -15,6 +15,7 @@ import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import java.time.LocalDateTime;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,9 @@ class ProductSearchReconcileSchedulerTest {
     @Mock
     private GroupBuyService groupBuyService;
 
+    @Mock
+    private ProductCountRepository productCountRepository;
+
     private SimpleMeterRegistry meterRegistry;
     private ProductSearchReconcileScheduler scheduler;
 
@@ -48,7 +52,7 @@ class ProductSearchReconcileSchedulerTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         scheduler = new ProductSearchReconcileScheduler(
-                productRepository, productSearchRepository, groupBuyService, meterRegistry);
+                productRepository, productSearchRepository, groupBuyService, productCountRepository, meterRegistry);
     }
 
     @Test
@@ -66,6 +70,7 @@ class ProductSearchReconcileSchedulerTest {
                 new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L, 2L))).thenReturn(Map.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(3L))).thenReturn(Map.of(3L, summary));
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         scheduler.reconcile();
 
@@ -98,6 +103,7 @@ class ProductSearchReconcileSchedulerTest {
         when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
                 ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
         when(productSearchRepository.saveAll(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         assertThatCode(() -> scheduler.reconcile()).doesNotThrowAnyException();
@@ -117,6 +123,7 @@ class ProductSearchReconcileSchedulerTest {
                 ProductStatus.APPROVED, 2L, LIMIT)).thenReturn(List.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(2L))).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
         // 1차: p1 saveAll 성공 → resumeFromId=1, p2 saveAll 실패 / 2차: p2 saveAll 성공
         when(productSearchRepository.saveAll(any()))
                 .thenReturn(List.of())

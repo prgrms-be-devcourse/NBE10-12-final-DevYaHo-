@@ -3,7 +3,9 @@ package com.wellbuying.domain.product.search;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductCount;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
@@ -13,6 +15,7 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -35,6 +38,7 @@ public class ProductSearchReconcileScheduler {
     private final ProductRepository productRepository;
     private final ProductSearchRepository productSearchRepository;
     private final GroupBuyService groupBuyService;
+    private final ProductCountRepository productCountRepository;
     private final Timer reconcileTimer;
     private final Counter reconciledDocuments;
     private final Counter reconcileFailures;
@@ -44,10 +48,12 @@ public class ProductSearchReconcileScheduler {
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
             GroupBuyService groupBuyService,
+            ProductCountRepository productCountRepository,
             MeterRegistry meterRegistry) {
         this.productRepository = productRepository;
         this.productSearchRepository = productSearchRepository;
         this.groupBuyService = groupBuyService;
+        this.productCountRepository = productCountRepository;
         this.reconcileTimer = Timer.builder("wellbuying.search.reconcile.duration")
                 .description("검색 인덱스 정합성 보정 배치 1회 소요 시간").register(meterRegistry);
         this.reconciledDocuments = Counter.builder("wellbuying.search.reconcile.documents")
@@ -76,8 +82,10 @@ public class ProductSearchReconcileScheduler {
                 List<Long> ids = products.stream().map(Product::getId).toList();
                 Map<Long, GroupBuyProductSummaryResponse> summaries =
                         groupBuyService.getActiveSummariesByProductIds(ids);
+                Map<Long, Long> viewCounts = productCountRepository.findAllById(ids).stream()
+                        .collect(Collectors.toMap(ProductCount::getProductId, ProductCount::getViewCount));
                 List<ProductSearchDocument> documents = products.stream()
-                        .map(p -> ProductSearchDocument.of(p, summaries.get(p.getId())))
+                        .map(p -> ProductSearchDocument.of(p, summaries.get(p.getId()), viewCounts.get(p.getId())))
                         .toList();
                 productSearchRepository.saveAll(documents);
                 total += documents.size();

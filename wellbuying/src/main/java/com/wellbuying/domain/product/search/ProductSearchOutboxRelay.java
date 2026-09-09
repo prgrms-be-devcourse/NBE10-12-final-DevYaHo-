@@ -3,7 +3,9 @@ package com.wellbuying.domain.product.search;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductCount;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,17 +32,20 @@ public class ProductSearchOutboxRelay {
     private final ProductSearchEventOutboxRepository outboxRepository;
     private final ProductSearchOutboxDispatcher dispatcher;
     private final ProductRepository productRepository;
+    private final ProductCountRepository productCountRepository;
     private final ProductSearchRepository productSearchRepository;
     private final GroupBuyService groupBuyService;
 
     public ProductSearchOutboxRelay(ProductSearchEventOutboxRepository outboxRepository,
             ProductSearchOutboxDispatcher dispatcher,
             ProductRepository productRepository,
+            ProductCountRepository productCountRepository,
             ProductSearchRepository productSearchRepository,
             GroupBuyService groupBuyService) {
         this.outboxRepository = outboxRepository;
         this.dispatcher = dispatcher;
         this.productRepository = productRepository;
+        this.productCountRepository = productCountRepository;
         this.productSearchRepository = productSearchRepository;
         this.groupBuyService = groupBuyService;
     }
@@ -73,10 +78,14 @@ public class ProductSearchOutboxRelay {
                     ? Map.of()
                     : productRepository.findByIdInAndDeletedAtIsNull(upsertIds).stream()
                             .collect(Collectors.toMap(Product::getId, p -> p));
+            Map<Long, Long> viewCounts = upsertIds.isEmpty()
+                    ? Map.of()
+                    : productCountRepository.findAllById(upsertIds).stream()
+                            .collect(Collectors.toMap(ProductCount::getProductId, ProductCount::getViewCount));
 
             for (ProductSearchEventOutbox event : pending) {
                 try {
-                    applyToIndex(event, products, summaries);
+                    applyToIndex(event, products, summaries, viewCounts);
                     succeeded.add(event);
                 } catch (Exception e) {
                     failures.add(new ProductSearchOutboxDispatcher.DispatchFailure(event, e));
@@ -93,14 +102,15 @@ public class ProductSearchOutboxRelay {
     // UPSERT: 폴링 시점에 최신 상품을 재조회해 인덱스에 반영한다.
     // 재조회 결과가 없거나(그새 삭제된 상품) 미승인 상태면 DELETE와 동일하게 인덱스에서 제거한다 -
     // 검색 인덱스에는 승인된 상품만 존재해야 한다는 정책을 outbox 기록 시점뿐 아니라 반영 시점에도 보장
-    private void applyToIndex(ProductSearchEventOutbox event, Map<Long, Product> products, Map<Long, GroupBuyProductSummaryResponse> summaries) {
+    private void applyToIndex(ProductSearchEventOutbox event, Map<Long, Product> products,
+            Map<Long, GroupBuyProductSummaryResponse> summaries, Map<Long, Long> viewCounts) {
         if ("DELETE".equals(event.getEventType())) {
             productSearchRepository.deleteById(event.getProductId());
             return;
         }
         Product product = products.get(event.getProductId());
         if (product != null && product.getStatus() == ProductStatus.APPROVED) {
-            productSearchRepository.save(ProductSearchDocument.of(product, summaries.get(product.getId())));
+            productSearchRepository.save(ProductSearchDocument.of(product, summaries.get(product.getId()), viewCounts.get(product.getId())));
         } else {
             productSearchRepository.deleteById(event.getProductId());
         }
