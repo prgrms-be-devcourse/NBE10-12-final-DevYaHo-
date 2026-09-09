@@ -3,18 +3,40 @@ package com.wellbuying.domain.product.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlResponse;
+import com.wellbuying.domain.product.dto.ProductImageSaveRequest;
+import com.wellbuying.domain.product.entity.ImageType;
+import com.wellbuying.domain.product.service.ProductImageService;
+import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
+import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
+import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
 import com.wellbuying.domain.product.service.ProductService;
+import com.wellbuying.global.exception.BusinessException;
+import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -35,6 +57,17 @@ class ProductControllerTest {
 
     @MockitoBean
     private ProductSearchService productSearchService;
+
+    @MockitoBean
+    private ProductImageUploadService productImageUploadService;
+
+    @MockitoBean
+    private ProductImageService productImageService;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     // 파라미터 없이 호출해도 200과 함께 목록이 반환된다
     @Test
@@ -61,7 +94,7 @@ class ProductControllerTest {
     // 상품 단건 조회 시 200과 함께 상세 필드가 반환된다
     @Test
     void getProduct_존재하는_상품이면_상세정보를_반환한다() throws Exception {
-        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true);
+        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of());
         when(productService.getDetail(1L)).thenReturn(response);
 
         mockMvc.perform(get("/api/products/1"))
@@ -139,5 +172,123 @@ class ProductControllerTest {
                         .param("keyword", "비타민")
                         .param("sort", "INVALID_TYPE"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 업로드 URL이 반환된다
+    @Test
+    void 썸네일_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/product-thumbnails/1/uuid.jpg"));
+
+        mockMvc.perform(post("/api/products/thumbnail/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/jpeg\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.thumbnailUrl")
+                        .value("https://bucket.s3.amazonaws.com/product-thumbnails/1/uuid.jpg"));
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 상세설명 이미지 업로드 URL이 반환된다
+    @Test
+    void 상세설명_이미지_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueDescriptionImageUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductDescriptionImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/description-images/1/uuid.png"));
+
+        mockMvc.perform(post("/api/products/description-images/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/png\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.imageUrl")
+                        .value("https://bucket.s3.amazonaws.com/description-images/1/uuid.png"));
+    }
+
+    // 판매자 인증 후 유효한 contentType으로 요청하면 200과 함께 갤러리 이미지 업로드 URL이 반환된다
+    @Test
+    void 갤러리_이미지_업로드_URL_발급_요청시_정상응답한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        when(productImageUploadService.issueGalleryImageUploadUrl(any(), any(ProductImageUploadUrlRequest.class)))
+                .thenReturn(new ProductGalleryImageUploadUrlResponse(
+                        "https://bucket.s3.amazonaws.com/presigned",
+                        "https://bucket.s3.amazonaws.com/gallery-images/1/uuid.webp"));
+
+        mockMvc.perform(post("/api/products/gallery-images/upload-url")
+                        .contentType("application/json")
+                        .content("{\"contentType\":\"image/webp\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").value("https://bucket.s3.amazonaws.com/presigned"))
+                .andExpect(jsonPath("$.imageUrl")
+                        .value("https://bucket.s3.amazonaws.com/gallery-images/1/uuid.webp"));
+    }
+
+    // 판매자 인증 후 유효한 요청이면 204와 함께 갤러리 이미지가 저장된다
+    @Test
+    void 갤러리_이미지_저장_요청시_204를_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
+                .andExpect(status().isNoContent());
+
+        verify(productImageService).saveImages(eq(1L), eq(10L), eq(ImageType.GALLERY),
+                eq(List.of("https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg")));
+    }
+
+    // 개수 초과 등으로 서비스에서 예외가 발생하면 400을 반환한다
+    @Test
+    void 갤러리_이미지_저장시_서비스_예외가_발생하면_400을_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+        doThrow(new BusinessException(ErrorCode.INVALID_INPUT))
+                .when(productImageService).saveImages(any(), any(), any(), any());
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\"]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // 이미지 URL 목록에 빈 문자열이 섞여 있으면 서비스 호출 전 400을 반환한다 (@NotBlank 검증)
+    @Test
+    void 갤러리_이미지_저장시_빈_URL이_섞여있으면_400을_반환한다() throws Exception {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedMember(1L, "test-device"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_SELLER"))));
+        SecurityContextHolder.setContext(securityContext);
+
+        mockMvc.perform(put("/api/products/10/gallery-images")
+                        .contentType("application/json")
+                        .content("{\"imageUrls\":[\"https://bucket.s3.amazonaws.com/gallery-images/1/a.jpg\", \"\"]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(productImageService, never()).saveImages(any(), any(), any(), any());
     }
 }
