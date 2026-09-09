@@ -1,7 +1,9 @@
 package com.wellbuying.domain.product.event;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,7 +32,7 @@ class ProductImageEventListenerTest {
 
     @BeforeEach
     void setUp() {
-        productImageEventListener = new ProductImageEventListener(s3Client, productImageUploadService, BUCKET);
+        productImageEventListener = new ProductImageEventListener(s3Client, productImageUploadService, BUCKET, 0L);
     }
 
     // 저장이 확정되면(상품 등록/수정 API로 저장 완료) pending 태그를 제거해 lifecycle rule의 자동 만료 대상에서 제외하는지 검증
@@ -68,5 +70,34 @@ class ProductImageEventListenerTest {
         productImageEventListener.handleOrphaned(new ProductImageOrphanedEvent(imageUrl));
 
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    // 앞 2회 실패해도 3회째 성공하면 정상 종료된다
+    @Test
+    void handleConfirmed_일시_장애면_재시도해서_성공한다() {
+        when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
+        when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
+        when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
+                .thenThrow(new RuntimeException("s3 timeout"))
+                .thenThrow(new RuntimeException("s3 timeout"))
+                .thenReturn(null);
+
+        productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg"));
+
+        verify(s3Client, times(3)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
+    }
+
+    // 3회 모두 실패해도 예외를 밖으로 던지지 않고 종료된다
+    @Test
+    void handleConfirmed_3회_모두_실패해도_예외를_던지지_않는다() {
+        when(productImageUploadService.isOurBucketUrl("https://bucket-url/thumb.jpg")).thenReturn(true);
+        when(productImageUploadService.extractKey("https://bucket-url/thumb.jpg")).thenReturn("thumb.jpg");
+        when(s3Client.deleteObjectTagging(any(DeleteObjectTaggingRequest.class)))
+                .thenThrow(new RuntimeException("s3 down"));
+
+        assertThatCode(() -> productImageEventListener.handleConfirmed(new ProductImageConfirmedEvent("https://bucket-url/thumb.jpg")))
+                .doesNotThrowAnyException();
+
+        verify(s3Client, times(3)).deleteObjectTagging(any(DeleteObjectTaggingRequest.class));
     }
 }
