@@ -15,6 +15,10 @@ public record ProductSearchRequest(
         @Min(1) @Max(100)
         Integer size,
 
+        Long categoryId,
+        @Min(0) Integer minPrice,
+        @Min(0) Integer maxPrice,
+
         Boolean activeGroupBuyOnly
 ) {
     public ProductSearchRequest {
@@ -30,5 +34,9 @@ public record ProductSearchRequest(
         if (activeGroupBuyOnly == null) {
             activeGroupBuyOnly = false;
         }
+    }
+
+    public ProductSearchFilter toFilter() {
+        return new ProductSearchFilter(categoryId, minPrice, maxPrice, activeGroupBuyOnly);
     }
 }
