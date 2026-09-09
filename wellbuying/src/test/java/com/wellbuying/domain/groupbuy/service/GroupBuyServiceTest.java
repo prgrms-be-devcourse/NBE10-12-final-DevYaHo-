@@ -258,10 +258,13 @@ class GroupBuyServiceTest {
 
         assertThat(result).containsOnlyKeys(10L);
         GroupBuyProductSummaryResponse summary = result.get(10L);
+        assertThat(summary.groupBuyId()).isEqualTo(1L);
         assertThat(summary.groupBuyStatus()).isEqualTo(GroupBuyStatus.ONGOING);
         assertThat(summary.currentUnitPrice()).isEqualTo(15_000);
-        assertThat(summary.participantCount()).isEqualTo(150);
+        assertThat(summary.currentQuantity()).isEqualTo(150);
         assertThat(summary.targetQuantity()).isEqualTo(100);
+        assertThat(summary.maxQuantity()).isEqualTo(10_000);
+        assertThat(summary.endAt()).isEqualTo(groupBuy.getEndAt());
     }
 
     // 진행 중인(READY/ONGOING) 공동구매가 없는 상품은 결과 Map에서 아예 빠지는지 검증
@@ -288,6 +291,6 @@ class GroupBuyServiceTest {
         Map<Long, GroupBuyProductSummaryResponse> result = groupBuyService.getActiveSummariesByProductIds(List.of(30L));
 
         assertThat(result.get(30L).groupBuyStatus()).isEqualTo(GroupBuyStatus.ONGOING);
-        assertThat(result.get(30L).participantCount()).isEqualTo(50);
+        assertThat(result.get(30L).currentQuantity()).isEqualTo(50);
     }
 }
