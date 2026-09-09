@@ -1,5 +1,6 @@
 package com.wellbuying.domain.product.search;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -37,6 +38,7 @@ public record ProductSearchRequest(
         }
     }
 
+    @JsonIgnore
     @AssertTrue(message = "최소 가격은 최대 가격보다 클 수 없습니다.")
     public boolean isValidPriceRange() {
         if (minPrice != null && maxPrice != null) {
