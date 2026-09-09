@@ -8,6 +8,7 @@ import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
@@ -68,10 +69,14 @@ public class ProductSearchOutboxRelay {
             Map<Long, GroupBuyProductSummaryResponse> summaries = upsertIds.isEmpty()
                     ? Map.of()
                     : groupBuyService.getActiveSummariesByProductIds(upsertIds);
+            Map<Long, Product> products = upsertIds.isEmpty()
+                    ? Map.of()
+                    : productRepository.findByIdInAndDeletedAtIsNull(upsertIds).stream()
+                            .collect(Collectors.toMap(Product::getId, p -> p));
 
             for (ProductSearchEventOutbox event : pending) {
                 try {
-                    applyToIndex(event, summaries);
+                    applyToIndex(event, products, summaries);
                     succeeded.add(event);
                 } catch (Exception e) {
                     failures.add(new ProductSearchOutboxDispatcher.DispatchFailure(event, e));
@@ -88,16 +93,16 @@ public class ProductSearchOutboxRelay {
     // UPSERT: 폴링 시점에 최신 상품을 재조회해 인덱스에 반영한다.
     // 재조회 결과가 없거나(그새 삭제된 상품) 미승인 상태면 DELETE와 동일하게 인덱스에서 제거한다 -
     // 검색 인덱스에는 승인된 상품만 존재해야 한다는 정책을 outbox 기록 시점뿐 아니라 반영 시점에도 보장
-    private void applyToIndex(ProductSearchEventOutbox event, Map<Long, GroupBuyProductSummaryResponse> summaries) {
+    private void applyToIndex(ProductSearchEventOutbox event, Map<Long, Product> products, Map<Long, GroupBuyProductSummaryResponse> summaries) {
         if ("DELETE".equals(event.getEventType())) {
             productSearchRepository.deleteById(event.getProductId());
             return;
         }
-        productRepository.findByIdAndDeletedAtIsNull(event.getProductId())
-                .filter(p -> p.getStatus() == ProductStatus.APPROVED)
-                .ifPresentOrElse(
-                        p -> productSearchRepository.save(ProductSearchDocument.of(p, summaries.get(p.getId()))),
-                        () -> productSearchRepository.deleteById(event.getProductId())
-                );
+        Product product = products.get(event.getProductId());
+        if (product != null && product.getStatus() == ProductStatus.APPROVED) {
+            productSearchRepository.save(ProductSearchDocument.of(product, summaries.get(product.getId())));
+        } else {
+            productSearchRepository.deleteById(event.getProductId());
+        }
     }
 }

@@ -19,7 +19,6 @@ import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchOutboxDispatcher.DispatchFailure;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -74,7 +73,7 @@ class ProductSearchOutboxRelayTest {
         relay.relay();
 
         verify(productSearchRepository).deleteById(1L);
-        verify(productRepository, never()).findByIdAndDeletedAtIsNull(any());
+        verify(productRepository, never()).findByIdInAndDeletedAtIsNull(any());
         ArgumentCaptor<List<ProductSearchEventOutbox>> captor = ArgumentCaptor.forClass(List.class);
         verify(dispatcher).markPublished(captor.capture());
         assertThat(captor.getValue()).containsExactly(event);
@@ -89,7 +88,7 @@ class ProductSearchOutboxRelayTest {
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
 
         relay.relay();
@@ -106,7 +105,7 @@ class ProductSearchOutboxRelayTest {
         ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of());
 
         relay.relay();
 
@@ -127,8 +126,9 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(status);
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
 
         relay.relay();
 
@@ -145,8 +145,12 @@ class ProductSearchOutboxRelayTest {
         ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
-        when(productRepository.findByIdAndDeletedAtIsNull(1L))
-                .thenThrow(new RuntimeException("OpenSearch 연결 실패"));
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
+        when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
+        when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productSearchRepository.save(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         relay.relay();
 
@@ -167,7 +171,7 @@ class ProductSearchOutboxRelayTest {
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
-        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
         GroupBuyProductSummaryResponse summary =
                 new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of(1L, summary));
