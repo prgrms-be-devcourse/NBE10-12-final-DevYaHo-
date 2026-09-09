@@ -115,9 +115,11 @@ public class GroupBuy {
         this.status = GroupBuyStatus.FAILED;
     }
 
-    // 관리자가 판매정지 요청을 승인 - status(GroupBuyStatus)와는 별개 축으로, ONGOING인 채로 신규 참여만 막는다
+    // 관리자가 판매정지 요청을 승인 - ONGOING이던 공동구매를 강제 취소한다. suspended 플래그는 CANCELED가 된
+    // 사유(판매정지 vs. 생산자의 시작 전 자진 취소)를 구분하기 위해 status와 별도로 유지한다
     public void suspend() {
         this.suspended = true;
+        this.status = GroupBuyStatus.CANCELED;
     }
 
     // GroupBuyFinalizationWorker가 확정 참여자 최종가 반영 + outbox 이벤트 기록까지 마쳤음을 표시

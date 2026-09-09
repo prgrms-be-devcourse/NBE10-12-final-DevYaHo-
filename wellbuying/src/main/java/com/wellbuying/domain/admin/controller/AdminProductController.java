@@ -1,6 +1,8 @@
 package com.wellbuying.domain.admin.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.dto.AdminActionReasonRequest;
 import com.wellbuying.domain.product.dto.AdminProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.entity.ProductStatus;
@@ -49,17 +51,29 @@ public class AdminProductController {
     // 상품 승인 - PRODUCT.status를 APPROVED로 변경
     @Operation(summary = "상품 승인 - PRODUCT.status를 APPROVED로 변경")
     @PostMapping("/{productId}/approve")
-    public ResponseEntity<Void> approve(@PathVariable Long productId) {
-        productService.approve(productId);
+    public ResponseEntity<Void> approve(@PathVariable Long productId,
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        productService.approve(productId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
     }
 
     // 상품 거절 - PRODUCT.status를 REJECTED로 변경
     @Operation(summary = "상품 거절 - PRODUCT.status를 REJECTED로 변경")
     @PostMapping("/{productId}/reject")
-    public ResponseEntity<Void> reject(@PathVariable Long productId) {
-        productService.reject(productId);
+    public ResponseEntity<Void> reject(@PathVariable Long productId,
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        productService.reject(productId, admin.memberId(), request.reason());
         return ResponseEntity.noContent().build();
+    }
+
+    // 상품 승인/거절 이력 조회
+    @Operation(summary = "상품 승인/거절 이력 조회")
+    @GetMapping("/action-logs")
+    public ResponseEntity<Page<AdminActionLogResponse>> listActionLogs(
+            @PageableDefault(size = 20, sort = "occurredAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(productService.listActionLogs(pageable));
     }
 
     // 상품 강제 삭제 - 소유권 무관, 사유 필수, 진행 중인 공동구매가 있으면 차단

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.restdocs.test.autoconfigure.AutoConfigureRestDocs;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -86,6 +87,8 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
         GroupBuySuspensionRequest request = savePendingRequest(groupBuy.getId(), producer.getId());
 
         mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/approve", request.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/groupbuy-suspension-approve-success"));
@@ -103,6 +106,8 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
         GroupBuySuspensionRequest request = savePendingRequest(groupBuy.getId(), producer.getId());
 
         mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/reject", request.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 불충분\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNoContent())
                 .andDo(document("admin/groupbuy-suspension-reject-success"));
@@ -119,6 +124,8 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
         GroupBuySuspensionRequest request = savePendingRequest(groupBuy.getId(), seller.getId());
 
         mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/approve", request.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 확인 완료\"}")
                         .with(authentication(authOf(seller))))
                 .andExpect(status().isForbidden());
     }
@@ -129,6 +136,8 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
         Member admin = saveMember("admin-suspension-not-found@example.com", Role.ADMIN);
 
         mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/approve", 999_999L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_404_SUSPENSION_NOT_FOUND"));
@@ -145,6 +154,8 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
         groupBuySuspensionRequestRepository.save(request);
 
         mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/approve", request.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 확인 완료\"}")
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GROUPBUY_409_SUSPENSION_ALREADY_PROCESSED"));
@@ -190,5 +201,42 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
                         .with(authentication(authOf(admin))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
+    }
+
+    // 판매정지 요청 승인/반려 이력 조회가 승인 처리 결과를 targetLabel(공동구매 제목)과 함께 반환하는지 검증
+    @Test
+    void 관리자가_판매정지_요청_이력_조회에_성공한다() throws Exception {
+        Member admin = saveMember("admin-suspension-action-log@example.com", Role.ADMIN);
+        Member producer = saveMember("producer-suspension-action-log@example.com", Role.SELLER);
+        GroupBuy groupBuy = saveOngoingGroupBuy(producer.getId());
+        GroupBuySuspensionRequest request = savePendingRequest(groupBuy.getId(), producer.getId());
+
+        mockMvc.perform(post("/api/admin/groupBuys/suspension-requests/{id}/approve", request.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"판매정지 사유 확인 완료\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/groupBuys/suspension-requests/action-logs")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].targetId").value(request.getId()))
+                .andExpect(jsonPath("$.content[0].targetLabel").value("산지 직송 유기농 토마토"))
+                .andExpect(jsonPath("$.content[0].action").value("APPROVE"))
+                .andExpect(jsonPath("$.content[0].reason").value("판매정지 사유 확인 완료"))
+                .andDo(document("admin/groupbuy-suspension-action-log-list-success",
+                        responseFields(
+                                fieldWithPath("content[].id").description("이력 ID"),
+                                fieldWithPath("content[].targetId").description("판매정지 요청 ID"),
+                                fieldWithPath("content[].targetLabel").description("공동구매 제목"),
+                                fieldWithPath("content[].adminId").description("처리한 관리자 ID"),
+                                fieldWithPath("content[].adminName").description("처리한 관리자 이름"),
+                                fieldWithPath("content[].action").description("처리 액션(APPROVE/REJECT)"),
+                                fieldWithPath("content[].reason").description("처리 사유"),
+                                fieldWithPath("content[].occurredAt").description("처리 일시"),
+                                fieldWithPath("page.size").description("페이지 크기"),
+                                fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
+                                fieldWithPath("page.totalElements").description("전체 개수"),
+                                fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
 }

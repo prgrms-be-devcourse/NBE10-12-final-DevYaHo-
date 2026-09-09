@@ -1,5 +1,10 @@
 package com.wellbuying.domain.product.service;
 
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.entity.AdminActionLog;
+import com.wellbuying.domain.admin.entity.AdminActionTargetType;
+import com.wellbuying.domain.admin.entity.AdminActionType;
+import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
@@ -48,6 +53,7 @@ public class ProductService {
     private final ProductCountRepository productCountRepository;
     private final ProductSearchEventOutboxRepository outboxRepository;
     private final GroupBuyRepository groupBuyRepository;
+    private final AdminActionLogRepository adminActionLogRepository;
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
     private final ProductImageRepository productImageRepository;
@@ -57,6 +63,7 @@ public class ProductService {
                           ProductCountRepository productCountRepository,
                           ProductSearchEventOutboxRepository outboxRepository,
                           GroupBuyRepository groupBuyRepository,
+                          AdminActionLogRepository adminActionLogRepository,
                           ProductImageUploadService productImageUploadService,
                           ApplicationEventPublisher eventPublisher,
                           ProductImageRepository productImageRepository) {
@@ -66,6 +73,7 @@ public class ProductService {
         this.productCountRepository = productCountRepository;
         this.outboxRepository = outboxRepository;
         this.groupBuyRepository = groupBuyRepository;
+        this.adminActionLogRepository = adminActionLogRepository;
         this.productImageUploadService = productImageUploadService;
         this.eventPublisher = eventPublisher;
         this.productImageRepository = productImageRepository;
@@ -142,15 +150,38 @@ public class ProductService {
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
-    public void approve(Long productId) {
+    public void approve(Long productId, Long adminId, String reason) {
         findProduct(productId).approve();
         outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
+        recordAction(productId, adminId, AdminActionType.APPROVE, reason);
     }
 
     // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
-    public void reject(Long productId) {
+    public void reject(Long productId, Long adminId, String reason) {
         findProduct(productId).reject();
+        recordAction(productId, adminId, AdminActionType.REJECT, reason);
+    }
+
+    // 상품 승인/거절 이력 조회 - "승인 대기 요청 처리" 화면에서 사용
+    @Transactional(readOnly = true)
+    public Page<AdminActionLogResponse> listActionLogs(Pageable pageable) {
+        Page<AdminActionLog> page = adminActionLogRepository
+                .findAllByTargetTypeOrderByOccurredAtDesc(AdminActionTargetType.PRODUCT, pageable);
+        List<Long> productIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
+        Map<Long, String> productNamesById = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Product::getProductName));
+        List<Long> adminIds = page.getContent().stream().map(AdminActionLog::getAdminId).distinct().toList();
+        Map<Long, String> adminNamesById = memberRepository.findAllById(adminIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getName));
+        return page.map(actionLog -> AdminActionLogResponse.of(actionLog,
+                productNamesById.getOrDefault(actionLog.getTargetId(), ""),
+                adminNamesById.getOrDefault(actionLog.getAdminId(), "")));
+    }
+
+    private void recordAction(Long productId, Long adminId, AdminActionType action, String reason) {
+        adminActionLogRepository.save(
+                AdminActionLog.record(AdminActionTargetType.PRODUCT, productId, adminId, action, reason));
     }
 
     @Transactional
