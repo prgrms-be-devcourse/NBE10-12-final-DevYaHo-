@@ -156,8 +156,8 @@ public class AuthService {
     // refresh token 검증 후 Lua 스크립트로 rotate하여 access/refresh 토큰을 재발급 (RTR) - role은 DB에서 최신값을 다시 조회해 반영
     // DB 조회(회원 존재 검증)와 Redis 호출(rotate)이 뒤섞여 있던 기존 readOnly 트랜잭션을 제거했다 - Redis 장애/지연 시에도
     // DB 커넥션을 붙잡아두지 않기 위함(phase21 §4-3). 폴백이 필요한 구간은 RefreshTokenFallbackStore가 자체 트랜잭션으로 처리한다.
-    public ReissueResponse reissue(ReissueRequest request) {
-        Claims claims = tokenProvider.parseClaims(request.refreshToken());
+    public ReissueResponse reissue(String refreshToken) {
+        Claims claims = tokenProvider.parseClaims(refreshToken);
         Long memberId = tokenProvider.getMemberId(claims);
         String deviceId = tokenProvider.getDeviceId(claims);
 
@@ -165,7 +165,7 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         eventPublisher.publishEvent(new MemberLoginEvent(memberId));
 
-        String oldTokenHash = tokenHasher.hash(request.refreshToken());
+        String oldTokenHash = tokenHasher.hash(refreshToken);
         String newAccessToken = tokenProvider.createAccessToken(memberId, member.getRole(), deviceId);
         String newRefreshToken = tokenProvider.createRefreshToken(memberId, deviceId);
         String newTokenHash = tokenHasher.hash(newRefreshToken);

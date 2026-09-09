@@ -24,13 +24,13 @@ class ProductSearchServiceTest {
     @Test
     void search_파라미터를_리포지토리에_그대로_위임하고_결과를_반환한다() {
         ProductSearchService service = new ProductSearchService(productSearchRepository);
-        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L);
+        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null);
         CursorPageResponse<ProductSearchResponse> mockPage = new CursorPageResponse<>(List.of(response), null, false);
-        when(productSearchRepository.search("비타민", null, 20)).thenReturn(mockPage);
+        when(productSearchRepository.search("비타민", null, 20, null)).thenReturn(mockPage);
 
-        CursorPageResponse<ProductSearchResponse> result = service.search("비타민", SearchSortType.RELEVANCE, null, 20);
+        CursorPageResponse<ProductSearchResponse> result = service.search("비타민", SearchSortType.RELEVANCE, null, 20, null);
 
         assertThat(result.content()).containsExactly(response);
-        verify(productSearchRepository).search("비타민", null, 20);
+        verify(productSearchRepository).search("비타민", null, 20, null);
     }
 }

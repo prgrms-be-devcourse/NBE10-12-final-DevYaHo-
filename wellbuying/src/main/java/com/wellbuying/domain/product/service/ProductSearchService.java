@@ -25,20 +25,21 @@ public class ProductSearchService {
     }
 
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "searchFallback")
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size,
+            Boolean activeGroupBuyOnly) {
         sort.validateSupported();
-        return productSearchRepository.search(keyword, cursor, size);
+        return productSearchRepository.search(keyword, cursor, size, activeGroupBuyOnly);
     }
 
     // 정렬 검증 등 요청 자체가 잘못된 경우는 그대로 전달 — 서킷 실패로도 집계되지 않음(yaml ignore-exceptions)
     private CursorPageResponse<ProductSearchResponse> searchFallback(String keyword, SearchSortType sort,
-            String cursor, int size, BusinessException e) {
+            String cursor, int size, Boolean activeGroupBuyOnly, BusinessException e) {
         throw e;
     }
 
     // OpenSearch 장애(연결 실패, 타임아웃) 또는 서킷 open(CallNotPermittedException) 시 503으로 응답
     private CursorPageResponse<ProductSearchResponse> searchFallback(String keyword, SearchSortType sort,
-            String cursor, int size, Exception e) {
+            String cursor, int size, Boolean activeGroupBuyOnly, Exception e) {
         log.warn("검색 폴백 동작: keyword={}, cause={}", keyword, e.getClass().getSimpleName());
         throw new BusinessException(ErrorCode.SEARCH_UNAVAILABLE);
     }
