@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listGroupBuys } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
 import type { GroupBuyStatus, GroupBuySummaryResponse } from "@/lib/api/types";
@@ -58,7 +58,10 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
 export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: string; size?: number }) {
   const [items, setItems] = useState<GroupBuyCardView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pageNumber, setPageNumber] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const sort = options?.sort;
   const size = options?.size ?? 50;
 
@@ -69,9 +72,12 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
       setLoading(true);
       setError(null);
       try {
-        const page = await listGroupBuys({ status, size, sort });
-        const views = page.content.map(toCardView);
-        if (!ignore) setItems(views);
+        const page = await listGroupBuys({ status, size, sort, page: 0 });
+        if (!ignore) {
+          setItems(page.content.map(toCardView));
+          setPageNumber(0);
+          setHasMore(page.page.number + 1 < page.page.totalPages);
+        }
       } catch (e) {
         if (!ignore) setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
       } finally {
@@ -85,5 +91,23 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
     };
   }, [status, sort, size]);
 
-  return { items, loading, error };
+  // 다음 페이지를 서버에서 이어받아 기존 목록 뒤에 붙인다("더보기" 버튼용) - 이미 앞에서
+  // 서버 정렬로 받아온 결과이므로 클라이언트에서 순서를 다시 계산할 필요가 없다
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    const nextPage = pageNumber + 1;
+    setLoadingMore(true);
+    try {
+      const page = await listGroupBuys({ status, size, sort, page: nextPage });
+      setItems((prev) => [...prev, ...page.content.map(toCardView)]);
+      setPageNumber(nextPage);
+      setHasMore(page.page.number + 1 < page.page.totalPages);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [status, sort, size, pageNumber, hasMore, loadingMore]);
+
+  return { items, loading, loadingMore, error, hasMore, loadMore };
 }
