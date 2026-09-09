@@ -332,6 +332,19 @@ class ProductServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.CANNOT_DELETE_ACTIVE_PRODUCT);
     }
 
+    // getPopularProducts() 호출 시 리포지토리 결과를 그대로 반환한다
+    @Test
+    void getPopularProducts_리포지토리_결과를_그대로_반환한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, productImageUploadService, eventPublisher, productImageRepository);
+        ProductSummaryResponse response = new ProductSummaryResponse(1L, "인기상품", 10000, "url", 999L);
+        when(productRepository.findTopByViewCount(10)).thenReturn(List.of(response));
+
+        List<ProductSummaryResponse> result = productService.getPopularProducts();
+
+        assertThat(result).containsExactly(response);
+        verify(productRepository).findTopByViewCount(10);
+    }
+
     // 등록한 썸네일이 우리 버킷 URL이면 확정 이벤트를 발행한다
     @Test
     void createProduct_썸네일이_우리_버킷_URL이면_확정_이벤트를_발행한다() {

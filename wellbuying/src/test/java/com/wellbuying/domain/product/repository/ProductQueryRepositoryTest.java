@@ -231,6 +231,76 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
         assertThat(second.content()).extracting("productName").contains("조회수없는상품");
     }
 
+    // 조회수 내림차순으로 정렬되어 반환된다
+    @Test
+    void findTopByViewCount_조회수_내림차순으로_정렬된다() {
+        Product low = Product.register(TEST_SELLER_ID, testCategoryId, "적은조회수", "설명", 10000, "url");
+        low.approve();
+        low = productRepository.save(low);
+        productCountRepository.save(withViewCount(low.getId(), 5L));
+        Product high = Product.register(TEST_SELLER_ID, testCategoryId, "많은조회수", "설명", 10000, "url");
+        high.approve();
+        high = productRepository.save(high);
+        productCountRepository.save(withViewCount(high.getId(), 500L));
+
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
+
+        assertThat(result).extracting(ProductSummaryResponse::productName).containsExactly("많은조회수", "적은조회수");
+    }
+
+    // limit 파라미터만큼만 반환된다
+    @Test
+    void findTopByViewCount_요청한_개수만큼만_반환한다() {
+        for (int i = 0; i < 5; i++) {
+            Product p = Product.register(TEST_SELLER_ID, testCategoryId, "상품" + i, "설명", 10000, "url");
+            p.approve();
+            p = productRepository.save(p);
+            productCountRepository.save(withViewCount(p.getId(), 100L - i));
+        }
+
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(3);
+
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(ProductSummaryResponse::productName).containsExactly("상품0", "상품1", "상품2");
+    }
+
+    // PENDING/REJECTED 상품은 조회수가 높아도 제외된다
+    @Test
+    void findTopByViewCount_승인되지_않은_상품은_제외된다() {
+        Product pending = productRepository.save(
+                Product.register(TEST_SELLER_ID, testCategoryId, "대기중인기상품", "설명", 10000, "url"));
+        productCountRepository.save(withViewCount(pending.getId(), 1000L));
+        Product rejected = Product.register(TEST_SELLER_ID, testCategoryId, "거절된인기상품", "설명", 10000, "url");
+        rejected.reject();
+        rejected = productRepository.save(rejected);
+        productCountRepository.save(withViewCount(rejected.getId(), 1000L));
+        Product approved = Product.register(TEST_SELLER_ID, testCategoryId, "승인된상품", "설명", 10000, "url");
+        approved.approve();
+        approved = productRepository.save(approved);
+        productCountRepository.save(withViewCount(approved.getId(), 1L));
+
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
+
+        assertThat(result).extracting("productName")
+                .contains("승인된상품")
+                .doesNotContain("대기중인기상품", "거절된인기상품");
+    }
+
+    // 소프트 삭제된 상품은 조회수가 높아도 제외된다
+    @Test
+    void findTopByViewCount_삭제된_상품은_제외된다() {
+        Product deleted = Product.register(TEST_SELLER_ID, testCategoryId, "삭제된인기상품", "설명", 10000, "url");
+        deleted.approve();
+        deleted = productRepository.save(deleted);
+        productCountRepository.save(withViewCount(deleted.getId(), 1000L));
+        deleted.delete(TEST_SELLER_ID, "테스트 삭제");
+        productRepository.save(deleted);
+
+        List<ProductSummaryResponse> result = productRepository.findTopByViewCount(10);
+
+        assertThat(result).extracting("productName").doesNotContain("삭제된인기상품");
+    }
+
     private ProductCount withViewCount(Long productId, long viewCount) {
         ProductCount count = ProductCount.init(productId);
         for (long i = 0; i < viewCount; i++) {

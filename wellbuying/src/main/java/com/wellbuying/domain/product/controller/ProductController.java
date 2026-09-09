@@ -30,6 +30,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.net.URI;
+import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
@@ -79,6 +80,13 @@ public class ProductController {
     ) {
         ProductSearchCondition condition = new ProductSearchCondition(category, minPrice, maxPrice, sort);
         return productService.getProducts(condition, cursor, size);
+    }
+
+    // 메인 페이지 홈 - 조회수 기준 인기 상품 TOP 10 (캐시 적용)
+    @Operation(summary = "인기 상품 TOP 10 조회 - 조회수 기준, 캐시 적용")
+    @GetMapping("/popular")
+    public List<ProductSummaryResponse> getPopularProducts() {
+        return productService.getPopularProducts();
     }
 
     // 상품 상세 - 설명/썸네일 등 목록에 없는 정보까지 포함해 단건 조회
