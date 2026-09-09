@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 // 공동구매 요약을 갱신하고, 그 과정에서 PostgreSQL↔OpenSearch 간 어긋난 문서도 함께 보정한다.
 // 페이지 단위로 처리해 한 번에 많은 메모리를 쓰지 않으며, 실패해도 다음 주기에 다시 시도한다.
 // OFFSET 대신 id 커서로 순차 조회해 count 쿼리와 뒤 페이지 지연을 피한다.
+// 실패 시 다음 실행은 마지막 성공 지점부터 이어서 시작한다(resumeFromId). 정상 완주하면 처음부터 다시 훑도록 0으로 리셋한다.
 @Component
 public class ProductSearchReconcileScheduler {
 
@@ -38,6 +39,7 @@ public class ProductSearchReconcileScheduler {
     private final Counter reconciledDocuments;
     private final Counter reconcileFailures;
     private final AtomicLong lastSuccessTimestamp = new AtomicLong(0);
+    private final AtomicLong resumeFromId = new AtomicLong(0);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
@@ -62,7 +64,7 @@ public class ProductSearchReconcileScheduler {
             initialDelayString = "${search.reconcile.initial-delay-ms:600000}")
     public void reconcile() {
         Timer.Sample sample = Timer.start();
-        long lastId = 0L;
+        long lastId = resumeFromId.get();
         int total = 0;
         try {
             while (true) {
@@ -81,10 +83,13 @@ public class ProductSearchReconcileScheduler {
                 total += documents.size();
                 reconciledDocuments.increment(documents.size());
                 lastId = products.get(products.size() - 1).getId();
+                resumeFromId.set(lastId);
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
             lastSuccessTimestamp.set(Instant.now().getEpochSecond());
+            resumeFromId.set(0L);
         } catch (Exception e) {
+            // resumeFromId 건드리지 않음 - 실패 시점 값 유지해 다음 실행이 이어받도록
             reconcileFailures.increment();
             log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
         } finally {

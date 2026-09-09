@@ -105,6 +105,34 @@ class ProductSearchReconcileSchedulerTest {
         assertThat(meterRegistry.get("wellbuying.search.reconcile.last_success_timestamp_seconds").gauge().value()).isEqualTo(0.0);
     }
 
+    @Test
+    void reconcile_실패_후_재실행하면_마지막_성공_지점부터_이어서_처리한다() {
+        Product p1 = mockProduct(1L);
+        Product p2 = mockProduct(2L);
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 1L, LIMIT)).thenReturn(List.of(p2));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 2L, LIMIT)).thenReturn(List.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(2L))).thenReturn(Map.of());
+        // 1차: p1 saveAll 성공 → resumeFromId=1, p2 saveAll 실패 / 2차: p2 saveAll 성공
+        when(productSearchRepository.saveAll(any()))
+                .thenReturn(List.of())
+                .thenThrow(new RuntimeException("OpenSearch 연결 실패"))
+                .thenReturn(List.of());
+
+        scheduler.reconcile(); // 1차: 0L→p1 성공(resumeFromId=1) → 1L→p2 실패
+        scheduler.reconcile(); // 2차: resumeFromId=1에서 이어서 시작
+
+        // findBy(1L)은 1차 1회 + 2차 1회 = 2회, findBy(0L)은 1차 1회만(2차는 0L에서 시작하지 않음)
+        verify(productRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 1L, LIMIT);
+        verify(productRepository, org.mockito.Mockito.times(1))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 0L, LIMIT);
+    }
+
     private Product mockProduct(Long id) {
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(id);
