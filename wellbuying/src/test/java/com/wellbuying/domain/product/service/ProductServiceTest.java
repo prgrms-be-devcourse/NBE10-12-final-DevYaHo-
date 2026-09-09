@@ -16,6 +16,7 @@ import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.product.dto.ProductDeletedAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
@@ -34,6 +35,10 @@ import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
 import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
 import com.wellbuying.global.exception.BusinessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import com.wellbuying.global.exception.ErrorCode;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
@@ -373,5 +378,22 @@ class ProductServiceTest {
         productService.deleteProduct(1L, 1L, "판매자 삭제 사유");
 
         verify(eventPublisher).publishEvent(new ProductImageOrphanedEvent("https://bucket-url/thumb.jpg"));
+    }
+
+    @Test
+    void findDeleted_삭제된_상품을_DTO로_매핑해_반환한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, productImageUploadService, eventPublisher, productImageRepository);
+        Product product = Product.register(1L, 10L, "삭제된상품", "설명", 5000, "thumb.jpg");
+        product.delete(99L, "이용약관 위반");
+        Pageable pageable = PageRequest.of(0, 20);
+        when(productRepository.findByDeletedAtIsNotNull(pageable)).thenReturn(new PageImpl<>(List.of(product)));
+
+        Page<ProductDeletedAdminResponse> result = productService.findDeleted(pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        ProductDeletedAdminResponse dto = result.getContent().get(0);
+        assertThat(dto.productName()).isEqualTo("삭제된상품");
+        assertThat(dto.deletedBy()).isEqualTo(99L);
+        assertThat(dto.deleteReason()).isEqualTo("이용약관 위반");
     }
 }

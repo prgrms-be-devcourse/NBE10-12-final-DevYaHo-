@@ -3,6 +3,7 @@ package com.wellbuying.domain.admin.controller;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.product.dto.AdminProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
+import com.wellbuying.domain.product.dto.ProductDeletedAdminResponse;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.service.ProductService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -44,6 +45,14 @@ public class AdminProductController {
     public ResponseEntity<Page<ProductAdminResponse>> list(@RequestParam ProductStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(productService.findByStatus(status, pageable));
+    }
+
+    // 삭제된 상품 이력 조회
+    @Operation(summary = "삭제된 상품 이력 조회")
+    @GetMapping("/deleted")
+    public ResponseEntity<Page<ProductDeletedAdminResponse>> deletedList(
+            @PageableDefault(size = 20, sort = "deletedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(productService.findDeleted(pageable));
     }
 
     // 상품 승인 - PRODUCT.status를 APPROVED로 변경

@@ -4,6 +4,7 @@ import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.docu
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.restdocs.payload.PayloadDocumentation.responseFields;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -133,6 +134,23 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
                         responseFields(
                                 fieldWithPath("code").description("에러 코드"),
                                 fieldWithPath("message").description("에러 메시지"))));
+    }
+
+    // 삭제된 상품 이력을 관리자가 조회하면 200과 삭제 정보를 반환하는지 검증
+    @Test
+    void 관리자가_삭제된_상품_이력을_조회한다() throws Exception {
+        Member admin = saveMember("admin-deleted-list@example.com", Role.ADMIN);
+        Member seller = saveMember("seller-deleted-list@example.com", Role.SELLER);
+        Product product = savePendingProduct(seller.getId());
+        product.delete(admin.getId(), "이용약관 위반");
+        productRepository.save(product);
+
+        mockMvc.perform(get("/api/admin/products/deleted")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].productName").value("테스트상품"))
+                .andExpect(jsonPath("$.content[0].deleteReason").value("이용약관 위반"))
+                .andDo(document("admin/product-deleted-list"));
     }
 
     // 이미 처리된(APPROVED) 상품을 다시 승인 시도하면 409와 PRODUCT_409_ALREADY_PROCESSED를 반환하는지 검증
