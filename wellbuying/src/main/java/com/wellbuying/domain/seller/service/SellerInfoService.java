@@ -152,7 +152,8 @@ public class SellerInfoService {
                 AdminActionTargetType.SELLER_INFO, actions, pageable);
         List<Long> sellerIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
         Map<Long, String> companyNamesById = sellerInfoRepository.findAllById(sellerIds).stream()
-                .collect(Collectors.toMap(SellerInfo::getId, SellerInfo::getCompanyName));
+                .collect(Collectors.toMap(SellerInfo::getId,
+                        seller -> seller.getCompanyName() != null ? seller.getCompanyName() : ""));
         List<Long> adminIds = page.getContent().stream().map(AdminActionLog::getAdminId).distinct().toList();
         Map<Long, String> adminNamesById = memberRepository.findAllById(adminIds).stream()
                 .collect(Collectors.toMap(Member::getId, Member::getName));
