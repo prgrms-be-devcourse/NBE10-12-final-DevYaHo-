@@ -63,6 +63,30 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         return new CursorPageResponse<>(content, nextCursor, hasNext);
     }
 
+    // 메인 페이지 홈에 노출할 조회수 기준 인기 상품 목록 - 캐싱 대상이라 커서 없이 고정 개수만 반환
+    @Override
+    public List<ProductSummaryResponse> findTopByViewCount(int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("조회 개수(limit)는 1 이상이어야 합니다: " + limit);
+        }
+        return queryFactory
+                .select(Projections.constructor(ProductSummaryResponse.class,
+                        product.id,
+                        product.productName,
+                        product.startPrice,
+                        product.thumbnailUrl,
+                        productCount.viewCount))
+                .from(product)
+                .join(productCount).on(productCount.productId.eq(product.id))
+                .where(
+                        product.status.eq(ProductStatus.APPROVED),
+                        product.deletedAt.isNull()
+                )
+                .orderBy(productCount.viewCount.desc(), product.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
     // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
     @Override
     public Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable) {

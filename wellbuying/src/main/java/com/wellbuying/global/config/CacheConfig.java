@@ -19,12 +19,15 @@ public class CacheConfig {
     // JSON 직렬화로 교체 - 앞으로 다른 record DTO를 캐싱해도 같은 문제가 재발하지 않음
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
-        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+        RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofHours(24))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new GenericJackson2JsonRedisSerializer()));
+        // 조회수 기반 인기 상품은 계속 바뀌는 데이터라 기본 24시간 TTL 대신 짧은 주기로 갱신
+        RedisCacheConfiguration popularProductsConfig = defaultConfig.entryTtl(Duration.ofMinutes(10));
         return RedisCacheManager.builder(redisConnectionFactory)
-                .cacheDefaults(config)
+                .cacheDefaults(defaultConfig)
+                .withCacheConfiguration("popularProducts", popularProductsConfig)
                 .build();
     }
 }

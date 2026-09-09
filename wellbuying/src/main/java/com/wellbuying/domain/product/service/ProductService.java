@@ -1,9 +1,15 @@
 package com.wellbuying.domain.product.service;
 
+import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
+import com.wellbuying.domain.admin.entity.AdminActionLog;
+import com.wellbuying.domain.admin.entity.AdminActionTargetType;
+import com.wellbuying.domain.admin.entity.AdminActionType;
+import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
+import com.wellbuying.domain.product.dto.ProductDeletedAdminResponse;
 import com.wellbuying.domain.product.dto.ProductCreateRequest;
 import com.wellbuying.domain.product.dto.ProductUpdateRequest;
 import com.wellbuying.domain.product.dto.ProductDetailResponse;
@@ -33,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -42,12 +49,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProductService {
 
+    private static final int POPULAR_PRODUCT_LIMIT = 10;
+
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
     private final ProductCategoryRepository productCategoryRepository;
     private final ProductCountRepository productCountRepository;
     private final ProductSearchEventOutboxRepository outboxRepository;
     private final GroupBuyRepository groupBuyRepository;
+    private final AdminActionLogRepository adminActionLogRepository;
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
     private final ProductImageRepository productImageRepository;
@@ -57,6 +67,7 @@ public class ProductService {
                           ProductCountRepository productCountRepository,
                           ProductSearchEventOutboxRepository outboxRepository,
                           GroupBuyRepository groupBuyRepository,
+                          AdminActionLogRepository adminActionLogRepository,
                           ProductImageUploadService productImageUploadService,
                           ApplicationEventPublisher eventPublisher,
                           ProductImageRepository productImageRepository) {
@@ -66,6 +77,7 @@ public class ProductService {
         this.productCountRepository = productCountRepository;
         this.outboxRepository = outboxRepository;
         this.groupBuyRepository = groupBuyRepository;
+        this.adminActionLogRepository = adminActionLogRepository;
         this.productImageUploadService = productImageUploadService;
         this.eventPublisher = eventPublisher;
         this.productImageRepository = productImageRepository;
@@ -75,6 +87,14 @@ public class ProductService {
     @Transactional(readOnly = true)
     public CursorPageResponse<ProductSummaryResponse> getProducts(ProductSearchCondition condition, String cursor, int size) {
         return productRepository.search(condition, cursor, size);
+    }
+
+    // 메인 페이지 홈 노출용 - 자주 조회되지만 자주 안 바뀌는 데이터라 캐싱
+    // (CategoryService.getCategoryTree()와 동일 패턴, 캐시 무효화는 TTL로만 처리)
+    @Cacheable(value = "popularProducts", key = "'top10'")
+    @Transactional(readOnly = true)
+    public List<ProductSummaryResponse> getPopularProducts() {
+        return productRepository.findTopByViewCount(POPULAR_PRODUCT_LIMIT);
     }
 
     // 공동구매 상세 화면에서 상품 설명/썸네일 등을 보여주기 위해 단건 조회
@@ -142,15 +162,38 @@ public class ProductService {
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
-    public void approve(Long productId) {
+    public void approve(Long productId, Long adminId, String reason) {
         findProduct(productId).approve();
         outboxRepository.save(ProductSearchEventOutbox.upsert(productId));
+        recordAction(productId, adminId, AdminActionType.APPROVE, reason);
     }
 
     // 상품 거절 - PENDING 여부 검증은 Product.reject()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
     @Transactional
-    public void reject(Long productId) {
+    public void reject(Long productId, Long adminId, String reason) {
         findProduct(productId).reject();
+        recordAction(productId, adminId, AdminActionType.REJECT, reason);
+    }
+
+    // 상품 승인/거절 이력 조회 - "승인 대기 요청 처리" 화면에서 사용
+    @Transactional(readOnly = true)
+    public Page<AdminActionLogResponse> listActionLogs(Pageable pageable) {
+        Page<AdminActionLog> page = adminActionLogRepository
+                .findAllByTargetTypeOrderByOccurredAtDesc(AdminActionTargetType.PRODUCT, pageable);
+        List<Long> productIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
+        Map<Long, String> productNamesById = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Product::getProductName));
+        List<Long> adminIds = page.getContent().stream().map(AdminActionLog::getAdminId).distinct().toList();
+        Map<Long, String> adminNamesById = memberRepository.findAllById(adminIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getName));
+        return page.map(actionLog -> AdminActionLogResponse.of(actionLog,
+                productNamesById.getOrDefault(actionLog.getTargetId(), ""),
+                adminNamesById.getOrDefault(actionLog.getAdminId(), "")));
+    }
+
+    private void recordAction(Long productId, Long adminId, AdminActionType action, String reason) {
+        adminActionLogRepository.save(
+                AdminActionLog.record(AdminActionTargetType.PRODUCT, productId, adminId, action, reason));
     }
 
     @Transactional
@@ -194,6 +237,12 @@ public class ProductService {
                 .filter(productImageUploadService::isOurBucketUrl)
                 .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
         productImageRepository.deleteByProductId(productId);
+    }
+
+    // 삭제 이력 조회 - deletedAt이 있는 상품만, 최근 삭제순 정렬은 컨트롤러 Pageable로 처리
+    @Transactional(readOnly = true)
+    public Page<ProductDeletedAdminResponse> findDeleted(Pageable pageable) {
+        return productRepository.findByDeletedAtIsNotNull(pageable).map(ProductDeletedAdminResponse::of);
     }
 
     // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단

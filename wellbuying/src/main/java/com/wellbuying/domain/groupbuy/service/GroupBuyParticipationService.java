@@ -41,13 +41,15 @@ public class GroupBuyParticipationService {
         GroupBuy groupBuy = groupBuyRepository.findById(groupBuyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_BUY_NOT_FOUND));
 
+        // isSuspended() 체크를 status 체크보다 먼저 한다 - suspend()가 status도 CANCELED로 바꾸므로,
+        // 순서가 바뀌면 판매정지된 건이 더 일반적인 GROUP_BUY_NOT_ONGOING으로 잘못 응답된다.
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
         LocalDateTime now = LocalDateTime.now();
         if (groupBuy.getStatus() != GroupBuyStatus.ONGOING || now.isBefore(groupBuy.getStartAt())
                 || !now.isBefore(groupBuy.getEndAt())) {
             throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
-        }
-        if (groupBuy.isSuspended()) {
-            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
         }
 
         // Redis 카운터를 건드리기 전에 배송지 소유권을 먼저 검증한다 - 검증에 실패하면 카운터를 되돌릴 필요 자체가 없다

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.domain.member.entity.Member;
@@ -44,6 +45,9 @@ class SellerInfoServiceTest {
 
     @Mock
     private EmailVerificationService emailVerificationService;
+
+    @Mock
+    private AdminActionLogRepository adminActionLogRepository;
 
     @InjectMocks
     private SellerInfoService sellerInfoService;
@@ -148,7 +152,7 @@ class SellerInfoServiceTest {
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
         when(memberRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(member));
 
-        sellerInfoService.approve(1L, 99L);
+        sellerInfoService.approve(1L, 99L, "서류 확인 완료");
 
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
         assertThat(member.getRole()).isEqualTo(Role.SELLER);
@@ -160,7 +164,7 @@ class SellerInfoServiceTest {
         SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        sellerInfoService.reject(1L, 99L);
+        sellerInfoService.reject(1L, 99L, "서류 미비");
 
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.REJECTED);
         verify(memberRepository, never()).findByIdAndDeletedAtIsNull(any());
@@ -171,7 +175,7 @@ class SellerInfoServiceTest {
     void 존재하지_않는_셀러_신청은_승인_거절에_실패한다() {
         when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> sellerInfoService.approve(999L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.approve(999L, 99L, "서류 확인 완료"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
@@ -184,7 +188,7 @@ class SellerInfoServiceTest {
         sellerInfo.approve();
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        assertThatThrownBy(() -> sellerInfoService.reject(1L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.reject(1L, 99L, "서류 확인 완료"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_ALREADY_PROCESSED);
@@ -197,7 +201,7 @@ class SellerInfoServiceTest {
         sellerInfo.approve();
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        sellerInfoService.suspend(1L, 99L);
+        sellerInfoService.suspend(1L, 99L, "약관 위반");
 
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.SUSPENDED);
     }
@@ -208,7 +212,7 @@ class SellerInfoServiceTest {
         SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        assertThatThrownBy(() -> sellerInfoService.suspend(1L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.suspend(1L, 99L, "약관 위반"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_APPROVED);
@@ -219,7 +223,7 @@ class SellerInfoServiceTest {
     void 존재하지_않는_셀러는_정지에_실패한다() {
         when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> sellerInfoService.suspend(999L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.suspend(999L, 99L, "약관 위반"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
@@ -233,7 +237,7 @@ class SellerInfoServiceTest {
         sellerInfo.suspend();
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        sellerInfoService.reactivate(1L, 99L);
+        sellerInfoService.reactivate(1L, 99L, "소명 확인 완료");
 
         assertThat(sellerInfo.getStatus()).isEqualTo(SellerStatus.APPROVED);
     }
@@ -245,7 +249,7 @@ class SellerInfoServiceTest {
         sellerInfo.approve();
         when(sellerInfoRepository.findById(1L)).thenReturn(Optional.of(sellerInfo));
 
-        assertThatThrownBy(() -> sellerInfoService.reactivate(1L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.reactivate(1L, 99L, "소명 확인 완료"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_SUSPENDED);
@@ -256,7 +260,7 @@ class SellerInfoServiceTest {
     void 존재하지_않는_셀러는_정지_복귀에_실패한다() {
         when(sellerInfoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> sellerInfoService.reactivate(999L, 99L))
+        assertThatThrownBy(() -> sellerInfoService.reactivate(999L, 99L, "소명 확인 완료"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
