@@ -248,7 +248,8 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("priceTiers[].thresholdQuantity").description("구간 기준 수량"),
                                 fieldWithPath("priceTiers[].unitPrice").description("구간 단가"),
                                 fieldWithPath("createdAt").description("생성 일시"),
-                                fieldWithPath("suspended").description("판매정지 여부"))));
+                                fieldWithPath("suspended").description("판매정지 여부"),
+                                fieldWithPath("viewCount").description("조회수"))));
     }
 
     // 목록 조회 응답이 PagedModel 형태(content + page 메타데이터)로 직렬화되는지 검증
@@ -280,6 +281,8 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("content[].currentQuantity").description("현재 누적 참여 수량"),
                                 fieldWithPath("content[].maxQuantity").description("최대 수량"),
                                 fieldWithPath("content[].suspended").description("판매정지 여부"),
+                                fieldWithPath("content[].viewCount").description("조회수"),
+                                fieldWithPath("content[].createdAt").description("생성 일시"),
                                 fieldWithPath("page.size").description("페이지 크기"),
                                 fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
                                 fieldWithPath("page.totalElements").description("전체 요소 수"),

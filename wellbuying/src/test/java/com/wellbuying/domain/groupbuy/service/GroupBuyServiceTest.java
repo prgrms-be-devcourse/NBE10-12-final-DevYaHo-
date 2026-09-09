@@ -16,6 +16,8 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyCreateRequest.PriceTierRequest;
+import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.event.GroupBuyEventPublisher;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
@@ -30,12 +32,14 @@ import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class GroupBuyServiceTest {
@@ -212,5 +216,78 @@ class GroupBuyServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_CANCEL_NOT_ALLOWED);
         verify(groupBuyCounterRepository, never()).delete(anyLong());
+    }
+
+    // 상세 조회 시마다 홈 화면 "인기" 정렬용 조회수를 원자적으로 1 증가시키는지 검증 (엔티티를 읽어 자바에서
+    // +1 하는 대신 GroupBuyRepository.increaseViewCount로 DB에 직접 반영하는지가 핵심)
+    @Test
+    void 상세_조회_시_조회수를_증가시킨다() {
+        GroupBuy groupBuy = GroupBuy.create(10L, 1L, "제목",
+                LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(8), 100, 10_000);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        when(groupBuyPriceRepository.findByGroupBuyIdOrderByTierOrderAsc(1L)).thenReturn(List.of());
+        when(productRepository.findById(10L)).thenReturn(Optional.empty());
+
+        groupBuyService.getDetail(1L);
+
+        verify(groupBuyRepository, times(1)).increaseViewCount(1L);
+    }
+
+    private GroupBuy groupBuyWithId(Long id, Long productId, GroupBuyStatus status, int currentQuantity,
+            int minQuantity) {
+        GroupBuy groupBuy = GroupBuy.create(productId, 1L, "제목",
+                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(8), minQuantity, 10_000);
+        ReflectionTestUtils.setField(groupBuy, "id", id);
+        ReflectionTestUtils.setField(groupBuy, "status", status);
+        ReflectionTestUtils.setField(groupBuy, "currentQuantity", currentQuantity);
+        return groupBuy;
+    }
+
+    // 검색 색인용 배치 조회 - 진행 중(ONGOING)인 공동구매는 참여 수량 기준 가격 구간에서 계산한 단가를 포함해 요약되는지 검증
+    // (GroupBuyPriceCalculator를 그대로 재사용하는지가 핵심 - 새로 계산 로직을 만들지 않는다)
+    @Test
+    void 상품별_진행중인_공동구매_요약을_배치로_조회한다() {
+        GroupBuy groupBuy = groupBuyWithId(1L, 10L, GroupBuyStatus.ONGOING, 150, 100);
+        when(groupBuyRepository.findByProductIdInAndStatusIn(List.of(10L), List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING)))
+                .thenReturn(List.of(groupBuy));
+        when(groupBuyPriceRepository.findByGroupBuyIdIn(List.of(1L))).thenReturn(List.of(
+                GroupBuyPrice.of(1L, 1, 100, 15_000),
+                GroupBuyPrice.of(1L, 2, 1_000, 12_000)));
+
+        Map<Long, GroupBuyProductSummaryResponse> result = groupBuyService.getActiveSummariesByProductIds(List.of(10L));
+
+        assertThat(result).containsOnlyKeys(10L);
+        GroupBuyProductSummaryResponse summary = result.get(10L);
+        assertThat(summary.groupBuyStatus()).isEqualTo(GroupBuyStatus.ONGOING);
+        assertThat(summary.currentUnitPrice()).isEqualTo(15_000);
+        assertThat(summary.participantCount()).isEqualTo(150);
+        assertThat(summary.targetQuantity()).isEqualTo(100);
+    }
+
+    // 진행 중인(READY/ONGOING) 공동구매가 없는 상품은 결과 Map에서 아예 빠지는지 검증
+    @Test
+    void 진행중인_공동구매가_없는_상품은_결과에서_빠진다() {
+        when(groupBuyRepository.findByProductIdInAndStatusIn(List.of(20L), List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING)))
+                .thenReturn(List.of());
+
+        Map<Long, GroupBuyProductSummaryResponse> result = groupBuyService.getActiveSummariesByProductIds(List.of(20L));
+
+        assertThat(result).isEmpty();
+    }
+
+    // 한 상품에 READY/ONGOING 공동구매가 동시에 있으면(생성 시점에 막고 있지 않아 이론상 가능) ONGOING을 대표로 고르는지 검증
+    @Test
+    void 같은_상품에_진행중인_공동구매가_여러건이면_ONGOING을_대표로_고른다() {
+        GroupBuy readyGroupBuy = groupBuyWithId(1L, 30L, GroupBuyStatus.READY, 0, 100);
+        GroupBuy ongoingGroupBuy = groupBuyWithId(2L, 30L, GroupBuyStatus.ONGOING, 50, 100);
+        when(groupBuyRepository.findByProductIdInAndStatusIn(List.of(30L), List.of(GroupBuyStatus.READY, GroupBuyStatus.ONGOING)))
+                .thenReturn(List.of(readyGroupBuy, ongoingGroupBuy));
+        when(groupBuyPriceRepository.findByGroupBuyIdIn(List.of(2L))).thenReturn(
+                List.of(GroupBuyPrice.of(2L, 1, 0, 20_000)));
+
+        Map<Long, GroupBuyProductSummaryResponse> result = groupBuyService.getActiveSummariesByProductIds(List.of(30L));
+
+        assertThat(result.get(30L).groupBuyStatus()).isEqualTo(GroupBuyStatus.ONGOING);
+        assertThat(result.get(30L).participantCount()).isEqualTo(50);
     }
 }

@@ -164,6 +164,8 @@ export type GroupBuySummaryResponse = {
   currentQuantity: number;
   maxQuantity: number;
   suspended: boolean;
+  viewCount: number;
+  createdAt: string;
 };
 
 export type GroupBuyPartCreateRequest = {
