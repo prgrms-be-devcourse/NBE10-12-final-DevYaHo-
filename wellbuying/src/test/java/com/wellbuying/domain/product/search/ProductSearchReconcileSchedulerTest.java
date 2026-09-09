@@ -140,6 +140,36 @@ class ProductSearchReconcileSchedulerTest {
                 .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 0L, LIMIT);
     }
 
+    @Test
+    void reconcile_3회_연속_실패하면_resumeFromId를_강제_리셋한다() {
+        Product p1 = mockProduct(1L);
+        Product p2 = mockProduct(2L);
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 1L, LIMIT))
+                .thenReturn(List.of(p2)).thenReturn(List.of(p2)).thenReturn(List.of(p2)).thenReturn(List.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(2L))).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
+        when(productSearchRepository.saveAll(any()))
+                .thenReturn(List.of())                               // 1차: p1 성공
+                .thenThrow(new RuntimeException("영구 실패"))         // 1차: p2 실패(1회)
+                .thenThrow(new RuntimeException("영구 실패"))         // 2차: p2 실패(2회)
+                .thenThrow(new RuntimeException("영구 실패"))         // 3차: p2 실패(3회) → 리셋
+                .thenReturn(List.of());                              // 4차: p1 성공
+
+        scheduler.reconcile(); // 1차: 0L→p1 성공(resumeFromId=1) → 1L→p2 실패(1회)
+        scheduler.reconcile(); // 2차: 1L→p2 실패(2회)
+        scheduler.reconcile(); // 3차: 1L→p2 실패(3회) → resumeFromId=0으로 강제 리셋
+        scheduler.reconcile(); // 4차: 0L→p1 성공 → 완주
+
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(3.0);
+        // 4차에서 리셋 후 0L부터 재시작: findBy(0L)은 1차 1회 + 4차 1회 = 2회
+        verify(productRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 0L, LIMIT);
+    }
+
     private Product mockProduct(Long id) {
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(id);

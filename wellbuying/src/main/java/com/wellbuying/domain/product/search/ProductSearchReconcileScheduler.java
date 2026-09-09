@@ -12,6 +12,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,8 @@ import org.springframework.stereotype.Component;
 // 페이지 단위로 처리해 한 번에 많은 메모리를 쓰지 않으며, 실패해도 다음 주기에 다시 시도한다.
 // OFFSET 대신 id 커서로 순차 조회해 count 쿼리와 뒤 페이지 지연을 피한다.
 // 실패 시 다음 실행은 마지막 성공 지점부터 이어서 시작한다(resumeFromId). 정상 완주하면 처음부터 다시 훑도록 0으로 리셋한다.
+// 특정 지점에서 반복 실패(poison pill)로 resumeFromId가 고착되면 그 이전 상품들이 영원히 보정되지 않으므로,
+// 3회 연속 실패 시 처음부터 다시 훑도록 강제 리셋한다.
 @Component
 public class ProductSearchReconcileScheduler {
 
@@ -44,6 +47,7 @@ public class ProductSearchReconcileScheduler {
     private final Counter reconcileFailures;
     private final AtomicLong lastSuccessTimestamp = new AtomicLong(0);
     private final AtomicLong resumeFromId = new AtomicLong(0);
+    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
@@ -96,10 +100,16 @@ public class ProductSearchReconcileScheduler {
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
             lastSuccessTimestamp.set(Instant.now().getEpochSecond());
             resumeFromId.set(0L);
+            consecutiveFailures.set(0);
         } catch (Exception e) {
-            // resumeFromId 건드리지 않음 - 실패 시점 값 유지해 다음 실행이 이어받도록
             reconcileFailures.increment();
-            log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
+            int failures = consecutiveFailures.incrementAndGet();
+            log.error("검색 인덱스 정합성 보정 실패 ({}회 연속): lastId={}, 지금까지 {}건 처리", failures, lastId, total, e);
+            if (failures >= 3) {
+                log.warn("보정 배치가 {}회 연속 실패하여 resumeFromId를 0으로 리셋합니다. (특정 지점 고착 방지)", failures);
+                resumeFromId.set(0L);
+                consecutiveFailures.set(0);
+            }
         } finally {
             sample.stop(reconcileTimer);
         }

@@ -59,18 +59,18 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
         String nextCursor = null;
         if (hasNext) {
             List<Object> sortValues = searchHits.get(size - 1).getSortValues();
-            FieldValue scoreVal = (FieldValue) sortValues.get(0);
+            FieldValue primarySortVal = (FieldValue) sortValues.get(0);
             FieldValue idVal = (FieldValue) sortValues.get(1);
-            String scoreStr;
-            if (scoreVal.isDouble()) {
-                scoreStr = String.valueOf(scoreVal.doubleValue());
-            } else if (scoreVal.isLong()) {
-                scoreStr = String.valueOf(scoreVal.longValue());
+            String primarySortStr;
+            if (primarySortVal.isDouble()) {
+                primarySortStr = String.valueOf(primarySortVal.doubleValue());
+            } else if (primarySortVal.isLong()) {
+                primarySortStr = String.valueOf(primarySortVal.longValue());
             } else {
-                throw new IllegalStateException("Unexpected FieldValue kind for score: " + scoreVal._kind());
+                throw new IllegalStateException("Unexpected FieldValue kind for score: " + primarySortVal._kind());
             }
             String idStr = String.valueOf(idVal.longValue());
-            nextCursor = Cursor.encode(sort.name(), scoreStr, idStr);
+            nextCursor = Cursor.encode(sort.name(), primarySortStr, idStr);
         }
 
         return new CursorPageResponse<>(content, nextCursor, hasNext);
