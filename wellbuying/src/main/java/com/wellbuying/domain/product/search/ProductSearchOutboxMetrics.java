@@ -15,12 +15,12 @@ public class ProductSearchOutboxMetrics {
             ProductSearchEventOutboxRepository outboxRepository) {
         Gauge.builder("wellbuying.search.outbox.events", outboxRepository,
                 r -> r.countByPublishedAtIsNullAndRetryCountLessThan(ProductSearchEventOutbox.MAX_RETRY_COUNT))
-                .description("OpenSearch에 아직 반영되지 않은 검색 outbox 이벤트 수")
+                .description("검색 outbox 이벤트 수 (status: pending=미반영, dead=재시도 한도 초과)")
                 .tag("status", "pending")
                 .register(meterRegistry);
         Gauge.builder("wellbuying.search.outbox.events", outboxRepository,
                 r -> r.countByPublishedAtIsNullAndRetryCountGreaterThanEqual(ProductSearchEventOutbox.MAX_RETRY_COUNT))
-                .description("재시도 한도를 넘어 포기된 검색 outbox 이벤트 수")
+                .description("검색 outbox 이벤트 수 (status: pending=미반영, dead=재시도 한도 초과)")
                 .tag("status", "dead")
                 .register(meterRegistry);
     }
