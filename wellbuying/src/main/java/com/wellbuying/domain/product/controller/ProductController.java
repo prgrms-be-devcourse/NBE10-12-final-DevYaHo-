@@ -204,6 +204,6 @@ public class ProductController {
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
     @GetMapping("/search")
     public CursorPageResponse<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
-        return productSearchService.search(request.keyword(), request.sort(), request.cursor(), request.size());
+        return productSearchService.search(request.keyword(), request.sort(), request.cursor(), request.size(), request.activeGroupBuyOnly());
     }
 }

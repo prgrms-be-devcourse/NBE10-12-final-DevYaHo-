@@ -9,11 +9,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchOutboxDispatcher.DispatchFailure;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +44,9 @@ class ProductSearchOutboxRelayTest {
 
     @Mock
     private ProductSearchRepository productSearchRepository;
+
+    @Mock
+    private GroupBuyService groupBuyService;
 
     @InjectMocks
     private ProductSearchOutboxRelay relay;
@@ -79,8 +86,10 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
 
         relay.relay();
 
@@ -146,6 +155,28 @@ class ProductSearchOutboxRelayTest {
         ArgumentCaptor<List<DispatchFailure>> failedCaptor = ArgumentCaptor.forClass(List.class);
         verify(dispatcher).recordFailures(failedCaptor.capture());
         assertThat(failedCaptor.getValue()).extracting(DispatchFailure::event).containsExactly(event);
+    }
+
+    // UPSERT 이벤트에서 공동구매 요약 Map에 해당 상품이 있으면 문서에 hasActiveGroupBuy=true와 요약 값이 반영되는지 검증
+    @Test
+    void relay_UPSERT_이벤트에_공동구매_요약이_있으면_문서에_반영된다() {
+        ProductSearchEventOutbox event = ProductSearchEventOutbox.upsert(1L);
+        when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
+                .thenReturn(List.of(event));
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(1L);
+        when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
+        when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
+        GroupBuyProductSummaryResponse summary =
+                new GroupBuyProductSummaryResponse(GroupBuyStatus.ONGOING, 8000, 5, 10);
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of(1L, summary));
+
+        relay.relay();
+
+        ArgumentCaptor<ProductSearchDocument> docCaptor = ArgumentCaptor.forClass(ProductSearchDocument.class);
+        verify(productSearchRepository).save(docCaptor.capture());
+        assertThat(docCaptor.getValue().hasActiveGroupBuy()).isTrue();
+        assertThat(docCaptor.getValue().currentUnitPrice()).isEqualTo(8000);
     }
 
     // 폴링 자체가 실패해도(DB 커넥션 문제 등) @Scheduled가 다음 주기에 재실행될 수 있도록

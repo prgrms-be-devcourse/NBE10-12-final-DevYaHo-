@@ -5,7 +5,12 @@ public record ProductSearchResponse(
         String productName,
         Integer startPrice,
         String thumbnailUrl,
-        Long viewCount
+        Long viewCount,
+        Boolean hasActiveGroupBuy,
+        String groupBuyStatus,
+        Integer currentUnitPrice,
+        Integer participantCount,
+        Integer targetQuantity
 ) {
     public static ProductSearchResponse from(ProductSearchDocument doc) {
         return new ProductSearchResponse(
@@ -13,7 +18,12 @@ public record ProductSearchResponse(
                 doc.productName(),
                 doc.startPrice(),
                 doc.thumbnailUrl(),
-                doc.viewCount()
+                doc.viewCount(),
+                doc.hasActiveGroupBuy(),
+                doc.groupBuyStatus(),
+                doc.currentUnitPrice(),
+                doc.participantCount(),
+                doc.targetQuantity()
         );
     }
 }
