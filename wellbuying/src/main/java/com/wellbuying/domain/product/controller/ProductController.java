@@ -212,12 +212,14 @@ public class ProductController {
     }
 
     // 키워드로 승인된 상품 전문 검색 (OpenSearch), 기본 정렬은 관련도순(_score)
+    @Operation(summary = "상품 검색 - 키워드/카테고리/가격대/공동구매 필터, 커서 페이지네이션")
     @GetMapping("/search")
     public CursorPageResponse<ProductSearchResponse> searchProducts(@Valid @ModelAttribute ProductSearchRequest request) {
         return productSearchService.search(request.keyword(), request.sort(), request.cursor(), request.size(), request.toFilter());
     }
 
     // 검색창 자동완성 - 상품명 접두어 일치, 최대 8건, 필터/페이지네이션 없음
+    @Operation(summary = "검색 자동완성 - 상품명 접두어 일치, 최대 8건")
     @GetMapping("/search/autocomplete")
     public List<ProductAutocompleteResponse> autocomplete(
             @RequestParam @NotBlank(message = "검색 키워드는 필수입니다.") String keyword) {
