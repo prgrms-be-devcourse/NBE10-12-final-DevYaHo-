@@ -13,6 +13,8 @@ public class GroupBuyCounterRepository {
     private static final String KEY_PREFIX = "gb:cnt:";
     private static final RedisScript<Long> PARTICIPATE_SCRIPT =
             RedisScript.of(new ClassPathResource("scripts/participate_groupbuy.lua"), Long.class);
+    private static final RedisScript<Long> DECREASE_SCRIPT =
+            RedisScript.of(new ClassPathResource("scripts/decrease_groupbuy.lua"), Long.class);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -27,9 +29,11 @@ public class GroupBuyCounterRepository {
         return result == null ? -1 : result;
     }
 
-    // 참여 취소 또는 DB 반영 실패 보상 처리 시 카운터를 원복
+    // 참여 취소 또는 DB 반영 실패 보상 처리 시 카운터를 원복. 단순 DECRBY가 아니라 decrease_groupbuy.lua로
+    // 처리한다 - 키가 이미 삭제된 뒤(성사 확정 등)라면 아무것도 하지 않는다. 삭제된 키에 DECRBY를 하면
+    // 음수 값으로 키가 새로 생겨버리고, tryIncrease가 그 음수를 그대로 신뢰해 재고 초과 허용으로 이어질 수 있다
     public void decrease(Long groupBuyId, int quantity) {
-        redisTemplate.opsForValue().decrement(key(groupBuyId), quantity);
+        redisTemplate.execute(DECREASE_SCRIPT, List.of(key(groupBuyId)), String.valueOf(quantity));
     }
 
     // 공동구매 생성 시 카운터를 0으로 초기화 - 마감 시각 이후 TTL로 자동 만료되도록 설정

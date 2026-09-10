@@ -6,7 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +20,7 @@ import com.wellbuying.domain.address.repository.BuyerAddressRepository;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartCreateRequest;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyPartResponse;
 import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
@@ -29,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @ExtendWith(MockitoExtension.class)
 class GroupBuyParticipationServiceTest {
@@ -44,6 +49,11 @@ class GroupBuyParticipationServiceTest {
 
     @Mock
     private BuyerAddressRepository buyerAddressRepository;
+
+    // participate()가 TransactionTemplate으로 STEP1/STEP3 트랜잭션 경계를 직접 잡으므로 필요 - 이 mock은
+    // getTransaction()/commit()/rollback() 전부 기본 no-op(null 반환)이라 별도 스텁 없이도 콜백이 그대로 실행된다
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private GroupBuyParticipationService groupBuyParticipationService;
@@ -63,16 +73,16 @@ class GroupBuyParticipationServiceTest {
         return groupBuy;
     }
 
-    // groupBuyRepository.increaseQuantity()는 실제로는 DB에서 원자적으로 증가시키지만, mock은 아무 동작도
-    // 하지 않으므로 그 효과(엔티티의 currentQuantity 증가)를 테스트에서 직접 재현해줘야 production 코드의
-    // isSoldOut() 판정 등이 실제와 동일하게 동작한다. groupBuy는 저장된 적 없어 id가 null이라 groupBuyId를
-    // 별도로 받아 매칭한다
+    // groupBuyRepository.increaseQuantity()는 실제로는 DB에서 원자적으로(+ status/end_at 조건까지 같이)
+    // 증가시키지만, mock은 아무 동작도 하지 않으므로 그 효과(엔티티의 currentQuantity 증가, 영향받은 행 수 1)를
+    // 테스트에서 직접 재현해줘야 production 코드의 isSoldOut() 판정 등이 실제와 동일하게 동작한다. groupBuy는
+    // 저장된 적 없어 id가 null이라 groupBuyId를 별도로 받아 매칭한다
     private void stubAtomicIncrease(Long groupBuyId, GroupBuy groupBuy) {
         doAnswer(invocation -> {
             int delta = invocation.getArgument(1);
             groupBuy.increaseQuantity(delta);
-            return null;
-        }).when(groupBuyRepository).increaseQuantity(eq(groupBuyId), anyInt());
+            return 1;
+        }).when(groupBuyRepository).increaseQuantity(eq(groupBuyId), anyInt(), eq(GroupBuyStatus.ONGOING), any());
     }
 
     // 재고가 남아있는 상태에서 참여하면 참여 내역이 CONFIRMED로 저장되고, 아직 성사 전이라 가격은 null이며
@@ -131,7 +141,7 @@ class GroupBuyParticipationServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_SOLD_OUT);
         verify(groupBuyPartRepository, never()).save(any());
-        verify(groupBuyRepository, never()).increaseQuantity(any(), anyInt());
+        verify(groupBuyRepository, never()).increaseQuantity(any(), anyInt(), any(), any());
     }
 
     // 아직 시작되지 않았거나(READY) 이미 끝난 공동구매에는 참여할 수 없어 GROUP_BUY_NOT_ONGOING 예외가 발생하는지 검증
@@ -147,6 +157,92 @@ class GroupBuyParticipationServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_NOT_ONGOING);
         verify(groupBuyCounterRepository, never()).tryIncrease(any(), anyInt(), anyInt());
+    }
+
+    // STEP1과 STEP3 사이(트랜잭션이 나뉘어 있어 생기는 틈)에 공동구매가 마감되거나 판매정지되면, STEP3의
+    // 조건부 UPDATE(status=ONGOING AND end_at>now)가 0건을 반영하고 GROUP_BUY_NOT_ONGOING으로 거부되며,
+    // 이미 늘려둔 Redis 카운터도 되돌려지는지 검증 - status 변경/end_at 경과 두 원인 모두 이 경로(0건 반영)로 수렴한다
+    @Test
+    void STEP1_이후_상태가_바뀌면_STEP3에서_거부되고_Redis_카운터를_보상한다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // STEP3 시점엔 이미 상태가 바뀌어(마감/판매정지) 조건부 UPDATE가 0건 반영됐다고 가정
+        when(groupBuyRepository.increaseQuantity(eq(1L), anyInt(), eq(GroupBuyStatus.ONGOING), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(50, 1L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_BUY_NOT_ONGOING);
+
+        verify(groupBuyCounterRepository, times(1)).decrease(1L, 50);
+        verify(groupBuyCounterRepository, never()).delete(any());
+    }
+
+    // STEP3 콜백 실행 중 예외(위 테스트처럼 검증 실패든, 그 외 런타임 예외든)가 나면 Redis 카운터 보상이
+    // 정확히 1번만 호출되는지 검증 - 중복 보상으로 카운터가 더 깎이면 안 된다
+    @Test
+    void STEP3_콜백에서_예외가_나면_Redis_보상은_정확히_1번만_호출된다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(groupBuyPartRepository.save(any(GroupBuyPart.class)))
+                .thenThrow(new RuntimeException("DB 저장 실패(예: 제약 위반)"));
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(50, 1L)))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(groupBuyCounterRepository, times(1)).decrease(1L, 50);
+    }
+
+    // STEP3 콜백 자체는 정상 반환됐지만 그 뒤 commit 단계에서 실패하는 경우(락 경합, DB 커넥션 장애 등)를
+    // 재현한다 - TransactionTemplate은 콜백 반환 이후 commit()을 호출하므로, commit()만 실패하도록 stub한다.
+    // 이때 매진 확정으로 Redis 카운터를 지우는 delete()가 호출되지 않아야 한다(호출됐다면 그 이후 보상 decrease()가
+    // 이미 삭제된 키에 음수 값을 만들어버리는 이번 리뷰의 핵심 시나리오가 재현된다)
+    @Test
+    void STEP3_commit이_실패하면_매진_삭제_없이_Redis_카운터를_보상한다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 100);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        stubAtomicIncrease(1L, groupBuy);
+        when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
+        when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        // STEP1의 commit은 성공시키고(doNothing), STEP3의 commit에서만 실패시킨다(두 번째 호출)
+        doNothing().doThrow(new RuntimeException("commit 실패")).when(transactionManager).commit(any());
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(100, 1L)))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(groupBuyCounterRepository, times(1)).decrease(1L, 100);
+        verify(groupBuyCounterRepository, never()).delete(any());
+    }
+
+    // STEP3 commit은 이미 성공했는데(DB 기준 참여 확정) 그 이후 매진 정리용 Redis delete()만 실패하는
+    // 경우(Redis 타임아웃 등)를 재현한다 - DB는 이미 성공했으므로 이 실패를 참여 실패로 취급해 Redis
+    // 카운터를 decrease()로 되돌리면 안 된다("DB는 성공, Redis만 rollback"이라는 불일치가 생김).
+    // delete() 실패는 최선 노력(best-effort)으로 로그만 남기고, 참여 자체는 정상 성공 응답이어야 한다
+    @Test
+    void 매진_확정_후_Redis_삭제가_실패해도_참여_자체는_성공으로_처리된다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 100);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        stubAtomicIncrease(1L, groupBuy);
+        when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
+        when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        doThrow(new RuntimeException("Redis timeout")).when(groupBuyCounterRepository).delete(1L);
+
+        GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(100, 1L));
+
+        assertThat(response.quantity()).isEqualTo(100);
+        assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
+        verify(groupBuyCounterRepository, never()).decrease(any(), anyInt());
     }
 
     // 참여자 본인이 진행 중인 공동구매의 참여를 취소하면 참여 상태가 CANCELED로 바뀌고 카운터가 원복되는지 검증

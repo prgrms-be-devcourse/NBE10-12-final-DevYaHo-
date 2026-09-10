@@ -51,10 +51,17 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
     // 참여 시 누적 수량을 원자적으로 증가시킨다 - "읽은 값 + delta를 자바에서 계산해 덮어쓰는" 방식이 아니라
     // DB가 직접 current_quantity = current_quantity + :quantity 를 한 문장으로 처리하므로, 동시에 여러 참여가
     // 몰려도 갱신이 유실(lost update)되지 않는다. clearAutomatically로 실행 후 영속성 컨텍스트를 비우므로
-    // 호출 측은 최신 값이 필요하면 반드시 다시 조회해야 한다
+    // 호출 측은 최신 값이 필요하면 반드시 다시 조회해야 한다.
+    // WHERE에 status/end_at 조건을 같이 걸어두는 이유: GroupBuyParticipationService.participate()가 검증
+    // (STEP1)과 반영(STEP3)을 별도 트랜잭션으로 나누면서, 그 사이에 스케줄러 마감이나 관리자 판매정지로
+    // 상태가 바뀔 수 있게 됐다 - 재-SELECT는 그 순간에도 또 바뀔 수 있어 완전한 방어가 안 되지만, 이
+    // UPDATE 자체의 조건은 DB가 그 순간 원자적으로 확인하므로 확실하다. 조건에 안 맞으면 0건 반영되고
+    // 호출 측이 반환값(영향받은 행 수)으로 실패를 판단한다
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE GroupBuy g SET g.currentQuantity = g.currentQuantity + :quantity WHERE g.id = :id")
-    void increaseQuantity(@Param("id") Long id, @Param("quantity") int quantity);
+    @Query("UPDATE GroupBuy g SET g.currentQuantity = g.currentQuantity + :quantity "
+            + "WHERE g.id = :id AND g.status = :status AND g.endAt > :now")
+    int increaseQuantity(@Param("id") Long id, @Param("quantity") int quantity,
+            @Param("status") GroupBuyStatus status, @Param("now") LocalDateTime now);
 
     // 참여 취소 시 누적 수량을 원자적으로 감소시킨다 (설명은 increaseQuantity와 동일). 0 미만으로는 내려가지 않는다
     @Modifying(clearAutomatically = true, flushAutomatically = true)
