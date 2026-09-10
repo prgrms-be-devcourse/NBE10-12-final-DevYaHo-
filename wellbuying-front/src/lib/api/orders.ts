@@ -27,7 +27,7 @@ export function getMyOrderIdByGroupBuy(groupBuyId: number): Promise<{ orderId: s
 
 // 결제 실패한 주문 재시도 - 실패했던 주문은 이력으로 남고, 새로 만들어진 주문의 상세가 돌아온다
 export function retryPayment(orderId: string): Promise<OrderDetailResponse> {
-  return http.post<OrderDetailResponse>(`/api/payments/retry/${encodeURIComponent(orderId)}`, undefined, {
+  return http.post<OrderDetailResponse>(`/api/payments/${encodeURIComponent(orderId)}/retry`, undefined, {
     auth: true,
   });
 }

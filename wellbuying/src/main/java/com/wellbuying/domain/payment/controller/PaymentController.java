@@ -24,8 +24,9 @@ public class PaymentController {
         this.orderQueryService = orderQueryService;
     }
 
-    // 재시도는 실패했던 주문은 그대로 두고 새 주문을 만들어 처리하므로, 새로 만들어진 주문의 상세를 돌려준다
-    @PostMapping("/retry/{orderId}")
+    // 재시도는 실패했던 주문은 그대로 두고 새 주문을 만들어 처리하므로, 새로 만들어진 주문의 상세를 돌려준다.
+    // URI는 id 뒤에 동사를 붙이는 프로젝트 컨벤션을 따른다 (AdminGroupBuyController의 approve/reject 참고)
+    @PostMapping("/{orderId}/retry")
     public ResponseEntity<OrderDetailResponse> retry(@AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable String orderId) {
         String newOrderId = paymentRetryService.retry(member.memberId(), orderId);
