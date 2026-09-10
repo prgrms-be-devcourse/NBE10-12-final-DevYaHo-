@@ -61,7 +61,7 @@ class OrderControllerTest extends AbstractIntegrationTest {
     // 구매자 1명분의 성사 → 결제 승인 → 주문(PAID) 상태를 통째로 만들어 둔다
     private Order savePaidOrder(Member buyer, String productName, int quantity, int unitPrice) {
         Member seller = memberRepository.save(Member.signUp("seller-" + System.nanoTime() + "@test.com", "pw", "생산자"));
-        ProductCategory category = productCategoryRepository.save(ProductCategory.create(null, "식품"));
+        ProductCategory category = productCategoryRepository.save(ProductCategory.create(null, "식품", 0));
         Product product = productRepository.save(
                 Product.register(seller.getId(), category.getId(), productName, "설명", unitPrice, "https://cdn/x.jpg"));
         GroupBuy groupBuy = groupBuyRepository.save(GroupBuy.create(product.getId(), seller.getId(), productName + " 공동구매",

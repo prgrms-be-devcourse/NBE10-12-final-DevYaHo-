@@ -54,7 +54,7 @@ class ProductControllerSecurityTest extends AbstractIntegrationTest {
     }
 
     private ProductCategory saveCategory() {
-        return productCategoryRepository.save(ProductCategory.create(null, "테스트카테고리"));
+        return productCategoryRepository.save(ProductCategory.create(null, "테스트카테고리", 0));
     }
 
     private UsernamePasswordAuthenticationToken authOf(Member member) {

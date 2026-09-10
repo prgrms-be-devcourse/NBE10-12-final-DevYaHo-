@@ -59,7 +59,7 @@ class AdminProductControllerTest extends AbstractIntegrationTest {
     }
 
     private Product savePendingProduct(Long sellerId) {
-        ProductCategory category = productCategoryRepository.save(ProductCategory.create(null, "테스트카테고리"));
+        ProductCategory category = productCategoryRepository.save(ProductCategory.create(null, "테스트카테고리", 0));
         return productRepository.save(Product.register(sellerId, category.getId(), "테스트상품", "설명", 10000, "url"));
     }
 

@@ -29,9 +29,9 @@ class CategoryServiceTest extends AbstractIntegrationTest {
     // 최상위 카테고리 아래에 하위 카테고리가 자식으로 묶여서 트리가 조립된다
     @Test
     void getCategoryTree_부모자식_관계에_맞게_트리로_조립된다() {
-        ProductCategory root = categoryRepository.save(ProductCategory.create(null, "전자제품"));
-        categoryRepository.save(ProductCategory.create(root.getId(), "노트북"));
-        categoryRepository.save(ProductCategory.create(root.getId(), "휴대폰"));
+        ProductCategory root = categoryRepository.save(ProductCategory.create(null, "전자제품", 1));
+        categoryRepository.save(ProductCategory.create(root.getId(), "노트북", 2));
+        categoryRepository.save(ProductCategory.create(root.getId(), "휴대폰", 1));
 
         List<CategoryTreeResponse> tree = categoryService.getCategoryTree();
 
@@ -47,8 +47,8 @@ class CategoryServiceTest extends AbstractIntegrationTest {
     @Test
     void getCategoryTree_순환참조가_있어도_무한루프에_빠지지_않는다() {
         entityManager.createNativeQuery(
-                        "INSERT INTO product_category (id, category_name, parent_id, created_at) VALUES "
-                                + "(9001, 'A', 9002, now()), (9002, 'B', 9001, now())")
+                        "INSERT INTO product_category (id, category_name, parent_id, sort_order, created_at) VALUES "
+                                + "(9001, 'A', 9002, 1, now()), (9002, 'B', 9001, 1, now())")
                 .executeUpdate();
 
         assertThatCode(() -> categoryService.getCategoryTree()).doesNotThrowAnyException();

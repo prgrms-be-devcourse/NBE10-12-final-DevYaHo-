@@ -47,13 +47,13 @@ class ProductQueryRepositoryTest extends AbstractIntegrationTest {
                 .setParameter("id", TEST_SELLER_ID)
                 .executeUpdate();
 
-        testCategoryId = categoryRepository.save(ProductCategory.create(null, "테스트카테고리")).getId();
+        testCategoryId = categoryRepository.save(ProductCategory.create(null, "테스트카테고리", 0)).getId();
     }
 
     // 카테고리로 필터링하면 다른 카테고리 상품은 결과에서 제외된다
     @Test
     void search_카테고리로_필터링하면_다른_카테고리_상품은_제외된다() {
-        Long otherCategoryId = categoryRepository.save(ProductCategory.create(null, "다른카테고리")).getId();
+        Long otherCategoryId = categoryRepository.save(ProductCategory.create(null, "다른카테고리", 0)).getId();
         Product laptop = Product.register(TEST_SELLER_ID, testCategoryId, "노트북A", "설명", 1000000, "url");
         laptop.approve();
         laptop = productRepository.save(laptop);
