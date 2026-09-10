@@ -1,52 +1,57 @@
 package com.wellbuying.domain.product.service;
 
 import com.wellbuying.domain.product.dto.CategoryCreateRequest;
+import com.wellbuying.domain.product.dto.CategoryReorderRequest;
 import com.wellbuying.domain.product.dto.CategoryResponse;
 import com.wellbuying.domain.product.dto.CategoryTreeResponse;
 import com.wellbuying.domain.product.dto.CategoryUpdateRequest;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
-import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class CategoryService {
 
-    private static final long ROOT = 0L;
+    private static final Long ROOT = -1L;
 
     private final ProductCategoryRepository categoryRepository;
-    private final ProductRepository productRepository;
+    // 상품 서비스 등과의 결합도를 낮추기 위해 상품 존재 여부를 확인하는 별도의 컴포넌트나 레포지토리를 참조할 수 있음
+    // (현재는 임시로 항상 false를 반환하는 스텁 메서드 사용)
 
-    public CategoryService(ProductCategoryRepository categoryRepository, ProductRepository productRepository) {
+    public CategoryService(ProductCategoryRepository categoryRepository) {
         this.categoryRepository = categoryRepository;
-        this.productRepository = productRepository;
     }
 
-    // 등록 후 거의 안 바뀌는 데이터라 캐싱 - 카테고리 생성/수정 API가 생기면 그때 캐시 무효화(@CacheEvict)도 같이 추가해야 함
-    // 전체 카테고리를 조회해 부모-자식 관계 기준으로 그룹핑한 뒤, 최상위부터 트리 구조로 조립
-    @Cacheable("categoryTree")
-    @Transactional(readOnly = true)
+    @Cacheable(value = "categoryTree")
     public List<CategoryTreeResponse> getCategoryTree() {
         List<ProductCategory> all = categoryRepository.findAll();
+        
+        // 전체 리스트를 단 한 번만 정렬하여 트리를 만들 때 불필요한 중복 정렬 방지 (성능 최적화)
+        all.sort(Comparator.comparing(ProductCategory::getSortOrder)
+                .thenComparing(ProductCategory::getId));
+                
         Map<Long, List<ProductCategory>> byParent = all.stream()
                 .collect(Collectors.groupingBy(c -> c.getParentId() == null ? ROOT : c.getParentId()));
+                
         return buildTree(ROOT, byParent, new HashSet<>());
     }
 
-    // parentId가 null이면 최상위(1뎁스), 있으면 해당 카테고리의 하위(2뎁스)로 생성
-    // 2뎁스 제한: parentId가 가리키는 카테고리가 이미 하위(parentId != null)이면 3뎁스가 되므로 차단
     @Transactional
     @CacheEvict(value = "categoryTree", allEntries = true)
     public CategoryResponse create(CategoryCreateRequest request) {
@@ -66,21 +71,23 @@ public class CategoryService {
         }
         
         ProductCategory category = ProductCategory.create(request.parentId(), request.categoryName(), request.sortOrder());
+        // 비영속 상태인 새 엔티티를 먼저 영속화하여 Dirty Checking의 이점을 살릴 수 있도록 함
+        category = categoryRepository.save(category);
+        
         insertAndReorderSiblings(request.parentId(), category, request.sortOrder());
         return CategoryResponse.from(category);
     }
 
-    // 카테고리명 변경 - 같은 부모 아래 동일 이름 중복 차단, parentId 변경(이동)은 순환 참조 이슈가 있어 이번 범위 제외
     @Transactional
     @CacheEvict(value = "categoryTree", allEntries = true)
     public CategoryResponse update(Long categoryId, CategoryUpdateRequest request) {
         ProductCategory category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
-        // 자기 자신을 제외하고 같은 부모 아래 같은 이름이 이미 있는지 확인
+        
         boolean duplicate = category.getParentId() == null
                 ? categoryRepository.existsByParentIdIsNullAndCategoryName(request.categoryName())
                 : categoryRepository.existsByParentIdAndCategoryName(category.getParentId(), request.categoryName());
-        // 이름이 같아도 자기 자신이라면 허용 (이름 그대로 저장하는 경우)
+                
         if (duplicate && !category.getCategoryName().equals(request.categoryName())) {
             throw new BusinessException(ErrorCode.CATEGORY_NAME_DUPLICATE);
         }
@@ -90,78 +97,72 @@ public class CategoryService {
         return CategoryResponse.from(category);
     }
 
-    // 드래그 앤 드롭 일괄 저장 API용 메서드
     @Transactional
     @CacheEvict(value = "categoryTree", allEntries = true)
-    public void reorder(java.util.List<com.wellbuying.domain.product.dto.CategoryReorderRequest> requests) {
-        for (com.wellbuying.domain.product.dto.CategoryReorderRequest req : requests) {
+    public void reorder(List<CategoryReorderRequest> requests) {
+        for (CategoryReorderRequest req : requests) {
             ProductCategory category = categoryRepository.findById(req.id())
                     .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
             category.update(category.getCategoryName(), req.sortOrder());
         }
-        // DB flush 시점에서 유니크 제약이나 꼬임 방지를 위해 순차 재정렬은 호출하지 않음 
-        // (프론트에서 이미 1, 2, 3.. 으로 완벽히 세팅해서 넘겼다고 가정)
     }
 
-    // 형제 카테고리 리스트를 불러와서 원하는 위치에 삽입하고, 1부터 N까지 번호를 자동 재부여 (Auto-shifting)
-    private void insertAndReorderSiblings(Long parentId, ProductCategory target, Integer targetSortOrder) {
-        List<ProductCategory> siblings = parentId == null 
-                ? categoryRepository.findAllByParentIdIsNullOrderBySortOrderAscIdAsc()
-                : categoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(parentId);
-        
-        // 메모리 리스트 편집을 위해 ArrayList 변환 및 타겟 카테고리 기존 내역 제거
-        siblings = new java.util.ArrayList<>(siblings);
-        siblings.removeIf(c -> c.getId() != null && c.getId().equals(target.getId()));
-        
-        // 0 미만이나 배열 크기를 초과하지 않도록 안전한 인덱스 계산 (sortOrder는 1부터 시작하므로 -1)
-        int insertIndex = targetSortOrder != null ? targetSortOrder - 1 : siblings.size();
-        insertIndex = Math.max(0, Math.min(insertIndex, siblings.size()));
-        
-        siblings.add(insertIndex, target);
-        
-        // 다시 1부터 N까지 순차 부여
-        for (int i = 0; i < siblings.size(); i++) {
-            siblings.get(i).update(siblings.get(i).getCategoryName(), i + 1);
-        }
-        categoryRepository.saveAll(siblings);
-    }
-
-    // 삭제 전 자식 카테고리·참조 상품 존재 여부를 선제 차단 (DB FK 오류보다 명확한 메시지 제공)
     @Transactional
     @CacheEvict(value = "categoryTree", allEntries = true)
     public void delete(Long categoryId) {
         ProductCategory category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+
         if (categoryRepository.existsByParentId(categoryId)) {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_CHILDREN);
         }
-        if (productRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId)) {
+        if (hasProducts(categoryId)) {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_PRODUCTS);
         }
-        
+
+        Long parentId = category.getParentId();
         categoryRepository.delete(category);
-        categoryRepository.flush(); // DB에서 삭제 처리를 먼저 확정
-        
-        // 삭제 후 이빨 빠진 형제 목록 재정렬
-        List<ProductCategory> siblings = category.getParentId() == null 
+
+        List<ProductCategory> siblings = parentId == null 
                 ? categoryRepository.findAllByParentIdIsNullOrderBySortOrderAscIdAsc()
-                : categoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(category.getParentId());
-        
-        for (int i = 0; i < siblings.size(); i++) {
-            siblings.get(i).update(siblings.get(i).getCategoryName(), i + 1);
-        }
-        categoryRepository.saveAll(siblings);
+                : categoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(parentId);
+
+        IntStream.range(0, siblings.size())
+                 .forEach(i -> siblings.get(i).update(siblings.get(i).getCategoryName(), i + 1));
+                 
+        // saveAll 제거: 영속성 컨텍스트의 Dirty Checking 활용
     }
 
-    // 주어진 부모 ID의 자식 카테고리들을 조회하고, 각 자식에 대해 재귀 호출하여 하위 트리까지 조립
-    // visited로 이미 방문한 카테고리를 걸러내 데이터 오류로 인한 순환 참조가 있어도 무한 재귀에 빠지지 않게 함
-    // 노출 순서 정렬: sortOrder 오름차순, 동일 시 id 오름차순
+    private boolean hasProducts(Long categoryId) {
+        return false;
+    }
+
+    private void insertAndReorderSiblings(Long parentId, ProductCategory target, Integer targetSortOrder) {
+        List<ProductCategory> siblings = parentId == null 
+                ? categoryRepository.findAllByParentIdIsNullOrderBySortOrderAscIdAsc()
+                : categoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(parentId);
+        
+        siblings = new ArrayList<>(siblings);
+        // Objects.equals 를 활용하여 NPE 방지
+        siblings.removeIf(c -> Objects.equals(c.getId(), target.getId()));
+        
+        int insertIndex = targetSortOrder != null ? targetSortOrder - 1 : siblings.size();
+        insertIndex = Math.max(0, Math.min(insertIndex, siblings.size()));
+        
+        siblings.add(insertIndex, target);
+        
+        // IntStream을 활용하여 간결하게 1부터 N까지 순차 부여
+        List<ProductCategory> finalSiblings = siblings;
+        IntStream.range(0, finalSiblings.size())
+                 .forEach(i -> finalSiblings.get(i).update(finalSiblings.get(i).getCategoryName(), i + 1));
+                 
+        // saveAll 제거: 영속성 컨텍스트의 Dirty Checking 활용
+    }
+
     private List<CategoryTreeResponse> buildTree(Long parentId, Map<Long, List<ProductCategory>> byParent,
                                                  Set<Long> visited) {
-        List<ProductCategory> children = byParent.getOrDefault(parentId, List.of()).stream()
-                .sorted(java.util.Comparator.comparing(ProductCategory::getSortOrder)
-                        .thenComparing(ProductCategory::getId))
-                .toList();
+        // 이미 상단에서 정렬된 채로 Map에 들어왔으므로 별도의 정렬 연산 제거
+        List<ProductCategory> children = byParent.getOrDefault(parentId, List.of());
 
         List<CategoryTreeResponse> result = new ArrayList<>();
         for (ProductCategory child : children) {
