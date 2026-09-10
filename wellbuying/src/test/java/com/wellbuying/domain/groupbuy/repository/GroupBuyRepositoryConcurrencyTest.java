@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.wellbuying.AbstractIntegrationTest;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import java.time.LocalDateTime;
@@ -43,8 +44,10 @@ class GroupBuyRepositoryConcurrencyTest extends AbstractIntegrationTest {
     void 동시에_여러_번_증가시켜도_유실_없이_정확히_합산된다() throws InterruptedException {
         Member producer = memberRepository.save(
                 Member.signUp("concurrency-" + System.nanoTime() + "@example.com", "encoded-password", "생산자"));
-        GroupBuy groupBuy = groupBuyRepository.save(GroupBuy.create(1L, producer.getId(), "제목",
-                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1), 1, 1_000));
+        GroupBuy groupBuy = GroupBuy.create(1L, producer.getId(), "제목",
+                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1), 1, 1_000);
+        groupBuy.start();
+        groupBuy = groupBuyRepository.save(groupBuy);
         Long groupBuyId = groupBuy.getId();
 
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
@@ -55,7 +58,8 @@ class GroupBuyRepositoryConcurrencyTest extends AbstractIntegrationTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    transactionTemplate.executeWithoutResult(status -> groupBuyRepository.increaseQuantity(groupBuyId, 1));
+                    transactionTemplate.executeWithoutResult(status -> groupBuyRepository.increaseQuantity(groupBuyId, 1,
+                            GroupBuyStatus.ONGOING, LocalDateTime.now()));
                 } catch (Throwable t) {
                     errors.add(t);
                 } finally {

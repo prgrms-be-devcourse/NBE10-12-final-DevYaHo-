@@ -159,7 +159,7 @@ public class GroupBuySeedRunner implements ApplicationRunner {
                 .filter(category -> category.getCategoryName().equals(name))
                 .map(ProductCategory::getId)
                 .findFirst()
-                .orElseGet(() -> productCategoryRepository.save(ProductCategory.create(null, name)).getId()));
+                .orElseGet(() -> productCategoryRepository.save(ProductCategory.create(null, name, 0)).getId()));
     }
 
     // 상품명은 프론트 seedCatalog.ts의 8개 장식 항목 키와 정확히 같은 문자열이어야 한다 -

@@ -151,6 +151,7 @@ export default function DealDetailPage() {
           address: newAddress.trim(),
           addressDetail: newAddressDetail.trim() || undefined,
           zipcode: newZipcode.trim(),
+          isDefault: false,
         });
         setAddresses((prev) => [created, ...prev]);
         setSelectedAddressId(created.id);

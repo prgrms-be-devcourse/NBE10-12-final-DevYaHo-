@@ -15,6 +15,7 @@ import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import java.time.LocalDateTime;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchOutboxDispatcher.DispatchFailure;
 import java.util.List;
@@ -47,6 +48,9 @@ class ProductSearchOutboxRelayTest {
 
     @Mock
     private GroupBuyService groupBuyService;
+
+    @Mock
+    private ProductCountRepository productCountRepository;
 
     @InjectMocks
     private ProductSearchOutboxRelay relay;
@@ -90,6 +94,7 @@ class ProductSearchOutboxRelayTest {
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
         when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         relay.relay();
 
@@ -106,6 +111,7 @@ class ProductSearchOutboxRelayTest {
         when(outboxRepository.findByPublishedAtIsNullAndRetryCountLessThanOrderByIdAsc(anyInt(), any()))
                 .thenReturn(List.of(event));
         when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         relay.relay();
 
@@ -129,6 +135,7 @@ class ProductSearchOutboxRelayTest {
         when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(status);
         when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         relay.relay();
 
@@ -150,6 +157,7 @@ class ProductSearchOutboxRelayTest {
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
         when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
         when(productSearchRepository.save(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         relay.relay();
@@ -175,6 +183,7 @@ class ProductSearchOutboxRelayTest {
         GroupBuyProductSummaryResponse summary =
                 new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of(1L, summary));
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         relay.relay();
 

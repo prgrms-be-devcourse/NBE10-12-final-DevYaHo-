@@ -17,4 +17,10 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     // 주문 상세 - 본인 소유가 아니면 없는 것으로 취급(404)해 주문 존재 여부를 노출하지 않는다
     Optional<Order> findByOrderIdAndMemberId(String orderId, Long memberId);
+
+    // 알림 클릭 시 groupBuyId만 갖고 해당 주문을 찾기 위한 용도. 재시도(PaymentRetryService)로 실패한
+    // 주문을 이력으로 남긴 채 새 주문을 추가로 만들 수 있어 참여 1건당 주문이 여러 건일 수 있으므로,
+    // 가장 최근 것 1건을 가져온다 - DB 유니크 제약도 실패 건은 제외하고 참여당 1건만 강제한다(V39 참고)
+    Optional<Order> findFirstByGroupBuyParticipantIdAndMemberIdOrderByCreatedAtDesc(Long groupBuyParticipantId,
+            Long memberId);
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, ShoppingBag } from "lucide-react";
 import { AccountShell } from "@/components/account/AccountShell";
 import { OrderDetailModal } from "@/components/consumer/OrderDetailModal";
@@ -18,13 +19,24 @@ import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order/orderStatus";
 const PAGE_SIZE = 10;
 
 function OrdersContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<OrderSummaryResponse[]>([]);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  // 알림을 클릭해 들어온 경우 ?orderId=로 바로 상세를 연다
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(() => searchParams.get("orderId"));
+
+  // 이 페이지를 이미 보고 있는 상태에서 알림(NotificationBell은 전역이라 어디서든 클릭 가능)을 또 클릭하면
+  // 같은 라우트라 리마운트 없이 쿼리스트링만 바뀌므로, 위 초기값만으로는 새 orderId를 못 따라간다 -
+  // searchParams 변화를 별도로 구독해 갱신한다
+  useEffect(() => {
+    const orderId = searchParams.get("orderId");
+    if (orderId) setSelectedOrderId(orderId);
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +60,35 @@ function OrdersContent() {
       cancelled = true;
     };
   }, []);
+
+  // 재시도로 새 주문이 생겼을 때 목록에 반영하기 위한 새로고침 - 사용자 액션(버튼 클릭)에 대한 응답이라
+  // 마운트 시 fetch와 달리 언마운트 취소 가드는 필요 없다 (loadMore와 동일한 성격)
+  async function refreshOrders() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listMyOrders({ page: 0, size: PAGE_SIZE });
+      setOrders(res.content);
+      setPage(res.page.number);
+      setHasNext(res.page.number + 1 < res.page.totalPages);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "결제 내역을 불러오지 못했어요.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 알림을 타고 들어와 ?orderId=가 붙은 채로 모달을 닫으면, URL에 쿼리스트링이 남아 새로고침 시
+  // 같은 모달이 다시 열려버린다 - 닫을 때 orderId만 지우고 나머지 쿼리파라미터(있다면)는 유지한다.
+  // useSearchParams()는 읽기 전용이라 URLSearchParams로 복제한 뒤 지운다
+  function closeModal() {
+    setSelectedOrderId(null);
+    if (searchParams.get("orderId")) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("orderId");
+      router.replace(params.toString() ? `/orders?${params.toString()}` : "/orders");
+    }
+  }
 
   async function loadMore() {
     setLoadingMore(true);
@@ -117,7 +158,11 @@ function OrdersContent() {
       <OrderDetailModal
         orderId={selectedOrderId}
         open={selectedOrderId !== null}
-        onClose={() => setSelectedOrderId(null)}
+        onClose={closeModal}
+        onRetried={(newOrderId) => {
+          setSelectedOrderId(newOrderId);
+          void refreshOrders();
+        }}
       />
     </div>
   );
@@ -126,7 +171,9 @@ function OrdersContent() {
 export default function OrdersPage() {
   return (
     <AccountShell>
-      <OrdersContent />
+      <Suspense fallback={<div className="py-9 text-sm text-wb-secondary">불러오는 중...</div>}>
+        <OrdersContent />
+      </Suspense>
     </AccountShell>
   );
 }

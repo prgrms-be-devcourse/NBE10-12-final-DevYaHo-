@@ -24,6 +24,7 @@ import com.wellbuying.domain.product.dto.ProductDetailResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
+import com.wellbuying.domain.product.search.ProductAutocompleteResponse;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.service.ProductImageUploadService;
 import com.wellbuying.domain.product.service.ProductSearchService;
@@ -182,6 +183,21 @@ class ProductControllerTest {
         mockMvc.perform(get("/api/products/search")
                         .param("keyword", "비타민")
                         .param("sort", "INVALID_TYPE"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void autocomplete_키워드로_자동완성_목록을_반환한다() throws Exception {
+        when(productSearchService.autocomplete("비타민")).thenReturn(List.of(new ProductAutocompleteResponse(1L, "비타민C")));
+
+        mockMvc.perform(get("/api/products/search/autocomplete").param("keyword", "비타민"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productName").value("비타민C"));
+    }
+
+    @Test
+    void autocomplete_빈_키워드로_호출하면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search/autocomplete").param("keyword", ""))
                 .andExpect(status().isBadRequest());
     }
 

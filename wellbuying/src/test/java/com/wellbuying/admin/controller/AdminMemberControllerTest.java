@@ -71,6 +71,8 @@ class AdminMemberControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("content[].status").description("상태"),
                                 fieldWithPath("content[].phoneNumber").description("전화번호").optional(),
                                 fieldWithPath("content[].createdAt").description("가입 일시"),
+                                fieldWithPath("content[].sellerId").description("셀러 ID (role이 SELLER가 아니면 null)").optional(),
+                                fieldWithPath("content[].sellerStatus").description("셀러 상태 (role이 SELLER가 아니면 null)").optional(),
                                 fieldWithPath("page.size").description("페이지 크기"),
                                 fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
                                 fieldWithPath("page.totalElements").description("전체 개수"),

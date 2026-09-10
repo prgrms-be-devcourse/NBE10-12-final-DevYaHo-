@@ -15,6 +15,7 @@ import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import java.time.LocalDateTime;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,9 @@ class ProductSearchReconcileSchedulerTest {
     @Mock
     private GroupBuyService groupBuyService;
 
+    @Mock
+    private ProductCountRepository productCountRepository;
+
     private SimpleMeterRegistry meterRegistry;
     private ProductSearchReconcileScheduler scheduler;
 
@@ -48,7 +52,7 @@ class ProductSearchReconcileSchedulerTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         scheduler = new ProductSearchReconcileScheduler(
-                productRepository, productSearchRepository, groupBuyService, meterRegistry);
+                productRepository, productSearchRepository, groupBuyService, productCountRepository, meterRegistry);
     }
 
     @Test
@@ -66,6 +70,7 @@ class ProductSearchReconcileSchedulerTest {
                 new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L, 2L))).thenReturn(Map.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(3L))).thenReturn(Map.of(3L, summary));
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
         scheduler.reconcile();
 
@@ -98,11 +103,71 @@ class ProductSearchReconcileSchedulerTest {
         when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
                 ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
         when(groupBuyService.getActiveSummariesByProductIds(any())).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
         when(productSearchRepository.saveAll(any())).thenThrow(new RuntimeException("OpenSearch 연결 실패"));
 
         assertThatCode(() -> scheduler.reconcile()).doesNotThrowAnyException();
         assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("wellbuying.search.reconcile.last_success_timestamp_seconds").gauge().value()).isEqualTo(0.0);
+    }
+
+    @Test
+    void reconcile_실패_후_재실행하면_마지막_성공_지점부터_이어서_처리한다() {
+        Product p1 = mockProduct(1L);
+        Product p2 = mockProduct(2L);
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 1L, LIMIT)).thenReturn(List.of(p2));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 2L, LIMIT)).thenReturn(List.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(2L))).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
+        // 1차: p1 saveAll 성공 → resumeFromId=1, p2 saveAll 실패 / 2차: p2 saveAll 성공
+        when(productSearchRepository.saveAll(any()))
+                .thenReturn(List.of())
+                .thenThrow(new RuntimeException("OpenSearch 연결 실패"))
+                .thenReturn(List.of());
+
+        scheduler.reconcile(); // 1차: 0L→p1 성공(resumeFromId=1) → 1L→p2 실패
+        scheduler.reconcile(); // 2차: resumeFromId=1에서 이어서 시작
+
+        // findBy(1L)은 1차 1회 + 2차 1회 = 2회, findBy(0L)은 1차 1회만(2차는 0L에서 시작하지 않음)
+        verify(productRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 1L, LIMIT);
+        verify(productRepository, org.mockito.Mockito.times(1))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 0L, LIMIT);
+    }
+
+    @Test
+    void reconcile_3회_연속_실패하면_resumeFromId를_강제_리셋한다() {
+        Product p1 = mockProduct(1L);
+        Product p2 = mockProduct(2L);
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 0L, LIMIT)).thenReturn(List.of(p1));
+        when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
+                ProductStatus.APPROVED, 1L, LIMIT))
+                .thenReturn(List.of(p2)).thenReturn(List.of(p2)).thenReturn(List.of(p2)).thenReturn(List.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of());
+        when(groupBuyService.getActiveSummariesByProductIds(List.of(2L))).thenReturn(Map.of());
+        when(productCountRepository.findAllById(any())).thenReturn(List.of());
+        when(productSearchRepository.saveAll(any()))
+                .thenReturn(List.of())                               // 1차: p1 성공
+                .thenThrow(new RuntimeException("영구 실패"))         // 1차: p2 실패(1회)
+                .thenThrow(new RuntimeException("영구 실패"))         // 2차: p2 실패(2회)
+                .thenThrow(new RuntimeException("영구 실패"))         // 3차: p2 실패(3회) → 리셋
+                .thenReturn(List.of());                              // 4차: p1 성공
+
+        scheduler.reconcile(); // 1차: 0L→p1 성공(resumeFromId=1) → 1L→p2 실패(1회)
+        scheduler.reconcile(); // 2차: 1L→p2 실패(2회)
+        scheduler.reconcile(); // 3차: 1L→p2 실패(3회) → resumeFromId=0으로 강제 리셋
+        scheduler.reconcile(); // 4차: 0L→p1 성공 → 완주
+
+        assertThat(meterRegistry.get("wellbuying.search.reconcile.failures").counter().count()).isEqualTo(3.0);
+        // 4차에서 리셋 후 0L부터 재시작: findBy(0L)은 1차 1회 + 4차 1회 = 2회
+        verify(productRepository, org.mockito.Mockito.times(2))
+                .findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(ProductStatus.APPROVED, 0L, LIMIT);
     }
 
     private Product mockProduct(Long id) {

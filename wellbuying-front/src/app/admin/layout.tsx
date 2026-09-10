@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, UserCheck, Users, Wallet } from "lucide-react";
+import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, Tag, UserCheck, Wallet } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { listAdminProducts } from "@/lib/api/admin";
@@ -29,11 +29,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const navItems: NavItem[] = [
     { href: "/admin/dashboard", label: "대시보드", icon: LayoutDashboard },
+    { href: "/admin/reviews", label: "상품 관리", icon: ShieldCheck, badge: pendingReviewCount },
     { href: "/admin/deals", label: "공동구매 관리", icon: Package },
-    { href: "/admin/reviews", label: "상품 심사", icon: ShieldCheck, badge: pendingReviewCount },
-    { href: "/admin/sellers", label: "판매자 승인", icon: UserCheck },
+    { href: "/admin/sellers", label: "회원 관리", icon: UserCheck },
     { href: "/admin/settlements", label: "정산 관리", icon: Wallet, badge: readySettlementCount },
-    { href: "/admin/members", label: "회원 현황", icon: Users },
+    { href: "/admin/categories", label: "카테고리 관리", icon: Tag },
     { href: "/profile", label: "내 정보", icon: Settings },
   ];
 
