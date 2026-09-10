@@ -7,6 +7,7 @@ import com.wellbuying.domain.product.dto.CategoryTreeResponse;
 import com.wellbuying.domain.product.dto.CategoryUpdateRequest;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
+import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.ArrayList;
@@ -30,11 +31,11 @@ public class CategoryService {
     private static final Long ROOT = -1L;
 
     private final ProductCategoryRepository categoryRepository;
-    // 상품 서비스 등과의 결합도를 낮추기 위해 상품 존재 여부를 확인하는 별도의 컴포넌트나 레포지토리를 참조할 수 있음
-    // (현재는 임시로 항상 false를 반환하는 스텁 메서드 사용)
+    private final ProductRepository productRepository;
 
-    public CategoryService(ProductCategoryRepository categoryRepository) {
+    public CategoryService(ProductCategoryRepository categoryRepository, ProductRepository productRepository) {
         this.categoryRepository = categoryRepository;
+        this.productRepository = productRepository;
     }
 
     @Cacheable(value = "categoryTree")
@@ -135,7 +136,7 @@ public class CategoryService {
     }
 
     private boolean hasProducts(Long categoryId) {
-        return false;
+        return productRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId);
     }
 
     private void insertAndReorderSiblings(Long parentId, ProductCategory target, Integer targetSortOrder) {

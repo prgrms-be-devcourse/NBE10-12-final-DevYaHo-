@@ -4,11 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wellbuying.AbstractIntegrationTest;
+import com.wellbuying.domain.member.entity.Member;
+import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.dto.CategoryCreateRequest;
 import com.wellbuying.domain.product.dto.CategoryResponse;
 import com.wellbuying.domain.product.dto.CategoryUpdateRequest;
+import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
+import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,12 @@ class CategoryServiceCrudTest extends AbstractIntegrationTest {
 
     @Autowired
     private ProductCategoryRepository categoryRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private MemberRepository memberRepository;
 
     // ── create ─────────────────────────────────────────────────────────────────
 
@@ -156,5 +166,18 @@ class CategoryServiceCrudTest extends AbstractIntegrationTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.CATEGORY_HAS_CHILDREN));
+    }
+
+    // 카테고리를 참조하는 상품이 있는 경우 삭제 차단 → CATEGORY_HAS_PRODUCTS
+    @Test
+    void delete_상품_존재_시_예외() {
+        Member seller = memberRepository.save(Member.signUp("seller@wellbuying.com", "Pass1234!", "판매자"));
+        ProductCategory category = categoryRepository.save(ProductCategory.create(null, "식품", 1));
+        productRepository.save(Product.register(seller.getId(), category.getId(), "사과", "신선한 사과", 1000, "http://image.url"));
+
+        assertThatThrownBy(() -> categoryService.delete(category.getId()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.CATEGORY_HAS_PRODUCTS));
     }
 }
