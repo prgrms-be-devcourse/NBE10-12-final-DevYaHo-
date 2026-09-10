@@ -1,11 +1,8 @@
 package com.wellbuying.domain.payment.service;
 
-import com.wellbuying.domain.order.entity.Order;
 import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
-import com.wellbuying.domain.payment.event.PaymentCompletedEvent;
-import com.wellbuying.domain.payment.event.PaymentEventPublisher;
-import com.wellbuying.domain.payment.event.PaymentFailedEvent;
+import com.wellbuying.domain.payment.event.PaymentEventContext;
 import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
@@ -22,7 +19,8 @@ import org.springframework.stereotype.Component;
 // 성사 이벤트 1건의 결제 처리 흐름을 조립한다.
 // 이 클래스 자체에는 @Transactional을 걸지 않는다 - PG 호출을 트랜잭션 밖에 두는 것이 이 설계의 핵심이라,
 // 트랜잭션 구간은 전부 PaymentTransactionService의 메서드 호출로만 열리고 닫힌다.
-// 이벤트 발행도 트랜잭션 메서드가 반환된 뒤(=커밋 후)에 하므로 별도의 afterCommit 훅이 필요 없다
+// 결제 완료/실패 이벤트 발행도 그 트랜잭션 메서드 안에서 아웃박스 행으로 남기므로(상태 전이와 원자적으로 묶기 위함),
+// 이 클래스는 더 이상 직접 발행하지 않는다. 03-outbox-poller.md 참고
 @Component
 public class PaymentProcessor {
 
@@ -33,18 +31,15 @@ public class PaymentProcessor {
     private final PaymentConsumedEventRepository paymentConsumedEventRepository;
     private final PaymentGateway paymentGateway;
     private final BillingKeyProvider billingKeyProvider;
-    private final PaymentEventPublisher paymentEventPublisher;
 
     public PaymentProcessor(PaymentTransactionService paymentTransactionService,
             PaymentFailureRecorder paymentFailureRecorder, PaymentConsumedEventRepository paymentConsumedEventRepository,
-            PaymentGateway paymentGateway, BillingKeyProvider billingKeyProvider,
-            PaymentEventPublisher paymentEventPublisher) {
+            PaymentGateway paymentGateway, BillingKeyProvider billingKeyProvider) {
         this.paymentTransactionService = paymentTransactionService;
         this.paymentFailureRecorder = paymentFailureRecorder;
         this.paymentConsumedEventRepository = paymentConsumedEventRepository;
         this.paymentGateway = paymentGateway;
         this.billingKeyProvider = billingKeyProvider;
-        this.paymentEventPublisher = paymentEventPublisher;
     }
 
     public void process(GroupBuyCompletedMessage message) {
@@ -63,15 +58,18 @@ public class PaymentProcessor {
             return;
         }
 
+        // 배송지 없음 등 승인을 시도조차 하지 않는 실패 - prepare 트랜잭션 안에서 이미 실패 이벤트까지 기록됐다
         if (preparation.failed()) {
-            publishFailed(message, preparation.paymentId(), preparation.failureReason());
             return;
         }
 
+        // 결제 이벤트에 실을, 엔티티만으로는 알 수 없는 값(공동구매 식별자·주최자)을 성사 메시지에서 뽑아둔다
+        PaymentEventContext eventContext = new PaymentEventContext(message.groupBuyId(), message.producerId());
+
         Optional<BillingCredential> credential = billingKeyProvider.findBillingKey(message.memberId());
         if (credential.isEmpty()) {
-            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId());
-            publishFailed(message, preparation.paymentId(), "등록된 빌링키가 없음");
+            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId(), eventContext,
+                    "등록된 빌링키가 없음");
             return;
         }
 
@@ -80,26 +78,21 @@ public class PaymentProcessor {
             result = paymentGateway.approve(toApproveCommand(message, credential.get(), preparation.orderId()));
         } catch (PgApprovalException e) {
             log.warn("PG 승인 실패 - eventId={}, paymentId={}", message.eventId(), preparation.paymentId(), e);
-            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId());
-            publishFailed(message, preparation.paymentId(), e.getMessage());
+            paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId(), eventContext,
+                    e.getMessage());
             return;
         }
 
-        Order order;
         try {
-            order = paymentTransactionService.completeApproval(preparation.paymentId(), preparation.orderId(), result);
+            paymentTransactionService.completeApproval(preparation.paymentId(), preparation.orderId(), eventContext,
+                    result);
         } catch (OrderCreationException e) {
             // 여기서부터는 실제 결제가 끝난 뒤다 - 되돌리지 않고 기록만 남겨 사람이 처리한다 (보상 트랜잭션 미채택)
             recordApprovedButNotPersisted(PaymentFailureType.ORDER_CREATE_FAILED, message, preparation, result, e);
-            return;
         } catch (RuntimeException e) {
             recordApprovedButNotPersisted(PaymentFailureType.APPROVE_RESULT_PERSIST_FAILED, message, preparation,
                     result, e);
-            return;
         }
-
-        paymentEventPublisher.publishCompleted(
-                PaymentCompletedEvent.of(order, message.groupBuyId(), message.producerId(), result.pgTransactionId()));
     }
 
     private PgApproveCommand toApproveCommand(GroupBuyCompletedMessage message, BillingCredential credential,
@@ -121,10 +114,5 @@ public class PaymentProcessor {
         log.error("PG 승인 후 DB 반영 실패 - 수동 확인 필요. eventId={}, paymentId={}, pgTransactionId={}",
                 message.eventId(), preparation.paymentId(), result.pgTransactionId(), cause);
         paymentFailureRecorder.record(failureType, message, preparation.paymentId(), result.pgTransactionId(), cause);
-    }
-
-    private void publishFailed(GroupBuyCompletedMessage message, Long paymentId, String reason) {
-        paymentEventPublisher.publishFailed(PaymentFailedEvent.of(paymentId, message.groupBuyId(), message.partId(),
-                message.memberId(), message.totalAmount(), reason));
     }
 }
