@@ -2,17 +2,15 @@ package com.wellbuying.domain.payment.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.wellbuying.domain.order.entity.Order;
 import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.event.GroupBuyCompletedMessage;
-import com.wellbuying.domain.payment.event.PaymentCompletedEvent;
-import com.wellbuying.domain.payment.event.PaymentEventPublisher;
-import com.wellbuying.domain.payment.event.PaymentFailedEvent;
+import com.wellbuying.domain.payment.event.PaymentEventContext;
 import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
@@ -41,6 +39,8 @@ class PaymentProcessorTest {
     private static final String ADDRESS = "서울시 강남구 1 (06000)";
     private static final String PG_TRANSACTION_ID = "pay_abc";
     private static final String ORDER_ID = "gb-11111111-2222-3333-4444-555555555555";
+    // message의 groupBuyId=1, producerId=3 (아래 setUp의 생성자 인자 순서와 일치)
+    private static final PaymentEventContext EVENT_CONTEXT = new PaymentEventContext(1L, 3L);
 
     @Mock
     private PaymentTransactionService paymentTransactionService;
@@ -56,9 +56,6 @@ class PaymentProcessorTest {
 
     @Mock
     private BillingKeyProvider billingKeyProvider;
-
-    @Mock
-    private PaymentEventPublisher paymentEventPublisher;
 
     @InjectMocks
     private PaymentProcessor paymentProcessor;
@@ -89,16 +86,14 @@ class PaymentProcessorTest {
     }
 
     @Test
-    @DisplayName("정상 흐름 - 승인 후 미리 만들어 둔 주문이 PAID로 바뀌고 결제 완료 이벤트가 발행된다")
+    @DisplayName("정상 흐름 - 승인 결과 반영을 completeApproval 트랜잭션에 위임한다 (완료 이벤트 발행도 그 안에서 일어난다)")
     void 정상_흐름() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        Order order = Order.pending(PAYMENT_ID, PART_ID, MEMBER_ID, ADDRESS, 10000);
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result)).thenReturn(order);
 
         paymentProcessor.process(message);
 
-        verify(paymentEventPublisher).publishCompleted(any(PaymentCompletedEvent.class));
+        verify(paymentTransactionService).completeApproval(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, result);
         verifyNoInteractions(paymentFailureRecorder);
     }
 
@@ -109,7 +104,7 @@ class PaymentProcessorTest {
 
         paymentProcessor.process(message);
 
-        verifyNoInteractions(paymentTransactionService, paymentEventPublisher);
+        verifyNoInteractions(paymentTransactionService);
     }
 
     @Test
@@ -123,11 +118,10 @@ class PaymentProcessorTest {
         paymentProcessor.process(message);
 
         verify(paymentGateway, never()).approve(any());
-        verifyNoInteractions(paymentEventPublisher);
     }
 
     @Test
-    @DisplayName("이벤트에 배송지가 없으면 PG 승인을 시도하지 않는다 - 돈이 나가기 전에 걸러야 하므로")
+    @DisplayName("이벤트에 배송지가 없으면 PG 승인을 시도하지 않는다 - prepare 트랜잭션 안에서 실패 이벤트까지 기록된다")
     void 배송지_없음() {
         when(paymentConsumedEventRepository.existsByEventId(EVENT_ID)).thenReturn(false);
         when(paymentGateway.provider()).thenReturn("TOSS");
@@ -137,7 +131,7 @@ class PaymentProcessorTest {
         paymentProcessor.process(message);
 
         verify(paymentGateway, never()).approve(any());
-        verify(paymentEventPublisher).publishFailed(any(PaymentFailedEvent.class));
+        verify(paymentTransactionService, never()).markFailed(any(), any(), any(), any());
         verifyNoInteractions(paymentFailureRecorder);
     }
 
@@ -150,8 +144,7 @@ class PaymentProcessorTest {
         paymentProcessor.process(message);
 
         verify(paymentGateway, never()).approve(any());
-        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID);
-        verify(paymentEventPublisher).publishFailed(any(PaymentFailedEvent.class));
+        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, "등록된 빌링키가 없음");
     }
 
     @Test
@@ -165,25 +158,23 @@ class PaymentProcessorTest {
 
         paymentProcessor.process(message);
 
-        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID);
-        verify(paymentEventPublisher).publishFailed(any(PaymentFailedEvent.class));
+        verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, "카드 한도 초과");
         // 승인이 안 됐으므로 수동 처리 대상이 아니다
         verifyNoInteractions(paymentFailureRecorder);
     }
 
     @Test
-    @DisplayName("승인 후 주문 반영이 깨지면 ORDER_CREATE_FAILED로 기록하고 완료 이벤트를 발행하지 않는다")
+    @DisplayName("승인 후 주문 반영이 깨지면 ORDER_CREATE_FAILED로 기록한다")
     void 승인_후_주문_반영_실패() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result))
-                .thenThrow(new OrderCreationException("승인 전에 만들어 둔 주문을 찾지 못함"));
+        doThrow(new OrderCreationException("승인 전에 만들어 둔 주문을 찾지 못함"))
+                .when(paymentTransactionService).completeApproval(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, result);
 
         paymentProcessor.process(message);
 
         verify(paymentFailureRecorder).record(eq(PaymentFailureType.ORDER_CREATE_FAILED), eq(message), eq(PAYMENT_ID),
                 eq(PG_TRANSACTION_ID), any(Throwable.class));
-        verify(paymentEventPublisher, never()).publishCompleted(any());
     }
 
     @Test
@@ -191,13 +182,12 @@ class PaymentProcessorTest {
     void 승인_후_커밋_실패() {
         givenPrepared();
         PgApproveResult result = givenApproved();
-        when(paymentTransactionService.completeApproval(PAYMENT_ID, ORDER_ID, result))
-                .thenThrow(new DataIntegrityViolationException("commit failed"));
+        doThrow(new DataIntegrityViolationException("commit failed"))
+                .when(paymentTransactionService).completeApproval(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, result);
 
         paymentProcessor.process(message);
 
         verify(paymentFailureRecorder).record(eq(PaymentFailureType.APPROVE_RESULT_PERSIST_FAILED), eq(message),
                 eq(PAYMENT_ID), eq(PG_TRANSACTION_ID), any(Throwable.class));
-        verify(paymentEventPublisher, never()).publishCompleted(any());
     }
 }
