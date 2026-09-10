@@ -86,6 +86,15 @@ spring:
 opensearch:
   uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
 
+settlement:
+  # 플랫폼 수수료율 - 정산 확정 시 총 매출에 곱해 원 단위 버림(FLOOR)으로 수수료를 계산한다
+  platform-fee-rate: 0.05
+  confirm:
+    # 재결제 유예 종료(공동구매 finalized_at + grace-period-days)를 넘긴 건을 모아 정산 확정하는 배치 주기
+    fixed-delay-ms: 3600000
+    # 재결제 유예기간(일). 이 기간이 지나면 정산을 확정하고 이후 역정산은 하지 않는다
+    grace-period-days: 3
+
 management:
   endpoints:
     web:
