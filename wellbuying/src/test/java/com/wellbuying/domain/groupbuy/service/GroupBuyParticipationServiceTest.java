@@ -29,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @ExtendWith(MockitoExtension.class)
 class GroupBuyParticipationServiceTest {
@@ -44,6 +45,11 @@ class GroupBuyParticipationServiceTest {
 
     @Mock
     private BuyerAddressRepository buyerAddressRepository;
+
+    // participate()가 TransactionTemplate으로 STEP1/STEP3 트랜잭션 경계를 직접 잡으므로 필요 - 이 mock은
+    // getTransaction()/commit()/rollback() 전부 기본 no-op(null 반환)이라 별도 스텁 없이도 콜백이 그대로 실행된다
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private GroupBuyParticipationService groupBuyParticipationService;
