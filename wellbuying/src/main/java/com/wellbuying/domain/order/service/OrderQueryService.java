@@ -2,6 +2,7 @@ package com.wellbuying.domain.order.service;
 
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.order.dto.OrderDetailResponse;
@@ -86,5 +87,17 @@ public class OrderQueryService {
         Payment payment = paymentRepository.findById(order.getPaymentId()).orElse(null);
 
         return OrderDetailResponse.of(order, part, groupBuy, product, payment);
+    }
+
+    // 알림은 groupBuyId만 들고 있으므로, 알림을 클릭했을 때 이동할 주문을 역으로 찾는다.
+    // 참여(CONFIRMED) 1건당 주문이 1건만 만들어지므로 유일하게 정해진다
+    @Transactional(readOnly = true)
+    public String getMyOrderIdByGroupBuy(Long memberId, Long groupBuyId) {
+        GroupBuyPart part = groupBuyPartRepository
+                .findByGroupBuyIdAndMemberIdAndStatus(groupBuyId, memberId, GroupBuyPartStatus.CONFIRMED)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        Order order = orderRepository.findByGroupBuyParticipantIdAndMemberId(part.getId(), memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        return order.getOrderId();
     }
 }

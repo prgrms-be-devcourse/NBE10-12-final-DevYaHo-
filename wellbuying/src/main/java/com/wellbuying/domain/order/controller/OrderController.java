@@ -2,6 +2,7 @@ package com.wellbuying.domain.order.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.order.dto.OrderDetailResponse;
+import com.wellbuying.domain.order.dto.OrderIdResponse;
 import com.wellbuying.domain.order.dto.OrderSummaryResponse;
 import com.wellbuying.domain.order.service.OrderQueryService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -44,5 +45,13 @@ public class OrderController {
             @AuthenticationPrincipal AuthenticatedMember member,
             @PathVariable String orderId) {
         return ResponseEntity.ok(orderQueryService.getMyOrderDetail(member.memberId(), orderId));
+    }
+
+    @Operation(summary = "공동구매 ID로 내 주문 조회 - 알림을 클릭했을 때 해당 주문 상세로 이동하기 위한 용도")
+    @GetMapping("/me/by-group-buy/{groupBuyId}")
+    public ResponseEntity<OrderIdResponse> myOrderIdByGroupBuy(
+            @AuthenticationPrincipal AuthenticatedMember member,
+            @PathVariable Long groupBuyId) {
+        return ResponseEntity.ok(new OrderIdResponse(orderQueryService.getMyOrderIdByGroupBuy(member.memberId(), groupBuyId)));
     }
 }

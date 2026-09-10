@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.order.dto.OrderDetailResponse;
@@ -156,6 +157,42 @@ class OrderQueryServiceTest {
         when(orderRepository.findByOrderIdAndMemberId(any(), eq(MEMBER_ID))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().getMyOrderDetail(MEMBER_ID, "gb-someone-else"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+    }
+
+    @Test
+    void getMyOrderIdByGroupBuy는_참여자와_주문을_연쇄조회해_orderId를_돌려준다() {
+        Order order = order();
+        when(groupBuyPartRepository.findByGroupBuyIdAndMemberIdAndStatus(GROUP_BUY_ID, MEMBER_ID,
+                GroupBuyPartStatus.CONFIRMED)).thenReturn(Optional.of(part()));
+        when(orderRepository.findByGroupBuyParticipantIdAndMemberId(PART_ID, MEMBER_ID))
+                .thenReturn(Optional.of(order));
+
+        String orderId = service().getMyOrderIdByGroupBuy(MEMBER_ID, GROUP_BUY_ID);
+
+        assertThat(orderId).isEqualTo(order.getOrderId());
+    }
+
+    @Test
+    void getMyOrderIdByGroupBuy는_참여내역이_없으면_ORDER_NOT_FOUND() {
+        when(groupBuyPartRepository.findByGroupBuyIdAndMemberIdAndStatus(GROUP_BUY_ID, MEMBER_ID,
+                GroupBuyPartStatus.CONFIRMED)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().getMyOrderIdByGroupBuy(MEMBER_ID, GROUP_BUY_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+    }
+
+    @Test
+    void getMyOrderIdByGroupBuy는_참여는_있어도_주문이_없으면_ORDER_NOT_FOUND() {
+        when(groupBuyPartRepository.findByGroupBuyIdAndMemberIdAndStatus(GROUP_BUY_ID, MEMBER_ID,
+                GroupBuyPartStatus.CONFIRMED)).thenReturn(Optional.of(part()));
+        when(orderRepository.findByGroupBuyParticipantIdAndMemberId(PART_ID, MEMBER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().getMyOrderIdByGroupBuy(MEMBER_ID, GROUP_BUY_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ORDER_NOT_FOUND);

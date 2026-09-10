@@ -17,4 +17,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     // 주문 상세 - 본인 소유가 아니면 없는 것으로 취급(404)해 주문 존재 여부를 노출하지 않는다
     Optional<Order> findByOrderIdAndMemberId(String orderId, Long memberId);
+
+    // 알림 클릭 시 groupBuyId만 갖고 해당 주문을 찾기 위한 용도 - 참여 1건당 주문 1건이라 유일하게 정해진다
+    Optional<Order> findByGroupBuyParticipantIdAndMemberId(Long groupBuyParticipantId, Long memberId);
 }

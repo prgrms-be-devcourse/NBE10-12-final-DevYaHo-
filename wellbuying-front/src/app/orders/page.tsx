@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronRight, ShoppingBag } from "lucide-react";
 import { AccountShell } from "@/components/account/AccountShell";
 import { OrderDetailModal } from "@/components/consumer/OrderDetailModal";
@@ -18,13 +19,15 @@ import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order/orderStatus";
 const PAGE_SIZE = 10;
 
 function OrdersContent() {
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<OrderSummaryResponse[]>([]);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  // 알림을 클릭해 들어온 경우 ?orderId=로 바로 상세를 연다
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(() => searchParams.get("orderId"));
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +51,23 @@ function OrdersContent() {
       cancelled = true;
     };
   }, []);
+
+  // 재시도로 새 주문이 생겼을 때 목록에 반영하기 위한 새로고침 - 사용자 액션(버튼 클릭)에 대한 응답이라
+  // 마운트 시 fetch와 달리 언마운트 취소 가드는 필요 없다 (loadMore와 동일한 성격)
+  async function refreshOrders() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listMyOrders({ page: 0, size: PAGE_SIZE });
+      setOrders(res.content);
+      setPage(res.page.number);
+      setHasNext(res.page.number + 1 < res.page.totalPages);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "결제 내역을 불러오지 못했어요.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function loadMore() {
     setLoadingMore(true);
@@ -118,6 +138,10 @@ function OrdersContent() {
         orderId={selectedOrderId}
         open={selectedOrderId !== null}
         onClose={() => setSelectedOrderId(null)}
+        onRetried={(newOrderId) => {
+          setSelectedOrderId(newOrderId);
+          void refreshOrders();
+        }}
       />
     </div>
   );

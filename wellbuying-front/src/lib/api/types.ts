@@ -298,7 +298,7 @@ export type PageResponse<T> = {
   };
 };
 
-export type NotificationType = "GROUP_BUY_COMPLETED" | "GROUP_BUY_FAILED";
+export type NotificationType = "GROUP_BUY_COMPLETED" | "GROUP_BUY_FAILED" | "PAYMENT_COMPLETED" | "PAYMENT_FAILED";
 
 export type NotificationResponse = {
   id: number;

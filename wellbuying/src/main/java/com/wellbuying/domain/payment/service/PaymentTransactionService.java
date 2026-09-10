@@ -66,6 +66,27 @@ public class PaymentTransactionService {
         return PaymentPreparation.ready(payment.getId(), order.getOrderId());
     }
 
+    // 결제 실패 후 구매자가 직접 재시도할 때의 TX1 - 카프카 이벤트가 없으므로 이벤트 중복 방지 기록은 남기지 않고,
+    // 실패한 주문의 참여 건/배송지/금액을 그대로 이어받아 완전히 새로운 Payment/Order 쌍을 만든다.
+    // 실패했던 주문/결제 행은 손대지 않고 이력으로 남겨둔다
+    @Transactional
+    public PaymentPreparation prepareRetry(Order failedOrder, String pgProvider, String idempotencyKey) {
+        Payment payment = paymentRepository.save(Payment.ready(
+                failedOrder.getGroupBuyParticipantId(),
+                failedOrder.getMemberId(),
+                failedOrder.getTotalPrice(),
+                pgProvider,
+                idempotencyKey));
+
+        Order order = orderRepository.save(Order.pending(
+                payment.getId(),
+                failedOrder.getGroupBuyParticipantId(),
+                failedOrder.getMemberId(),
+                failedOrder.getShippingAddress(),
+                payment.getAmount()));
+        return PaymentPreparation.ready(payment.getId(), order.getOrderId());
+    }
+
     // TX2 - 승인 결과를 결제와 주문에 함께 반영한다.
     // 주문은 TX1에서 이미 만들어 뒀으므로 여기서는 INSERT 없이 두 행의 상태만 바꾼다 -
     // 승인은 끝났는데 주문 생성에서 깨지는 경우(수동 처리 대상)를 구조적으로 줄이기 위한 것이다

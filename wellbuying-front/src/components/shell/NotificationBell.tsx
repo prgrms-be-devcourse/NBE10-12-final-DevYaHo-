@@ -9,6 +9,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/api/notification";
+import { getMyOrderIdByGroupBuy } from "@/lib/api/orders";
 import type { NotificationResponse } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -72,6 +73,20 @@ export function NotificationBell() {
       markNotificationRead(notification.id).catch(() => {
         // 읽음 처리 실패해도 화면 이동은 그대로 진행
       });
+    }
+
+    // 결제 완료/실패 알림은 결제 시도 자체(주문)에 대한 알림이므로 마이페이지 > 결제 내역 > 해당 주문 상세로 보낸다.
+    // 공동구매 성사/실패 알림은 결제가 시도되기 전이라 연결된 주문이 아직 없으므로 공동구매 상세로 보낸다
+    if (notification.type === "PAYMENT_COMPLETED" || notification.type === "PAYMENT_FAILED") {
+      try {
+        const { orderId } = await getMyOrderIdByGroupBuy(notification.groupBuyId);
+        router.push(`/orders?orderId=${encodeURIComponent(orderId)}`);
+        return;
+      } catch {
+        // 주문을 못 찾으면(드묾) 결제 내역 목록으로라도 보낸다
+        router.push("/orders");
+        return;
+      }
     }
     router.push(`/deals/${notification.groupBuyId}`);
   }
