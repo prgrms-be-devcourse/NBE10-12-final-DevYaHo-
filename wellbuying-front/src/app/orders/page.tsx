@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, ShoppingBag } from "lucide-react";
 import { AccountShell } from "@/components/account/AccountShell";
 import { OrderDetailModal } from "@/components/consumer/OrderDetailModal";
@@ -19,6 +19,7 @@ import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order/orderStatus";
 const PAGE_SIZE = 10;
 
 function OrdersContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<OrderSummaryResponse[]>([]);
   const [page, setPage] = useState(0);
@@ -74,6 +75,16 @@ function OrdersContent() {
       setError(e instanceof ApiError ? e.message : "결제 내역을 불러오지 못했어요.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 알림을 타고 들어와 ?orderId=가 붙은 채로 모달을 닫으면, URL에 쿼리스트링이 남아 새로고침 시
+  // 같은 모달이 다시 열려버린다 - 닫을 때 쿼리스트링도 함께 정리한다 (목록에서 직접 연 경우는
+  // 애초에 쿼리스트링이 없으니 별도 처리가 필요 없다)
+  function closeModal() {
+    setSelectedOrderId(null);
+    if (searchParams.get("orderId")) {
+      router.replace("/orders");
     }
   }
 
@@ -145,7 +156,7 @@ function OrdersContent() {
       <OrderDetailModal
         orderId={selectedOrderId}
         open={selectedOrderId !== null}
-        onClose={() => setSelectedOrderId(null)}
+        onClose={closeModal}
         onRetried={(newOrderId) => {
           setSelectedOrderId(newOrderId);
           void refreshOrders();
