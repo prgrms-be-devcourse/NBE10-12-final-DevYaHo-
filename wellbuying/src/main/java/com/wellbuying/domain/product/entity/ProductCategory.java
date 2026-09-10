@@ -23,6 +23,9 @@ public class ProductCategory {
     @Column(name = "category_name", nullable = false)
     private String categoryName;
 
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder = 0;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -30,17 +33,15 @@ public class ProductCategory {
     protected ProductCategory() {
     }
 
-    private ProductCategory(Long parentId, String categoryName) {
+    public static ProductCategory create(Long parentId, String categoryName, Integer sortOrder) {
         if (categoryName == null || categoryName.isBlank()) {
             throw new IllegalArgumentException("카테고리명은 필수입니다");
         }
-        this.parentId = parentId;
-        this.categoryName = categoryName;
-    }
-
-    // 카테고리를 생성, parentId가 null이면 최상위 카테고리로 등록
-    public static ProductCategory create(Long parentId, String categoryName) {
-        return new ProductCategory(parentId, categoryName);
+        ProductCategory category = new ProductCategory();
+        category.parentId = parentId;
+        category.categoryName = categoryName;
+        category.sortOrder = sortOrder != null ? sortOrder : 0;
+        return category;
     }
 
     public Long getId() {
@@ -53,6 +54,19 @@ public class ProductCategory {
 
     public String getCategoryName() {
         return categoryName;
+    }
+
+    public Integer getSortOrder() {
+        return sortOrder;
+    }
+
+    // 카테고리명, 정렬 순서 변경
+    public void update(String categoryName, Integer sortOrder) {
+        if (categoryName == null || categoryName.isBlank()) {
+            throw new IllegalArgumentException("카테고리명은 필수입니다");
+        }
+        this.categoryName = categoryName;
+        this.sortOrder = sortOrder != null ? sortOrder : 0;
     }
 
     public LocalDateTime getCreatedAt() {

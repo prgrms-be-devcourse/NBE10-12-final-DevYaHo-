@@ -28,8 +28,8 @@ class CategoryControllerTest {
     // 카테고리 트리가 JSON 배열로 정상 응답된다
     @Test
     void getCategories_트리구조가_정상응답된다() throws Exception {
-        CategoryTreeResponse child = new CategoryTreeResponse(2L, "노트북", List.of());
-        CategoryTreeResponse root = new CategoryTreeResponse(1L, "전자제품", List.of(child));
+        CategoryTreeResponse child = new CategoryTreeResponse(2L, "노트북", 1, List.of());
+        CategoryTreeResponse root = new CategoryTreeResponse(1L, "전자제품", 1, List.of(child));
         when(categoryService.getCategoryTree()).thenReturn(List.of(root));
 
         mockMvc.perform(get("/api/categories"))

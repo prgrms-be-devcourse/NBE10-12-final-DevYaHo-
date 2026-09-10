@@ -76,7 +76,7 @@ class ProductServicePopularCacheTest extends AbstractIntegrationTest {
 
     @Test
     void getPopularProducts_반환값을_Redis에_저장했다_꺼내면_원래_타입으로_역직렬화된다() {
-        ProductCategory category = categoryRepository.save(ProductCategory.create(null, "캐시테스트카테고리"));
+        ProductCategory category = categoryRepository.save(ProductCategory.create(null, "캐시테스트카테고리", 0));
         Product product = Product.register(TEST_SELLER_ID, category.getId(), "캐시테스트상품", "설명", 10000, "url");
         product.approve();
         product = productRepository.save(product);

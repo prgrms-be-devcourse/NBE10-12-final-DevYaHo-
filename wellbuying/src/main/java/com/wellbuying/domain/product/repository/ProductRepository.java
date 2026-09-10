@@ -24,4 +24,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
             ProductStatus status, Long lastId, Pageable pageable);
     // 관리자 삭제 이력 조회용 - 소프트 삭제된 상품만 조회
     Page<Product> findByDeletedAtIsNotNull(Pageable pageable);
+
+    // 카테고리 삭제 차단용 - 해당 카테고리를 참조하는 상품 존재 여부 확인
+    boolean existsByCategoryIdAndDeletedAtIsNull(Long categoryId);
 }
