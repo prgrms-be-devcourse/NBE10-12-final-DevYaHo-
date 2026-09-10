@@ -14,6 +14,8 @@ import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
 import com.wellbuying.domain.notification.event.GroupBuyCompletedPayload;
 import com.wellbuying.domain.notification.event.GroupBuyFailedPayload;
+import com.wellbuying.domain.notification.event.PaymentCompletedPayload;
+import com.wellbuying.domain.notification.event.PaymentFailedPayload;
 import com.wellbuying.domain.notification.repository.NotificationRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
@@ -78,6 +80,66 @@ class NotificationServiceTest {
         service.notifyCompleted(new GroupBuyCompletedPayload(1L, 10L, 100L));
 
         verify(notificationRepository, times(1)).save(any());
+    }
+
+    // 결제 완료 이벤트는 페이로드에 이미 memberId가 있으므로, 참여자 조회 없이 바로 알림 1건을 저장한다.
+    // productId가 없는 이벤트라 null로 저장되는지도 함께 확인한다
+    @Test
+    void notifyPaymentCompleted은_중복이_아니면_알림을_저장한다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
+                NotificationType.PAYMENT_COMPLETED)).thenReturn(false);
+
+        service.notifyPaymentCompleted(new PaymentCompletedPayload(1L, 100L));
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        Notification saved = captor.getValue();
+        assertThat(saved.getMemberId()).isEqualTo(100L);
+        assertThat(saved.getGroupBuyId()).isEqualTo(1L);
+        assertThat(saved.getProductId()).isNull();
+        assertThat(saved.getType()).isEqualTo(NotificationType.PAYMENT_COMPLETED);
+    }
+
+    // Kafka 재처리로 같은 결제 완료 이벤트가 다시 들어와도 이미 알림이 있으면 저장하지 않는다
+    @Test
+    void notifyPaymentCompleted은_이미_존재하면_저장하지_않는다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
+                NotificationType.PAYMENT_COMPLETED)).thenReturn(true);
+
+        service.notifyPaymentCompleted(new PaymentCompletedPayload(1L, 100L));
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    // 결제 실패 이벤트도 완료와 동일한 방식(memberId가 이미 페이로드에 있음)으로 저장되는지 검증
+    @Test
+    void notifyPaymentFailed은_중복이_아니면_알림을_저장한다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
+                NotificationType.PAYMENT_FAILED)).thenReturn(false);
+
+        service.notifyPaymentFailed(new PaymentFailedPayload(1L, 100L));
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        Notification saved = captor.getValue();
+        assertThat(saved.getMemberId()).isEqualTo(100L);
+        assertThat(saved.getGroupBuyId()).isEqualTo(1L);
+        assertThat(saved.getProductId()).isNull();
+        assertThat(saved.getType()).isEqualTo(NotificationType.PAYMENT_FAILED);
+    }
+
+    @Test
+    void notifyPaymentFailed은_이미_존재하면_저장하지_않는다() {
+        NotificationService service = new NotificationService(notificationRepository);
+        when(notificationRepository.existsByMemberIdAndGroupBuyIdAndType(100L, 1L,
+                NotificationType.PAYMENT_FAILED)).thenReturn(true);
+
+        service.notifyPaymentFailed(new PaymentFailedPayload(1L, 100L));
+
+        verify(notificationRepository, never()).save(any());
     }
 
     // 실패 이벤트는 memberId가 없으므로, 확정 참여자 중 아직 알림을 못 받은 memberId를 NOT EXISTS

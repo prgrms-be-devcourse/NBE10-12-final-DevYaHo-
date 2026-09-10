@@ -6,6 +6,8 @@ import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
 import com.wellbuying.domain.notification.event.GroupBuyCompletedPayload;
 import com.wellbuying.domain.notification.event.GroupBuyFailedPayload;
+import com.wellbuying.domain.notification.event.PaymentCompletedPayload;
+import com.wellbuying.domain.notification.event.PaymentFailedPayload;
 import com.wellbuying.domain.notification.repository.NotificationRepository;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
@@ -35,6 +37,22 @@ public class NotificationService {
     @Transactional
     public void notifyCompleted(GroupBuyCompletedPayload payload) {
         save(payload.memberId(), NotificationType.GROUP_BUY_COMPLETED, payload.groupBuyId(), payload.productId());
+    }
+
+    // 결제 완료 이벤트는 참여자 1명당 1건 발행되므로 memberId가 이미 페이로드에 들어있다.
+    // 이 이벤트에는 productId가 없어 null로 저장한다(notification.product_id는 nullable)
+    @Transactional
+    public void notifyPaymentCompleted(PaymentCompletedPayload payload) {
+        save(payload.memberId(), NotificationType.PAYMENT_COMPLETED, payload.groupBuyId(), null);
+    }
+
+    // 결제 실패 이벤트도 완료와 마찬가지로 참여자 1명당 1건 발행되며 memberId가 이미 페이로드에 들어있다.
+    // (group_buy_id, member_id, type) 유니크 제약 덕분에 같은 공동구매에 대해 PAYMENT_COMPLETED와
+    // PAYMENT_FAILED 알림이 동시에 남는 걸 걱정할 필요는 없다 - 애초에 한 참여 건은 성공 또는 실패
+    // 둘 중 하나로만 끝난다
+    @Transactional
+    public void notifyPaymentFailed(PaymentFailedPayload payload) {
+        save(payload.memberId(), NotificationType.PAYMENT_FAILED, payload.groupBuyId(), null);
     }
 
     // 실패 이벤트는 공동구매당 1건만 발행되므로, 확정 참여자 중 아직 알림을 못 받은 memberId를

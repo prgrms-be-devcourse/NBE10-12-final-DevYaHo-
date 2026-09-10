@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Home, PackageCheck, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Home, PackageCheck, RotateCcw, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
 import { OrderThumbnail } from "@/components/consumer/OrderThumbnail";
 import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/Tag";
 import { ApiError } from "@/lib/api/http";
-import { getMyOrder } from "@/lib/api/orders";
+import { getMyOrder, retryPayment } from "@/lib/api/orders";
 import type { OrderDetailResponse, OrderStatus } from "@/lib/api/types";
 import { formatDateTime, won } from "@/lib/format";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order/orderStatus";
@@ -29,14 +30,19 @@ export function OrderDetailModal({
   orderId,
   open,
   onClose,
+  onRetried,
 }: {
   orderId: string | null;
   open: boolean;
   onClose: () => void;
+  // 재시도로 새 주문이 만들어졌을 때 호출된다 - 부모가 목록에 새 주문을 반영할 수 있게 새 orderId를 넘긴다
+  onRetried?: (newOrderId: string) => void;
 }) {
   const [detail, setDetail] = useState<OrderDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !orderId) return;
@@ -46,6 +52,7 @@ export function OrderDetailModal({
       setLoading(true);
       setError(null);
       setDetail(null);
+      setRetryError(null);
       try {
         const res = await getMyOrder(id);
         if (!cancelled) setDetail(res);
@@ -64,6 +71,21 @@ export function OrderDetailModal({
   const stepIndex = detail ? STEPS.findIndex((s) => s.status === detail.status) : -1;
   const showStepper = detail?.paymentStatus === "APPROVED" && stepIndex >= 0;
   const itemAmount = detail?.unitPrice != null ? detail.unitPrice * detail.quantity : detail?.totalPrice ?? 0;
+
+  async function handleRetry() {
+    if (!detail) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const retried = await retryPayment(detail.orderId);
+      setDetail(retried);
+      onRetried?.(retried.orderId);
+    } catch (e) {
+      setRetryError(e instanceof ApiError ? e.message : "결제 재시도에 실패했어요.");
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="결제 상세" subtitle={orderId ?? undefined} width="600px">
@@ -150,9 +172,13 @@ export function OrderDetailModal({
           </dl>
 
           {detail.status === "PAYMENT_FAILED" && (
-            <p className="rounded-xl bg-red-600/10 p-3.5 text-sm font-semibold text-red-600 dark:text-red-400">
-              결제가 실패한 주문입니다.
-            </p>
+            <div className="space-y-3 rounded-xl bg-red-600/10 p-3.5">
+              <p className="text-sm font-semibold text-red-600 dark:text-red-400">결제가 실패한 주문입니다.</p>
+              <Button variant="secondary" className="w-full" loading={retrying} onClick={() => void handleRetry()}>
+                <RotateCcw className="h-4 w-4" /> 결제 재시도
+              </Button>
+              {retryError && <Banner tone="error">{retryError}</Banner>}
+            </div>
           )}
         </div>
       )}
