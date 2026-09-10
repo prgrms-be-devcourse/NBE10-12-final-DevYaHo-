@@ -26,9 +26,9 @@ import {
   verifyPasswordReissueCode,
   resetPassword,
 } from "@/lib/api/auth";
-import { listMyAddresses, createMyAddress, deleteMyAddress } from "@/lib/api/address";
+import { listMyAddresses, createMyAddress, deleteMyAddress, setDefaultAddress } from "@/lib/api/address";
 import { ApiError } from "@/lib/api/http";
-import { clearTokens, getDeviceId } from "@/lib/auth/token-storage";
+import { clearTokens, getDeviceId, getCachedDevices, saveCachedDevices } from "@/lib/auth/token-storage";
 import type { DeviceSessionResponse, MemberResponse, OAuthProvider, BuyerAddressResponse } from "@/lib/api/types";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -142,8 +142,20 @@ function DeviceListSection() {
 
   useEffect(() => {
     getDevices()
-      .then(setDevices)
-      .catch(() => setDevices([]));
+      .then((data) => {
+        if (data && data.length > 0) {
+          saveCachedDevices(data);
+          setDevices(data);
+        } else {
+          // 백엔드 세션이 날아갔지만 JWT는 살아있어 빈 배열이 올 경우 캐시 사용
+          const cached = getCachedDevices();
+          setDevices(cached || []);
+        }
+      })
+      .catch(() => {
+        const cached = getCachedDevices();
+        setDevices(cached || []);
+      });
   }, []);
 
   if (!devices || devices.length === 0) return null;
@@ -213,6 +225,7 @@ function EditProfileModal({
           body: file,
           headers: {
             "Content-Type": file.type,
+            "x-amz-tagging": "pending=true",
           },
         });
         if (!uploadRes.ok) throw new Error("이미지 업로드에 실패했어요.");
@@ -289,6 +302,7 @@ function AddressSection() {
   const [error, setError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [settingDefaultId, setSettingDefaultId] = useState<number | null>(null);
 
   const load = () => {
     listMyAddresses().then(setAddresses).catch(() => setAddresses([]));
@@ -301,7 +315,7 @@ function AddressSection() {
     setError(null);
     setLoading(true);
     try {
-      await createMyAddress({ address, addressDetail, zipcode });
+      await createMyAddress({ address, addressDetail, zipcode, isDefault: false });
       setZipcode("");
       setAddress("");
       setAddressDetail("");
@@ -323,6 +337,19 @@ function AddressSection() {
       setError(e instanceof ApiError ? e.message : "배송지 삭제에 실패했어요.");
     } finally {
       setDeleteTarget(null);
+    }
+  }
+
+  async function handleSetDefault(addressId: number) {
+    setError(null);
+    setSettingDefaultId(addressId);
+    try {
+      await setDefaultAddress(addressId);
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "기본 배송지 설정에 실패했어요.");
+    } finally {
+      setSettingDefaultId(null);
     }
   }
 
@@ -350,9 +377,30 @@ function AddressSection() {
         <ul className="space-y-2">
           {addresses.map((addr) => (
             <li key={addr.id} className="flex flex-col gap-1 rounded-lg border border-wb-line bg-wb-canvas px-3 py-2 text-sm">
-              <div className="flex justify-between">
-                <span className="font-semibold">[{addr.zipcode}]</span>
-                <button onClick={() => setDeleteTarget(addr.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold">[{addr.zipcode}]</span>
+                  {addr.isDefault && (
+                    <span className="rounded-full bg-wb-green px-1.5 py-0.5 text-[10px] font-semibold text-white">기본</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {!addr.isDefault && (
+                    <button
+                      onClick={() => handleSetDefault(addr.id)}
+                      disabled={settingDefaultId === addr.id}
+                      className="rounded-md border border-wb-green px-2.5 py-1 text-xs font-semibold text-wb-green transition-colors hover:bg-wb-light-green/40 disabled:opacity-50"
+                    >
+                      {settingDefaultId === addr.id ? "처리 중..." : "기본으로 설정"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setDeleteTarget(addr.id)}
+                    className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </div>
               </div>
               <span className="text-wb-ink">{addr.address} {addr.addressDetail}</span>
             </li>
@@ -364,14 +412,11 @@ function AddressSection() {
         <Modal open onClose={() => setShowAdd(false)} title="배송지 추가" width="400px">
           {isSearching ? (
             <div className="space-y-2">
-               <div className="relative overflow-hidden h-[400px]">
-                 <DaumPostcode 
-                   onComplete={handleCompletePostcode} 
-                   autoClose={false} 
-                   style={{ height: "430px", width: "100%" }} 
-                 />
-                 <div className="absolute bottom-0 left-0 right-0 h-10 bg-white z-10 pointer-events-none" />
-               </div>
+               <DaumPostcode 
+                 onComplete={handleCompletePostcode} 
+                 autoClose={false} 
+                 style={{ height: "400px", width: "100%" }} 
+               />
                <Button variant="secondary" className="w-full" onClick={() => setIsSearching(false)}>닫기</Button>
             </div>
           ) : (
@@ -651,6 +696,12 @@ export function ProfileContent({ showHeader = true }: { showHeader?: boolean } =
 
         <AddressSection />
 
+        <Suspense fallback={null}>
+          <SocialAccountsSection />
+        </Suspense>
+
+        <DeviceListSection />
+
         <div className="flex gap-2 border-t border-wb-line pt-5">
           <Button
             variant="secondary"
@@ -669,12 +720,6 @@ export function ProfileContent({ showHeader = true }: { showHeader?: boolean } =
             전체 로그아웃
           </Button>
         </div>
-
-        <Suspense fallback={null}>
-          <SocialAccountsSection />
-        </Suspense>
-
-        <DeviceListSection />
 
         <button
           type="button"

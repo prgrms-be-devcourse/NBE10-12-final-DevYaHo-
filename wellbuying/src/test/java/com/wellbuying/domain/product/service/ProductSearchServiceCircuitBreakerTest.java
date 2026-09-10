@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wellbuying.AbstractIntegrationTest;
+import com.wellbuying.domain.product.search.ProductSearchFilter;
 import com.wellbuying.domain.product.search.ProductSearchRepository;
 import com.wellbuying.domain.product.search.SearchSortType;
 import com.wellbuying.global.exception.BusinessException;
@@ -42,7 +43,7 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
         when(productSearchRepository.search(any(), any(), any(), anyInt(), any()))
                 .thenThrow(new RuntimeException("connection refused"));
 
-        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, false))
+        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, ProductSearchFilter.none()))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SEARCH_UNAVAILABLE);
     }
@@ -51,7 +52,7 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
     void search_서킷이_열려있으면_OpenSearch를_호출하지_않고_SEARCH_UNAVAILABLE을_던진다() {
         circuitBreakerRegistry.circuitBreaker("openSearchProductSearch").transitionToOpenState();
 
-        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, false))
+        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, null, 20, ProductSearchFilter.none()))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SEARCH_UNAVAILABLE);
         verify(productSearchRepository, never()).search(any(), any(), any(), anyInt(), any());
@@ -63,7 +64,7 @@ class ProductSearchServiceCircuitBreakerTest extends AbstractIntegrationTest {
         when(productSearchRepository.search(any(), any(), any(), anyInt(), any()))
                 .thenThrow(new BusinessException(ErrorCode.INVALID_CURSOR));
 
-        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, "bad-cursor", 20, false))
+        assertThatThrownBy(() -> service.search("비타민", SearchSortType.RELEVANCE, "bad-cursor", 20, ProductSearchFilter.none()))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_CURSOR);
         assertThat(circuitBreakerRegistry.circuitBreaker("openSearchProductSearch").getMetrics().getNumberOfFailedCalls())

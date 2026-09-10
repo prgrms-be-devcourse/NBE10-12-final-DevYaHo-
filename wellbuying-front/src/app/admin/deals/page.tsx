@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PauseCircle, ShoppingBag } from "lucide-react";
+import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +17,16 @@ import {
 import { ApiError } from "@/lib/api/http";
 import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+
+type PendingAction = { id: number; kind: "approve" | "reject" };
+
+const ACTION_MODAL_CONFIG: Record<
+  PendingAction["kind"],
+  { title: string; actionLabel: string; confirmVariant: "primary" | "secondary" }
+> = {
+  approve: { title: "판매정지 요청 승인", actionLabel: "승인", confirmVariant: "primary" },
+  reject: { title: "판매정지 요청 반려", actionLabel: "반려", confirmVariant: "secondary" },
+};
 
 const SUSPENSION_TABS: { status: GroupBuySuspensionStatus; label: string }[] = [
   { status: "PENDING", label: "처리 대기" },
@@ -40,7 +51,7 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
   const [items, setItems] = useState<GroupBuySuspensionRequestResponse[] | null>(null);
   const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [actioningId, setActioningId] = useState<number | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -62,30 +73,17 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
     };
   }, [status, page]);
 
-  async function handleApprove(id: number) {
-    setActioningId(id);
-    setError(null);
-    try {
-      await approveSuspensionRequest(id);
-      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "승인에 실패했어요.");
-    } finally {
-      setActioningId(null);
-    }
-  }
+  const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
+    approve: approveSuspensionRequest,
+    reject: rejectSuspensionRequest,
+  };
 
-  async function handleReject(id: number) {
-    setActioningId(id);
+  async function handleConfirmAction(reason: string) {
+    if (!pendingAction) return;
     setError(null);
-    try {
-      await rejectSuspensionRequest(id);
-      setItems((prev) => (prev ?? []).filter((item) => item.id !== id));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "반려에 실패했어요.");
-    } finally {
-      setActioningId(null);
-    }
+    await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
+    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    setPendingAction(null);
   }
 
   if (items === null) {
@@ -122,15 +120,13 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
                     <Button
                       variant="secondary"
                       className="px-3 py-1.5 text-xs"
-                      loading={actioningId === item.id}
-                      onClick={() => handleReject(item.id)}
+                      onClick={() => setPendingAction({ id: item.id, kind: "reject" })}
                     >
                       반려
                     </Button>
                     <Button
                       className="px-3 py-1.5 text-xs"
-                      loading={actioningId === item.id}
-                      onClick={() => handleApprove(item.id)}
+                      onClick={() => setPendingAction({ id: item.id, kind: "approve" })}
                     >
                       승인
                     </Button>
@@ -165,6 +161,15 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
           </Button>
         </div>
       )}
+
+      <ActionReasonModal
+        open={pendingAction !== null}
+        title={pendingAction ? ACTION_MODAL_CONFIG[pendingAction.kind].title : ""}
+        actionLabel={pendingAction ? ACTION_MODAL_CONFIG[pendingAction.kind].actionLabel : ""}
+        confirmVariant={pendingAction ? ACTION_MODAL_CONFIG[pendingAction.kind].confirmVariant : "primary"}
+        onClose={() => setPendingAction(null)}
+        onConfirm={handleConfirmAction}
+      />
     </div>
   );
 }
@@ -231,41 +236,59 @@ function GroupBuyListSection() {
   );
 }
 
+const VIEW_TABS: { key: "approval" | "all"; label: string }[] = [
+  { key: "approval", label: "판매정지 심사" },
+  { key: "all", label: "전체 공동구매 목록" },
+];
+
 export default function AdminDealsPage() {
+  const [view, setView] = useState<"approval" | "all">("approval");
   const [suspensionStatus, setSuspensionStatus] = useState<GroupBuySuspensionStatus>("PENDING");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-6 py-9">
+    <div className="mx-auto max-w-5xl space-y-6 px-6 py-9">
       <div>
         <p className="text-xs font-bold tracking-wide text-wb-green">GROUP BUYING</p>
         <h1 className="mt-1 text-3xl font-bold">공동구매 관리</h1>
         <p className="mt-1 text-sm text-wb-secondary">공동구매 현황과 판매정지 요청을 한 화면에서 확인합니다.</p>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold">판매정지 요청</h2>
-        <div className="flex flex-wrap gap-2">
-          {SUSPENSION_TABS.map((tab) => (
-            <button
-              key={tab.status}
-              onClick={() => setSuspensionStatus(tab.status)}
-              className={`rounded-full px-4 py-2 text-xs font-bold ${
-                suspensionStatus === tab.status
-                  ? "bg-wb-green text-white"
-                  : "border border-wb-line bg-wb-surface text-wb-secondary"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <SuspensionRequestsPanel key={suspensionStatus} status={suspensionStatus} />
-      </section>
+      <div className="flex gap-4 border-b border-wb-line">
+        {VIEW_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setView(tab.key)}
+            className={`-mb-px border-b-2 px-1 pb-3 text-sm font-bold ${
+              view === tab.key ? "border-wb-green text-wb-green" : "border-transparent text-wb-secondary"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold">전체 공동구매 목록</h2>
+      {view === "approval" ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {SUSPENSION_TABS.map((tab) => (
+              <button
+                key={tab.status}
+                onClick={() => setSuspensionStatus(tab.status)}
+                className={`rounded-full px-4 py-2 text-xs font-bold ${
+                  suspensionStatus === tab.status
+                    ? "bg-wb-green text-white"
+                    : "border border-wb-line bg-wb-surface text-wb-secondary"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <SuspensionRequestsPanel key={suspensionStatus} status={suspensionStatus} />
+        </div>
+      ) : (
         <GroupBuyListSection />
-      </section>
+      )}
     </div>
   );
 }

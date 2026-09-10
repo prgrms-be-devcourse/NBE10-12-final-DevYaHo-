@@ -304,7 +304,7 @@ class MemberServiceTest {
     void 회원목록조회는_repository의_search_결과를_반환한다() {
         Member member = Member.signUp("me@example.com", "encoded-password", "홍길동");
         MemberSummaryResponse summary = new MemberSummaryResponse(1L, member.getEmail(), member.getName(),
-                Role.BUYER, MemberStatus.ACTIVE, null, member.getCreatedAt());
+                Role.BUYER, MemberStatus.ACTIVE, null, member.getCreatedAt(), null, null);
         PageRequest pageable = PageRequest.of(0, 20);
         PageImpl<MemberSummaryResponse> page = new PageImpl<>(java.util.List.of(summary), pageable, 1);
         when(memberRepository.search(Role.BUYER, MemberStatus.ACTIVE, pageable)).thenReturn(page);

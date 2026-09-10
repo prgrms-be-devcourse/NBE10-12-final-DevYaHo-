@@ -34,7 +34,7 @@ public class BuyerAddress {
     private String zipcode;
 
     @Column(name = "is_default", nullable = false)
-    private boolean isDefault = true;
+    private boolean isDefault;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -47,15 +47,29 @@ public class BuyerAddress {
     protected BuyerAddress() {
     }
 
-    private BuyerAddress(Long memberId, String address, String addressDetail, String zipcode) {
+    private BuyerAddress(Long memberId, String address, String addressDetail, String zipcode, boolean isDefault) {
         this.memberId = memberId;
         this.address = address;
         this.addressDetail = addressDetail;
         this.zipcode = zipcode;
+        this.isDefault = isDefault;
     }
 
     public static BuyerAddress create(Long memberId, String address, String addressDetail, String zipcode) {
-        return new BuyerAddress(memberId, address, addressDetail, zipcode);
+        return new BuyerAddress(memberId, address, addressDetail, zipcode, true);
+    }
+
+    public static BuyerAddress create(Long memberId, String address, String addressDetail, String zipcode,
+            boolean isDefault) {
+        return new BuyerAddress(memberId, address, addressDetail, zipcode, isDefault);
+    }
+
+    public void markAsDefault() {
+        this.isDefault = true;
+    }
+
+    public void unmarkAsDefault() {
+        this.isDefault = false;
     }
 
     public Long getId() {

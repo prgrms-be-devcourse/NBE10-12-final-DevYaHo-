@@ -70,7 +70,7 @@ export type SellerApplyRequest = {
 
 export type SellerSignupRequest = SignupRequest & SellerApplyRequest;
 
-export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
+export type SellerStatus = "PENDING" | "APPROVED" | "SUSPENDED" | "REJECTED";
 
 export type SellerInfoResponse = {
   id: number;
@@ -84,6 +84,7 @@ export type SellerInfoResponse = {
 export type MemberStatus = "ACTIVE" | "DORMANT" | "WITHDRAWN";
 
 // GET /api/admin/members 응답 - 관리자 회원 목록 조회
+// sellerId/sellerStatus는 role이 SELLER인 회원만 값이 채워짐 - 그 외에는 null
 export type MemberSummaryResponse = {
   id: number;
   email: string;
@@ -92,6 +93,8 @@ export type MemberSummaryResponse = {
   status: MemberStatus;
   phoneNumber: string | null;
   createdAt: string;
+  sellerId: number | null;
+  sellerStatus: SellerStatus | null;
 };
 
 export type ErrorResponse = {
@@ -270,6 +273,7 @@ export type BuyerAddressResponse = {
   address: string;
   addressDetail: string | null;
   zipcode: string;
+  isDefault: boolean;
   createdAt: string;
 };
 
@@ -278,6 +282,8 @@ export type BuyerAddressCreateRequest = {
   addressDetail?: string;
   // 새 우편번호 체계 - 숫자 5자리 고정
   zipcode: string;
+  // 최초 등록이거나 true면 기본 배송지로 지정 - 기존 기본 배송지는 자동 해제된다
+  isDefault: boolean;
 };
 
 // 백엔드가 Page<T>를 그대로 직렬화하지 않고 Spring Data의 PagedModel(@EnableSpringDataWebSupport(VIA_DTO))로
