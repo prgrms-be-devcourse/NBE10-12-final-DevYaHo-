@@ -56,10 +56,20 @@ public class GroupBuyParticipationService {
         }
 
         try {
-            return transactionTemplate.execute(
+            ConfirmationResult result = transactionTemplate.execute(
                     status -> confirmParticipation(memberId, groupBuyId, quantity, validated.buyerAddressId()));
+            // 여기 도달했다는 것은 STEP3 트랜잭션이 이미 commit까지 성공했다는 뜻이다 - TransactionTemplate은
+            // 콜백이 정상 반환된 뒤에 commit을 호출하므로, 콜백 안에서 먼저 Redis 카운터를 지우면 그 이후
+            // commit이 실패했을 때(락 경합, 제약 위반 등) 이미 지워진 키에 아래 catch의 decrease()가
+            // 호출되어 음수 키를 새로 만들어버릴 수 있다(그 음수를 tryIncrease가 그대로 신뢰해 재고 초과
+            // 허용으로 이어짐). 그래서 매진 카운터 정리는 commit 성공이 확정된 이 시점으로 미룬다
+            if (result.soldOut()) {
+                groupBuyCounterRepository.delete(groupBuyId);
+            }
+            return result.response();
         } catch (RuntimeException e) {
-            // DB 반영이 실패하면 먼저 늘려둔 Redis 카운터를 되돌려 재고가 영구히 줄어든 상태로 남지 않도록 한다
+            // DB 반영이 실패하면 먼저 늘려둔 Redis 카운터를 되돌려 재고가 영구히 줄어든 상태로 남지 않도록 한다.
+            // decrease()는 이미 삭제된 키에도 안전하다(decrease_groupbuy.lua 참고)
             groupBuyCounterRepository.decrease(groupBuyId, quantity);
             throw e;
         }
@@ -98,8 +108,13 @@ public class GroupBuyParticipationService {
     private record ValidatedParticipation(int maxQuantity, Long buyerAddressId) {
     }
 
+    // STEP3 결과 전달용 - 매진 확정 여부를 담아서, Redis 카운터 정리(참여자와 무관한 부수효과)를
+    // commit 성공이 확정된 뒤(participate()에서 execute()가 정상 반환된 시점)로 미룰 수 있게 한다
+    private record ConfirmationResult(GroupBuyPartResponse response, boolean soldOut) {
+    }
+
     // STEP3: 참여 건 저장 + 수량 증가 + 매진 판정을 하나의 트랜잭션으로 묶는다
-    private GroupBuyPartResponse confirmParticipation(Long memberId, Long groupBuyId, int quantity,
+    private ConfirmationResult confirmParticipation(Long memberId, Long groupBuyId, int quantity,
             Long buyerAddressId) {
         // 참여 시점에는 가격을 계산/저장하지 않는다 - 성사되면 최종가로 소급 확정되고,
         // 실패하면 애초에 가격이 필요 없으므로 여기서 계산하는 건 낭비다. 예상가는 프론트가
@@ -108,9 +123,15 @@ public class GroupBuyParticipationService {
                 buyerAddressId));
 
         // 자바 메모리에서 읽은 값에 더해 통째로 덮어쓰는 방식이 아니라, DB에서 직접 원자적으로 증가시킨다
-        // (동시에 여러 참여가 몰려도 lost update가 없다). 이 호출 이후 영속성 컨텍스트가 비워지므로
-        // 매진 판정에 쓸 최신 값은 아래에서 다시 조회해야 한다
-        groupBuyRepository.increaseQuantity(groupBuyId, quantity);
+        // (동시에 여러 참여가 몰려도 lost update가 없다). WHERE의 status/end_at 조건이 곧 STEP1과 STEP3
+        // 사이에 상태가 바뀌지 않았는지의 최종 확인이다 - 0건 반영되면 그 사이 마감/판매정지된 것이므로
+        // 실패로 처리한다. increaseQuantity 호출 이후 영속성 컨텍스트가 비워지므로 매진 판정에 쓸 최신
+        // 값은 아래에서 다시 조회해야 한다
+        int affected = groupBuyRepository.increaseQuantity(groupBuyId, quantity, GroupBuyStatus.ONGOING,
+                LocalDateTime.now());
+        if (affected == 0) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
+        }
         GroupBuy updatedGroupBuy = groupBuyRepository.findById(groupBuyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_BUY_NOT_FOUND));
 
@@ -118,16 +139,15 @@ public class GroupBuyParticipationService {
         // 포함)에게 최종 단가를 반영하고 성사 이벤트를 기록하는 무거운 작업(참여자 수 N에 비례)은 하지 않는다 -
         // 그 작업까지 이 트랜잭션이 떠안으면 매진을 트리거한 단 하나의 요청만 N에 비례해 느려진다(부하테스트
         // 실측: 300명 규모 1.7초, 3,000명 규모 6.2초). 대신 GroupBuyFinalizationWorker가 별도 스케줄 틱에서
-        // 뒤이어 처리하므로, 이 응답의 appliedPrice는 성사 트리거 여부와 무관하게 항상 null로 내려간다
-        if (updatedGroupBuy.isSoldOut()) {
+        // 뒤이어 처리하므로, 이 응답의 appliedPrice는 성사 트리거 여부와 무관하게 항상 null로 내려간다.
+        // Redis 카운터 정리(마감 스케줄러 경로와 동일한 시점 통일 목적)는 여기서 하지 않고 participate()가
+        // 이 트랜잭션의 commit 성공을 확인한 뒤 처리한다
+        boolean soldOut = updatedGroupBuy.isSoldOut();
+        if (soldOut) {
             updatedGroupBuy.succeed();
-            // 마감 스케줄러 경로(GroupBuyCloseProcessor.closeSucceeded)와 동일하게 성사 확정 시점에
-            // Redis 카운터를 즉시 정리한다 - TTL로도 결국 만료되긴 하지만, 정리 시점을 경로마다 다르게
-            // 두지 않고 맞춘다
-            groupBuyCounterRepository.delete(groupBuyId);
         }
 
-        return GroupBuyPartResponse.of(part);
+        return new ConfirmationResult(GroupBuyPartResponse.of(part), soldOut);
     }
 
     // 참여 취소 - 진행 중(ONGOING)인 동안만 가능

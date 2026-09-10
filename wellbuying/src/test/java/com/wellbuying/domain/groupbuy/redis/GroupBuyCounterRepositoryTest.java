@@ -101,6 +101,33 @@ class GroupBuyCounterRepositoryTest extends AbstractIntegrationTest {
         assertThat(groupBuyCounterRepository.tryIncrease(id, 0, 100)).isEqualTo(30);
     }
 
+    // 이미 삭제된 키(성사 확정 시 delete()됨)에 decrease()를 호출해도 음수 키가 새로 생기지 않는지 검증 -
+    // DB 반영 실패 보상으로 decrease()가 호출되는 시점엔 이미 카운터가 지워져 있을 수 있다
+    @Test
+    void 삭제된_키에_decrease를_호출해도_새로_생기지_않는다() {
+        Long id = newGroupBuyId();
+        groupBuyCounterRepository.initialize(id, Duration.ofMinutes(5));
+        groupBuyCounterRepository.tryIncrease(id, 50, 100);
+        groupBuyCounterRepository.delete(id);
+
+        groupBuyCounterRepository.decrease(id, 20);
+
+        // 키가 없으면 아무것도 안 했어야 하므로, 새로 참여하면 0부터 다시 시작한다(음수로 오염되지 않음)
+        assertThat(groupBuyCounterRepository.tryIncrease(id, 10, 100)).isEqualTo(10);
+    }
+
+    // decrease()가 현재 값보다 큰 수량을 되돌리려 해도 0 밑으로는 내려가지 않는지 검증
+    @Test
+    void decrease는_0_밑으로_내려가지_않는다() {
+        Long id = newGroupBuyId();
+        groupBuyCounterRepository.initialize(id, Duration.ofMinutes(5));
+        groupBuyCounterRepository.tryIncrease(id, 10, 100);
+
+        groupBuyCounterRepository.decrease(id, 50);
+
+        assertThat(groupBuyCounterRepository.tryIncrease(id, 0, 100)).isEqualTo(0);
+    }
+
     // 동시에 여러 참여 요청이 들어와도 Lua 스크립트의 원자성 덕분에 재고를 초과해서 증가시키지 않는지 검증
     @Test
     void 동시_참여_요청에서도_최대_수량을_초과하지_않는다() throws InterruptedException {
