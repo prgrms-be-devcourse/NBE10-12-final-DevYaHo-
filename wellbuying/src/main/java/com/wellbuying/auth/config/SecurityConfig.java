@@ -66,6 +66,7 @@ public class SecurityConfig {
     private static final String[] PRODUCT_PUBLIC_GET_PATHS = {
             "/api/products",
             "/api/products/*",
+            "/api/products/search/autocomplete",
             "/api/categories"
     };
 
