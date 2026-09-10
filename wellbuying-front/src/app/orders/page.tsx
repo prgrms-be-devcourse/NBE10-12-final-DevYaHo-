@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronRight, ShoppingBag } from "lucide-react";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -150,7 +150,9 @@ function OrdersContent() {
 export default function OrdersPage() {
   return (
     <AccountShell>
-      <OrdersContent />
+      <Suspense fallback={<div className="py-9 text-sm text-wb-secondary">불러오는 중...</div>}>
+        <OrdersContent />
+      </Suspense>
     </AccountShell>
   );
 }

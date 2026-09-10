@@ -167,7 +167,7 @@ class OrderQueryServiceTest {
         Order order = order();
         when(groupBuyPartRepository.findByGroupBuyIdAndMemberIdAndStatus(GROUP_BUY_ID, MEMBER_ID,
                 GroupBuyPartStatus.CONFIRMED)).thenReturn(Optional.of(part()));
-        when(orderRepository.findByGroupBuyParticipantIdAndMemberId(PART_ID, MEMBER_ID))
+        when(orderRepository.findFirstByGroupBuyParticipantIdAndMemberIdOrderByCreatedAtDesc(PART_ID, MEMBER_ID))
                 .thenReturn(Optional.of(order));
 
         String orderId = service().getMyOrderIdByGroupBuy(MEMBER_ID, GROUP_BUY_ID);
@@ -190,7 +190,7 @@ class OrderQueryServiceTest {
     void getMyOrderIdByGroupBuy는_참여는_있어도_주문이_없으면_ORDER_NOT_FOUND() {
         when(groupBuyPartRepository.findByGroupBuyIdAndMemberIdAndStatus(GROUP_BUY_ID, MEMBER_ID,
                 GroupBuyPartStatus.CONFIRMED)).thenReturn(Optional.of(part()));
-        when(orderRepository.findByGroupBuyParticipantIdAndMemberId(PART_ID, MEMBER_ID)).thenReturn(Optional.empty());
+        when(orderRepository.findFirstByGroupBuyParticipantIdAndMemberIdOrderByCreatedAtDesc(PART_ID, MEMBER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().getMyOrderIdByGroupBuy(MEMBER_ID, GROUP_BUY_ID))
                 .isInstanceOf(BusinessException.class)

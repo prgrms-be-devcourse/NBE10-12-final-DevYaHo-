@@ -90,13 +90,15 @@ public class OrderQueryService {
     }
 
     // 알림은 groupBuyId만 들고 있으므로, 알림을 클릭했을 때 이동할 주문을 역으로 찾는다.
-    // 참여(CONFIRMED) 1건당 주문이 1건만 만들어지므로 유일하게 정해진다
+    // 결제 재시도(PaymentRetryService)로 실패한 주문을 이력으로 남긴 채 새 주문이 추가될 수 있어
+    // 참여 1건당 주문이 여러 건일 수 있으므로, 가장 최근 주문 1건을 가져온다
     @Transactional(readOnly = true)
     public String getMyOrderIdByGroupBuy(Long memberId, Long groupBuyId) {
         GroupBuyPart part = groupBuyPartRepository
                 .findByGroupBuyIdAndMemberIdAndStatus(groupBuyId, memberId, GroupBuyPartStatus.CONFIRMED)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        Order order = orderRepository.findByGroupBuyParticipantIdAndMemberId(part.getId(), memberId)
+        Order order = orderRepository.findFirstByGroupBuyParticipantIdAndMemberIdOrderByCreatedAtDesc(part.getId(),
+                        memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         return order.getOrderId();
     }
