@@ -15,6 +15,8 @@ import com.wellbuying.domain.groupbuy.redis.GroupBuyCounterRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyPartRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import java.time.LocalDateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class GroupBuyParticipationService {
+
+    private static final Logger log = LoggerFactory.getLogger(GroupBuyParticipationService.class);
 
     private final GroupBuyRepository groupBuyRepository;
     private final GroupBuyPartRepository groupBuyPartRepository;
@@ -55,24 +59,31 @@ public class GroupBuyParticipationService {
             throw new BusinessException(ErrorCode.GROUP_BUY_SOLD_OUT);
         }
 
+        ConfirmationResult result;
         try {
-            ConfirmationResult result = transactionTemplate.execute(
+            result = transactionTemplate.execute(
                     status -> confirmParticipation(memberId, groupBuyId, quantity, validated.buyerAddressId()));
-            // 여기 도달했다는 것은 STEP3 트랜잭션이 이미 commit까지 성공했다는 뜻이다 - TransactionTemplate은
-            // 콜백이 정상 반환된 뒤에 commit을 호출하므로, 콜백 안에서 먼저 Redis 카운터를 지우면 그 이후
-            // commit이 실패했을 때(락 경합, 제약 위반 등) 이미 지워진 키에 아래 catch의 decrease()가
-            // 호출되어 음수 키를 새로 만들어버릴 수 있다(그 음수를 tryIncrease가 그대로 신뢰해 재고 초과
-            // 허용으로 이어짐). 그래서 매진 카운터 정리는 commit 성공이 확정된 이 시점으로 미룬다
-            if (result.soldOut()) {
-                groupBuyCounterRepository.delete(groupBuyId);
-            }
-            return result.response();
         } catch (RuntimeException e) {
             // DB 반영이 실패하면 먼저 늘려둔 Redis 카운터를 되돌려 재고가 영구히 줄어든 상태로 남지 않도록 한다.
-            // decrease()는 이미 삭제된 키에도 안전하다(decrease_groupbuy.lua 참고)
+            // decrease()는 이미 삭제된 키에도 안전하다(decrease_groupbuy.lua 참고). try 범위를
+            // transactionTemplate.execute()까지만으로 좁힌 이유는 바로 아래 참고
             groupBuyCounterRepository.decrease(groupBuyId, quantity);
             throw e;
         }
+
+        // 여기 도달했다는 것은 STEP3 트랜잭션이 이미 commit까지 성공했다는 뜻이다 - 참여는 DB 기준으로
+        // 이미 확정됐으므로, 그 이후에 하는 Redis 정리 작업의 성패를 참여 자체의 성패와 섞지 않는다.
+        // 이 delete()를 위 try 블록 안에 두면(콜백 반환 후 commit 전이 아니라, 심지어 commit 이후에도)
+        // Redis 타임아웃 등으로 예외가 나는 순간 catch의 decrease()가 실행되어 "DB는 성공, Redis만
+        // 되돌리는" 불일치가 생긴다 - 그래서 별도 try-catch로 최선 노력(best-effort) 정리로만 처리한다
+        if (result.soldOut()) {
+            try {
+                groupBuyCounterRepository.delete(groupBuyId);
+            } catch (RuntimeException e) {
+                log.warn("매진 확정 후 Redis 카운터 삭제 실패 - groupBuyId={} (TTL로 결국 만료됨)", groupBuyId, e);
+            }
+        }
+        return result.response();
     }
 
     // STEP1: groupBuy 상태 + 배송지 소유권 검증만 하고 아무것도 쓰지 않는다. 배송지 소유권은 Redis 카운터를

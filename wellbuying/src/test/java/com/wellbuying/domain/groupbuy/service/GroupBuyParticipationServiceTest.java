@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -220,6 +221,28 @@ class GroupBuyParticipationServiceTest {
 
         verify(groupBuyCounterRepository, times(1)).decrease(1L, 100);
         verify(groupBuyCounterRepository, never()).delete(any());
+    }
+
+    // STEP3 commit은 이미 성공했는데(DB 기준 참여 확정) 그 이후 매진 정리용 Redis delete()만 실패하는
+    // 경우(Redis 타임아웃 등)를 재현한다 - DB는 이미 성공했으므로 이 실패를 참여 실패로 취급해 Redis
+    // 카운터를 decrease()로 되돌리면 안 된다("DB는 성공, Redis만 rollback"이라는 불일치가 생김).
+    // delete() 실패는 최선 노력(best-effort)으로 로그만 남기고, 참여 자체는 정상 성공 응답이어야 한다
+    @Test
+    void 매진_확정_후_Redis_삭제가_실패해도_참여_자체는_성공으로_처리된다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 100);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        stubAtomicIncrease(1L, groupBuy);
+        when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
+        when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        doThrow(new RuntimeException("Redis timeout")).when(groupBuyCounterRepository).delete(1L);
+
+        GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(100, 1L));
+
+        assertThat(response.quantity()).isEqualTo(100);
+        assertThat(groupBuy.getStatus().name()).isEqualTo("SUCCESS");
+        verify(groupBuyCounterRepository, never()).decrease(any(), anyInt());
     }
 
     // 참여자 본인이 진행 중인 공동구매의 참여를 취소하면 참여 상태가 CANCELED로 바뀌고 카운터가 원복되는지 검증
