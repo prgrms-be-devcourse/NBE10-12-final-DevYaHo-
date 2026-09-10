@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -127,8 +126,10 @@ public class CategoryService {
                 ? categoryRepository.findAllByParentIdIsNullOrderBySortOrderAscIdAsc()
                 : categoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(parentId);
 
-        IntStream.range(0, siblings.size())
-                 .forEach(i -> siblings.get(i).update(siblings.get(i).getCategoryName(), i + 1));
+        for (int i = 0; i < siblings.size(); i++) {
+            ProductCategory sibling = siblings.get(i);
+            sibling.update(sibling.getCategoryName(), i + 1);
+        }
                  
         // saveAll 제거: 영속성 컨텍스트의 Dirty Checking 활용
     }
@@ -151,10 +152,10 @@ public class CategoryService {
         
         siblings.add(insertIndex, target);
         
-        // IntStream을 활용하여 간결하게 1부터 N까지 순차 부여
-        List<ProductCategory> finalSiblings = siblings;
-        IntStream.range(0, finalSiblings.size())
-                 .forEach(i -> finalSiblings.get(i).update(finalSiblings.get(i).getCategoryName(), i + 1));
+        for (int i = 0; i < siblings.size(); i++) {
+            ProductCategory sibling = siblings.get(i);
+            sibling.update(sibling.getCategoryName(), i + 1);
+        }
                  
         // saveAll 제거: 영속성 컨텍스트의 Dirty Checking 활용
     }
