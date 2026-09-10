@@ -8,6 +8,7 @@ public record BuyerAddressResponse(
         String address,
         String addressDetail,
         String zipcode,
+        boolean isDefault,
         LocalDateTime createdAt
 ) {
 
@@ -17,6 +18,7 @@ public record BuyerAddressResponse(
                 buyerAddress.getAddress(),
                 buyerAddress.getAddressDetail(),
                 buyerAddress.getZipcode(),
+                buyerAddress.isDefault(),
                 buyerAddress.getCreatedAt());
     }
 }

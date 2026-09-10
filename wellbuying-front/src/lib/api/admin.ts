@@ -25,20 +25,20 @@ export function listSellerApplications(params: {
   return http.get<PageResponse<SellerInfoResponse>>(`/api/admin/sellers?${query.toString()}`, { auth: true });
 }
 
-export function approveSeller(sellerId: number): Promise<void> {
-  return http.post<void>(`/api/admin/sellers/${sellerId}/approve`, undefined, { auth: true });
+export function approveSeller(sellerId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/sellers/${sellerId}/approve`, { reason }, { auth: true });
 }
 
-export function rejectSeller(sellerId: number): Promise<void> {
-  return http.post<void>(`/api/admin/sellers/${sellerId}/reject`, undefined, { auth: true });
+export function rejectSeller(sellerId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/sellers/${sellerId}/reject`, { reason }, { auth: true });
 }
 
-export function suspendSeller(sellerId: number): Promise<void> {
-  return http.post<void>(`/api/admin/sellers/${sellerId}/suspend`, undefined, { auth: true });
+export function suspendSeller(sellerId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/sellers/${sellerId}/suspend`, { reason }, { auth: true });
 }
 
-export function reactivateSeller(sellerId: number): Promise<void> {
-  return http.post<void>(`/api/admin/sellers/${sellerId}/reactivate`, undefined, { auth: true });
+export function reactivateSeller(sellerId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/sellers/${sellerId}/reactivate`, { reason }, { auth: true });
 }
 
 export function listAdminProducts(params: {
@@ -52,12 +52,12 @@ export function listAdminProducts(params: {
   return http.get<PageResponse<ProductAdminResponse>>(`/api/admin/products?${query.toString()}`, { auth: true });
 }
 
-export function approveProduct(productId: number): Promise<void> {
-  return http.post<void>(`/api/admin/products/${productId}/approve`, undefined, { auth: true });
+export function approveProduct(productId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/products/${productId}/approve`, { reason }, { auth: true });
 }
 
-export function rejectProduct(productId: number): Promise<void> {
-  return http.post<void>(`/api/admin/products/${productId}/reject`, undefined, { auth: true });
+export function rejectProduct(productId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/products/${productId}/reject`, { reason }, { auth: true });
 }
 
 export function listMembers(params?: {
@@ -102,10 +102,10 @@ export function listSuspensionRequests(params: {
   );
 }
 
-export function approveSuspensionRequest(id: number): Promise<void> {
-  return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/approve`, undefined, { auth: true });
+export function approveSuspensionRequest(id: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/approve`, { reason }, { auth: true });
 }
 
-export function rejectSuspensionRequest(id: number): Promise<void> {
-  return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/reject`, undefined, { auth: true });
+export function rejectSuspensionRequest(id: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/reject`, { reason }, { auth: true });
 }
