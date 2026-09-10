@@ -28,7 +28,7 @@ class ProductSearchDocumentTest {
 
     @Test
     void of_summary가_null이면_hasActiveGroupBuy가_false이고_공동구매_필드는_null이다() {
-        ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), null);
+        ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), null, 0L);
 
         assertThat(doc.hasActiveGroupBuy()).isFalse();
         assertThat(doc.groupBuyStatus()).isNull();
@@ -42,7 +42,7 @@ class ProductSearchDocumentTest {
         GroupBuyProductSummaryResponse summary =
                 new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
 
-        ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), summary);
+        ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), summary, 0L);
 
         assertThat(doc.hasActiveGroupBuy()).isTrue();
         assertThat(doc.groupBuyStatus()).isEqualTo("ONGOING");

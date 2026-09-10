@@ -3,16 +3,20 @@ package com.wellbuying.domain.product.search;
 import com.wellbuying.domain.groupbuy.dto.GroupBuyProductSummaryResponse;
 import com.wellbuying.domain.groupbuy.service.GroupBuyService;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductCount;
 import com.wellbuying.domain.product.entity.ProductStatus;
+import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -25,6 +29,9 @@ import org.springframework.stereotype.Component;
 // 공동구매 요약을 갱신하고, 그 과정에서 PostgreSQL↔OpenSearch 간 어긋난 문서도 함께 보정한다.
 // 페이지 단위로 처리해 한 번에 많은 메모리를 쓰지 않으며, 실패해도 다음 주기에 다시 시도한다.
 // OFFSET 대신 id 커서로 순차 조회해 count 쿼리와 뒤 페이지 지연을 피한다.
+// 실패 시 다음 실행은 마지막 성공 지점부터 이어서 시작한다(resumeFromId). 정상 완주하면 처음부터 다시 훑도록 0으로 리셋한다.
+// 특정 지점에서 반복 실패(poison pill)로 resumeFromId가 고착되면 그 이전 상품들이 영원히 보정되지 않으므로,
+// 3회 연속 실패 시 처음부터 다시 훑도록 강제 리셋한다.
 @Component
 public class ProductSearchReconcileScheduler {
 
@@ -34,18 +41,23 @@ public class ProductSearchReconcileScheduler {
     private final ProductRepository productRepository;
     private final ProductSearchRepository productSearchRepository;
     private final GroupBuyService groupBuyService;
+    private final ProductCountRepository productCountRepository;
     private final Timer reconcileTimer;
     private final Counter reconciledDocuments;
     private final Counter reconcileFailures;
     private final AtomicLong lastSuccessTimestamp = new AtomicLong(0);
+    private final AtomicLong resumeFromId = new AtomicLong(0);
+    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
     public ProductSearchReconcileScheduler(ProductRepository productRepository,
             ProductSearchRepository productSearchRepository,
             GroupBuyService groupBuyService,
+            ProductCountRepository productCountRepository,
             MeterRegistry meterRegistry) {
         this.productRepository = productRepository;
         this.productSearchRepository = productSearchRepository;
         this.groupBuyService = groupBuyService;
+        this.productCountRepository = productCountRepository;
         this.reconcileTimer = Timer.builder("wellbuying.search.reconcile.duration")
                 .description("검색 인덱스 정합성 보정 배치 1회 소요 시간").register(meterRegistry);
         this.reconciledDocuments = Counter.builder("wellbuying.search.reconcile.documents")
@@ -62,7 +74,7 @@ public class ProductSearchReconcileScheduler {
             initialDelayString = "${search.reconcile.initial-delay-ms:600000}")
     public void reconcile() {
         Timer.Sample sample = Timer.start();
-        long lastId = 0L;
+        long lastId = resumeFromId.get();
         int total = 0;
         try {
             while (true) {
@@ -74,19 +86,30 @@ public class ProductSearchReconcileScheduler {
                 List<Long> ids = products.stream().map(Product::getId).toList();
                 Map<Long, GroupBuyProductSummaryResponse> summaries =
                         groupBuyService.getActiveSummariesByProductIds(ids);
+                Map<Long, Long> viewCounts = productCountRepository.findAllById(ids).stream()
+                        .collect(Collectors.toMap(ProductCount::getProductId, ProductCount::getViewCount));
                 List<ProductSearchDocument> documents = products.stream()
-                        .map(p -> ProductSearchDocument.of(p, summaries.get(p.getId())))
+                        .map(p -> ProductSearchDocument.of(p, summaries.get(p.getId()), viewCounts.get(p.getId())))
                         .toList();
                 productSearchRepository.saveAll(documents);
                 total += documents.size();
                 reconciledDocuments.increment(documents.size());
                 lastId = products.get(products.size() - 1).getId();
+                resumeFromId.set(lastId);
             }
             log.info("검색 인덱스 정합성 보정 완료: {}건 재색인", total);
             lastSuccessTimestamp.set(Instant.now().getEpochSecond());
+            resumeFromId.set(0L);
+            consecutiveFailures.set(0);
         } catch (Exception e) {
             reconcileFailures.increment();
-            log.error("검색 인덱스 정합성 보정 실패: lastId={}, 지금까지 {}건 처리", lastId, total, e);
+            int failures = consecutiveFailures.incrementAndGet();
+            log.error("검색 인덱스 정합성 보정 실패 ({}회 연속): lastId={}, 지금까지 {}건 처리", failures, lastId, total, e);
+            if (failures >= 3) {
+                log.warn("보정 배치가 {}회 연속 실패하여 resumeFromId를 0으로 리셋합니다. (특정 지점 고착 방지)", failures);
+                resumeFromId.set(0L);
+                consecutiveFailures.set(0);
+            }
         } finally {
             sample.stop(reconcileTimer);
         }

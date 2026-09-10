@@ -4,7 +4,8 @@ import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 
 public enum SearchSortType {
-    RELEVANCE(true);
+    RELEVANCE(true),
+    POPULAR(true);
 
     private final boolean supported;
 
