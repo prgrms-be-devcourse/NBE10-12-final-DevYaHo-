@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.product.search.ProductAutocompleteResponse;
+import com.wellbuying.domain.product.search.ProductSearchFilter;
 import com.wellbuying.domain.product.search.ProductSearchRepository;
 import com.wellbuying.domain.product.search.ProductSearchResponse;
 import com.wellbuying.domain.product.search.SearchSortType;
@@ -26,11 +28,22 @@ class ProductSearchServiceTest {
         ProductSearchService service = new ProductSearchService(productSearchRepository);
         ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null);
         CursorPageResponse<ProductSearchResponse> mockPage = new CursorPageResponse<>(List.of(response), null, false);
-        when(productSearchRepository.search("비타민", null, 20, null)).thenReturn(mockPage);
+        when(productSearchRepository.search("비타민", null, 20, ProductSearchFilter.none())).thenReturn(mockPage);
 
-        CursorPageResponse<ProductSearchResponse> result = service.search("비타민", SearchSortType.RELEVANCE, null, 20, null);
+        CursorPageResponse<ProductSearchResponse> result = service.search("비타민", SearchSortType.RELEVANCE, null, 20, ProductSearchFilter.none());
 
         assertThat(result.content()).containsExactly(response);
-        verify(productSearchRepository).search("비타민", null, 20, null);
+        verify(productSearchRepository).search("비타민", null, 20, ProductSearchFilter.none());
+    }
+
+    @Test
+    void autocomplete_파라미터를_리포지토리에_위임하고_결과를_반환한다() {
+        ProductSearchService service = new ProductSearchService(productSearchRepository);
+        when(productSearchRepository.autocomplete("비타민")).thenReturn(List.of(new ProductAutocompleteResponse(1L, "비타민C")));
+
+        List<ProductAutocompleteResponse> result = service.autocomplete("비타민");
+
+        assertThat(result).containsExactly(new ProductAutocompleteResponse(1L, "비타민C"));
+        verify(productSearchRepository).autocomplete("비타민");
     }
 }
