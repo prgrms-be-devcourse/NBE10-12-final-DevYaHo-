@@ -12,7 +12,8 @@
 //   특정 시나리오만 실행:          k6 run -e ONLY=search,detail product-load-test.js
 //   대상 서버 지정:                k6 run -e BASE_URL=http://localhost:8080 product-load-test.js
 //
-// ONLY로 고를 수 있는 이름: categories, list_latest, list_filter, list_popular, list_price, detail, search
+// ONLY로 고를 수 있는 이름: categories, list_latest, list_filter, list_popular, list_price, detail, search,
+//                         search_filter, search_popular, search_group_buy, autocomplete
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -24,6 +25,7 @@ const DETAIL_FANOUT = 3; // 목록 한 페이지에서 상세로 이어서 클�
 const ADJS = ['유기농', '프리미엄', '베스트', '신선한', '천연', '국내산', '수입', '고품질', '특가', '한정'];
 const NOUNS = ['비타민', '마스크', '텀블러', '에코백', '쿠션', '영양제', '셔츠', '신발', '가방', '모자'];
 const KEYWORDS = [...NOUNS, ...ADJS, ...ADJS.flatMap((a) => NOUNS.map((n) => `${a} ${n}`))];
+const AUTOCOMPLETE_PREFIXES = [...new Set([...ADJS, ...NOUNS].map((w) => w.slice(0, 2)))];
 
 const MIN_PRICE_POOL = [null, 0, 5000, 10000, 20000];
 const MAX_PRICE_POOL = [null, 20000, 50000, 100000];
@@ -52,6 +54,10 @@ const ALL_SCENARIOS = {
   list_price: { executor: 'ramping-vus', exec: 'listPriceTest', stages: STAGES, tags: { test_type: 'list_price' } },
   detail: { executor: 'ramping-vus', exec: 'detailTest', stages: STAGES, tags: { test_type: 'detail' } },
   search: { executor: 'ramping-vus', exec: 'searchTest', stages: STAGES, tags: { test_type: 'search' } },
+  search_filter: { executor: 'ramping-vus', exec: 'searchFilterTest', stages: STAGES, tags: { test_type: 'search_filter' } },
+  search_popular: { executor: 'ramping-vus', exec: 'searchPopularTest', stages: STAGES, tags: { test_type: 'search_popular' } },
+  search_group_buy: { executor: 'ramping-vus', exec: 'searchGroupBuyTest', stages: STAGES, tags: { test_type: 'search_group_buy' } },
+  autocomplete: { executor: 'ramping-vus', exec: 'autocompleteTest', stages: STAGES, tags: { test_type: 'autocomplete' } },
 };
 
 const scenarios = {};
@@ -69,6 +75,10 @@ export const options = {
     'http_req_duration{test_type:list_price}': ['p(95)<3000', 'p(99)<5000'],
     'http_req_duration{test_type:detail}': ['p(95)<1000', 'p(99)<2000'],
     'http_req_duration{test_type:search}': ['p(95)<3000', 'p(99)<5000'],
+    'http_req_duration{test_type:search_filter}': ['p(95)<3000', 'p(99)<5000'],
+    'http_req_duration{test_type:search_popular}': ['p(95)<3000', 'p(99)<5000'],
+    'http_req_duration{test_type:search_group_buy}': ['p(95)<3000', 'p(99)<5000'],
+    'http_req_duration{test_type:autocomplete}': ['p(95)<500', 'p(99)<1000'],
     http_req_failed: ['rate<0.05'],
   },
 };
@@ -226,6 +236,57 @@ export function searchTest() {
     return `${BASE_URL}/api/products/search?${qs}`;
   }, 'search');
   sleep(1);
+}
+
+// 8) 검색 - 카테고리+가격 필터 조합 (issue-76)
+export function searchFilterTest(data) {
+  const kw = pick(KEYWORDS);
+  const categoryId = pick(data.categoryIds);
+  const minPrice = pick(MIN_PRICE_POOL);
+  const maxPrice = pick(MAX_PRICE_POOL);
+
+  walkCursorPages((cursor) => {
+    const qs = buildQuery({ keyword: kw, size: 20, categoryId, minPrice, maxPrice, cursor });
+    return `${BASE_URL}/api/products/search?${qs}`;
+  }, 'search_filter');
+  sleep(1);
+}
+
+// 9) 검색 - POPULAR(조회수순) 정렬 (issue-183)
+export function searchPopularTest() {
+  const kw = pick(KEYWORDS);
+  walkCursorPages((cursor) => {
+    const qs = buildQuery({ keyword: kw, sort: 'POPULAR', size: 20, cursor });
+    return `${BASE_URL}/api/products/search?${qs}`;
+  }, 'search_popular');
+  sleep(1);
+}
+
+// 10) 검색 - 진행 중 공동구매만 필터
+export function searchGroupBuyTest() {
+  const kw = pick(KEYWORDS);
+  walkCursorPages((cursor) => {
+    const qs = buildQuery({ keyword: kw, activeGroupBuyOnly: true, size: 20, cursor });
+    return `${BASE_URL}/api/products/search?${qs}`;
+  }, 'search_group_buy');
+  sleep(1);
+}
+
+// 11) 자동완성 - 짧은 prefix로 고빈도 호출 (실제 타이핑 패턴 흉내, 커서 없음)
+export function autocompleteTest() {
+  const prefix = pick(AUTOCOMPLETE_PREFIXES);
+  const res = http.get(`${BASE_URL}/api/products/search/autocomplete?keyword=${encodeURIComponent(prefix)}`);
+  check(res, {
+    'autocomplete status 200': (r) => r.status === 200,
+    'autocomplete returns array': (r) => {
+      try {
+        return Array.isArray(r.json());
+      } catch (e) {
+        return false;
+      }
+    },
+  });
+  sleep(0.5);
 }
 
 export default function () {

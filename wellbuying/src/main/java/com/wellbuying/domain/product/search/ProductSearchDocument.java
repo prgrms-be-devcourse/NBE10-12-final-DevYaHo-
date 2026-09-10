@@ -33,11 +33,12 @@ public record ProductSearchDocument(
         @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis) LocalDateTime endAt
 ) {
     public static ProductSearchDocument of(Product product) {
-        return of(product, null);
+        return of(product, null, 0L);
     }
 
-    public static ProductSearchDocument of(Product product, GroupBuyProductSummaryResponse summary) {
+    public static ProductSearchDocument of(Product product, GroupBuyProductSummaryResponse summary, Long viewCount) {
         boolean hasActive = summary != null;
+        long resolvedViewCount = viewCount != null ? viewCount : 0L;
         return new ProductSearchDocument(
                 product.getId(),
                 product.getProductName(),
@@ -45,7 +46,7 @@ public record ProductSearchDocument(
                 product.getCategoryId(),
                 product.getStatus().name(),
                 product.getStartPrice(),
-                0L,
+                resolvedViewCount,
                 product.getThumbnailUrl(),
                 product.getSellerId(),
                 product.getCreatedAt(),

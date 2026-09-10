@@ -3,8 +3,10 @@ package com.wellbuying.domain.product.search;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.SortOptions;
 import org.opensearch.client.opensearch._types.SortOrder;
@@ -27,20 +29,24 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
     }
 
     @Override
-    public CursorPageResponse<ProductSearchResponse> search(String keyword, String cursor, int size, ProductSearchFilter filter) {
+    public CursorPageResponse<ProductSearchResponse> search(String keyword, SearchSortType sort, String cursor, int size, ProductSearchFilter filter) {
+        List<SortOptions> sortOptions = sort == SearchSortType.POPULAR
+                ? List.of(
+                SortOptions.of(s -> s.field(f -> f.field("viewCount").order(SortOrder.Desc))),
+                SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc))))
+                : List.of(
+                SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
+                SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc))));
         NativeQueryBuilder builder = new NativeQueryBuilder()
                 .withQuery(buildQuery(keyword, filter))
-                .withSort(List.of(
-                        SortOptions.of(s -> s.score(sc -> sc.order(SortOrder.Desc))),
-                        SortOptions.of(s -> s.field(f -> f.field("id").order(SortOrder.Asc)))
-                ))
+                .withSort(sortOptions)
                 .withPageable(PageRequest.of(0, size + 1));
 
         if (cursor != null) {
-            Cursor c = Cursor.decode(SearchSortType.RELEVANCE.name(), cursor, 2);
-            double score = c.getDouble(0);
+            Cursor c = Cursor.decode(sort.name(), cursor, 2);
+            Object cursorValue = sort == SearchSortType.POPULAR ? c.getLong(0) : c.getDouble(0);
             long id = c.getLong(1);
-            builder = builder.withSearchAfter(List.of(score, id));
+            builder = builder.withSearchAfter(List.of(cursorValue, id));
         }
 
         SearchHits<ProductSearchDocument> hits = operations.search(builder.build(), ProductSearchDocument.class);
@@ -57,18 +63,18 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
         String nextCursor = null;
         if (hasNext) {
             List<Object> sortValues = searchHits.get(size - 1).getSortValues();
-            FieldValue scoreVal = (FieldValue) sortValues.get(0);
+            FieldValue primarySortVal = (FieldValue) sortValues.get(0);
             FieldValue idVal = (FieldValue) sortValues.get(1);
-            String scoreStr;
-            if (scoreVal.isDouble()) {
-                scoreStr = String.valueOf(scoreVal.doubleValue());
-            } else if (scoreVal.isLong()) {
-                scoreStr = String.valueOf(scoreVal.longValue());
+            String primarySortStr;
+            if (primarySortVal.isDouble()) {
+                primarySortStr = String.valueOf(primarySortVal.doubleValue());
+            } else if (primarySortVal.isLong()) {
+                primarySortStr = String.valueOf(primarySortVal.longValue());
             } else {
-                throw new IllegalStateException("Unexpected FieldValue kind for score: " + scoreVal._kind());
+                throw new IllegalStateException("Unexpected FieldValue kind for primary sort field: " + primarySortVal._kind());
             }
             String idStr = String.valueOf(idVal.longValue());
-            nextCursor = Cursor.encode(SearchSortType.RELEVANCE.name(), scoreStr, idStr);
+            nextCursor = Cursor.encode(sort.name(), primarySortStr, idStr);
         }
 
         return new CursorPageResponse<>(content, nextCursor, hasNext);
