@@ -18,7 +18,9 @@ export function getMyOrder(orderId: string): Promise<OrderDetailResponse> {
   return http.get<OrderDetailResponse>(`/api/orders/me/${encodeURIComponent(orderId)}`, { auth: true });
 }
 
-// 알림 클릭 시 groupBuyId만으로 해당 주문을 찾기 위한 조회 - 참여 1건당 주문 1건이라 유일하게 정해진다
+// 알림 클릭 시 groupBuyId만으로 해당 주문을 찾기 위한 조회. 결제 재시도로 실패한 주문이 이력으로
+// 남은 채 새 주문이 추가될 수 있어 참여 1건당 주문이 여러 건일 수 있는데, 백엔드가 그중 가장 최근
+// 주문 하나를 골라 돌려준다
 export function getMyOrderIdByGroupBuy(groupBuyId: number): Promise<{ orderId: string }> {
   return http.get<{ orderId: string }>(`/api/orders/me/by-group-buy/${groupBuyId}`, { auth: true });
 }
