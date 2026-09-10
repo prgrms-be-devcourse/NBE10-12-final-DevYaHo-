@@ -15,8 +15,8 @@ import static org.mockito.Mockito.when;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.domain.address.entity.BuyerAddress;
-import com.wellbuying.domain.address.repository.BuyerAddressRepository;
+import com.wellbuying.domain.address.service.BuyerAddressService;
+import com.wellbuying.domain.address.service.BuyerAddressService.BuyerAddressOwner;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
@@ -48,7 +48,7 @@ class GroupBuyParticipationServiceTest {
     private GroupBuyCounterRepository groupBuyCounterRepository;
 
     @Mock
-    private BuyerAddressRepository buyerAddressRepository;
+    private BuyerAddressService buyerAddressService;
 
     // participate()가 TransactionTemplate으로 STEP1/STEP3 트랜잭션 경계를 직접 잡으므로 필요 - 이 mock은
     // getTransaction()/commit()/rollback() 전부 기본 no-op(null 반환)이라 별도 스텁 없이도 콜백이 그대로 실행된다
@@ -57,14 +57,6 @@ class GroupBuyParticipationServiceTest {
 
     @InjectMocks
     private GroupBuyParticipationService groupBuyParticipationService;
-
-    // 배송지 소유권 검증(findById 후 memberId 비교)을 통과시키기 위한 더미 주소록 항목.
-    // id는 리플렉션으로 채운다 - BuyerAddress.create()는 저장 전이라 id가 없기 때문
-    private BuyerAddress buyerAddressOf(Long id, Long memberId) {
-        BuyerAddress buyerAddress = BuyerAddress.create(memberId, "서울특별시 강남구 테헤란로 123", "4층", "06234");
-        org.springframework.test.util.ReflectionTestUtils.setField(buyerAddress, "id", id);
-        return buyerAddress;
-    }
 
     private GroupBuy ongoingGroupBuy(int minQuantity, int maxQuantity) {
         GroupBuy groupBuy = GroupBuy.create(10L, 1L, "제목",
@@ -94,7 +86,7 @@ class GroupBuyParticipationServiceTest {
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
                 new GroupBuyPartCreateRequest(50, 1L));
@@ -115,7 +107,7 @@ class GroupBuyParticipationServiceTest {
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
                 new GroupBuyPartCreateRequest(100, 1L));
@@ -133,7 +125,7 @@ class GroupBuyParticipationServiceTest {
         GroupBuy groupBuy = ongoingGroupBuy(100, 100);
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 100)).thenReturn(-1L);
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
 
         assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
                 new GroupBuyPartCreateRequest(50, 1L)))
@@ -157,6 +149,55 @@ class GroupBuyParticipationServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.GROUP_BUY_NOT_ONGOING);
         verify(groupBuyCounterRepository, never()).tryIncrease(any(), anyInt(), anyInt());
+        verify(buyerAddressService, never()).findOwner(any());
+    }
+
+    // STEP1.5: groupBuy 상태는 정상(ONGOING)인데 존재하지 않는 배송지로 참여를 시도하면 Redis 카운터를
+    // 건드리기 전에 즉시 거부되는지 검증 - buyerAddressService.findOwner()가 캐시/DB 어느 쪽이든
+    // 결과가 없으면 null을 반환하는데, 이 경우를 NOT_FOUND로 해석하는지 확인한다
+    @Test
+    void 존재하지_않는_배송지면_Redis_카운터_증가_없이_즉시_실패한다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        when(buyerAddressService.findOwner(1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(10, 1L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUYER_ADDRESS_NOT_FOUND);
+        verify(groupBuyCounterRepository, never()).tryIncrease(any(), anyInt(), anyInt());
+    }
+
+    // STEP1.5: 본인 소유가 아닌 배송지로 참여를 시도하면 FORBIDDEN으로 거부되는지 검증
+    @Test
+    void 본인_소유가_아닌_배송지면_참여에_실패한다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(999L));
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(10, 1L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUYER_ADDRESS_FORBIDDEN);
+        verify(groupBuyCounterRepository, never()).tryIncrease(any(), anyInt(), anyInt());
+    }
+
+    // groupBuy 자체의 문제(판매정지)가 배송지 문제보다 먼저 걸러지는지 검증 - 배송지 관련 스텁을 아예
+    // 안 함으로써, findOwner가 호출되기 전에 이미 SUSPENDED로 끝나야 함을 보인다
+    @Test
+    void 판매정지된_공동구매는_배송지_검증보다_먼저_차단된다() {
+        GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
+        groupBuy.suspend();
+        when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
+
+        assertThatThrownBy(() -> groupBuyParticipationService.participate(100L, 1L,
+                new GroupBuyPartCreateRequest(10, 1L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_BUY_SUSPENDED);
+        verify(buyerAddressService, never()).findOwner(any());
     }
 
     // STEP1과 STEP3 사이(트랜잭션이 나뉘어 있어 생기는 틈)에 공동구매가 마감되거나 판매정지되면, STEP3의
@@ -167,7 +208,7 @@ class GroupBuyParticipationServiceTest {
         GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
         // STEP3 시점엔 이미 상태가 바뀌어(마감/판매정지) 조건부 UPDATE가 0건 반영됐다고 가정
         when(groupBuyRepository.increaseQuantity(eq(1L), anyInt(), eq(GroupBuyStatus.ONGOING), any())).thenReturn(0);
@@ -189,7 +230,7 @@ class GroupBuyParticipationServiceTest {
         GroupBuy groupBuy = ongoingGroupBuy(100, 10_000);
         when(groupBuyRepository.findById(1L)).thenReturn(Optional.of(groupBuy));
         when(groupBuyCounterRepository.tryIncrease(1L, 50, 10_000)).thenReturn(50L);
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
         when(groupBuyPartRepository.save(any(GroupBuyPart.class)))
                 .thenThrow(new RuntimeException("DB 저장 실패(예: 제약 위반)"));
 
@@ -211,7 +252,7 @@ class GroupBuyParticipationServiceTest {
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
         // STEP1의 commit은 성공시키고(doNothing), STEP3의 commit에서만 실패시킨다(두 번째 호출)
         doNothing().doThrow(new RuntimeException("commit 실패")).when(transactionManager).commit(any());
 
@@ -234,7 +275,7 @@ class GroupBuyParticipationServiceTest {
         stubAtomicIncrease(1L, groupBuy);
         when(groupBuyCounterRepository.tryIncrease(1L, 100, 100)).thenReturn(100L);
         when(groupBuyPartRepository.save(any(GroupBuyPart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(buyerAddressRepository.findById(1L)).thenReturn(Optional.of(buyerAddressOf(1L, 100L)));
+        when(buyerAddressService.findOwner(1L)).thenReturn(new BuyerAddressOwner(100L));
         doThrow(new RuntimeException("Redis timeout")).when(groupBuyCounterRepository).delete(1L);
 
         GroupBuyPartResponse response = groupBuyParticipationService.participate(100L, 1L,
