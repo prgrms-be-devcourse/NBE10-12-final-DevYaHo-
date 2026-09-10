@@ -104,6 +104,13 @@ class ProductControllerSecurityTest extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // 자동완성은 비로그인 사용자도 접근 가능해야 한다 (#191 - 인증 예외 경로 누락으로 401 발생했던 버그의 회귀 테스트)
+    @Test
+    void autocomplete_인증_없이_호출해도_200을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/products/search/autocomplete").param("keyword", "비타"))
+                .andExpect(status().isOk());
+    }
+
     // 존재하지 않는 categoryId로 상품 등록 시 404와 PRODUCT_404_CATEGORY_NOT_FOUND를 반환하는지 검증
     @Test
     void 존재하지_않는_카테고리로_상품_등록시_404를_반환한다() throws Exception {
