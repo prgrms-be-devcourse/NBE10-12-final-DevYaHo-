@@ -5,6 +5,8 @@ import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -112,4 +114,33 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
     long countByProducerIdAndPaidAtRangeAndStatus(@Param("producerId") Long producerId,
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
             @Param("status") SettlementItemStatus status);
+
+    // "정산 대기중" 리스트 - ACCRUED 상태 settlement_item을 group_buy_id로 묶어 그룹바이 단위 미리보기 행을
+    // 만든다. settlement 행이 아직 없는(=미확정) 공동구매만 나온다(ACCRUED가 남아있다는 것 자체가 그 뜻).
+    // finalized_at 범위로 "그 달에 성사된 것"만 거른다 - SettlementQueryService 클래스 주석 참고.
+    // GROUP BY + 페이지네이션이 같이 필요해 네이티브 쿼리로 작성. ORDER BY를 직접 쓰므로 호출 측은 정렬 없는
+    // Pageable을 넘긴다(Sort를 얹으면 네이티브 쿼리에 자동 반영되지 않는다). 컬럼 별칭은
+    // SettlementPendingRow의 getter 이름과 맞춘다
+    @Query(value = """
+            SELECT si.group_buy_id AS "groupBuyId", gb.title AS "groupBuyTitle", si.producer_id AS "producerId",
+                   COUNT(*) AS "itemCount", SUM(si.amount) AS "totalSales"
+            FROM settlement_item si
+            JOIN group_buy gb ON gb.id = si.group_buy_id
+            WHERE si.producer_id = :producerId AND si.status = 'ACCRUED'
+              AND gb.finalized_at >= :from AND gb.finalized_at < :to
+            GROUP BY si.group_buy_id, gb.title, si.producer_id, gb.finalized_at
+            ORDER BY gb.finalized_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM (
+                SELECT si.group_buy_id
+                FROM settlement_item si
+                JOIN group_buy gb ON gb.id = si.group_buy_id
+                WHERE si.producer_id = :producerId AND si.status = 'ACCRUED'
+                  AND gb.finalized_at >= :from AND gb.finalized_at < :to
+                GROUP BY si.group_buy_id
+            ) sub
+            """, nativeQuery = true)
+    Page<SettlementPendingRow> findPendingByProducerIdAndFinalizedAtRange(@Param("producerId") Long producerId,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, Pageable pageable);
 }

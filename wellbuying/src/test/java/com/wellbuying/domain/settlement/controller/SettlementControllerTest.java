@@ -9,11 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
+import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
-import com.wellbuying.domain.settlement.dto.SettlementResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
-import com.wellbuying.domain.settlement.entity.SettlementStatus;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
 import com.wellbuying.domain.settlement.service.SettlementStatsService;
 import java.time.LocalDateTime;
@@ -60,19 +60,33 @@ class SettlementControllerTest {
     }
 
     @Test
-    void 내_정산_내역은_로그인_회원_id로_서비스를_호출하고_목록을_반환한다() throws Exception {
+    void 내_정산_내역은_로그인_회원_id와_년월_상태를_그대로_서비스에_전달한다() throws Exception {
         login(5L);
-        SettlementResponse row = new SettlementResponse(1L, 42L, "제주 감귤 공동구매", 5L, "푸른살림",
-                3, 100_000L, 5_000L, 95_000L, SettlementStatus.CONFIRMED, LocalDateTime.now());
-        when(settlementQueryService.getMySettlements(eq(5L), any()))
-                .thenReturn(new PageImpl<>(List.of(row)));
+        SettlementListItemResponse row = new SettlementListItemResponse(1L, 42L, "제주 감귤 공동구매", 5L, "푸른살림",
+                3, 100_000L, 5_000L, 95_000L, SettlementListStatus.COMPLETED, LocalDateTime.now(),
+                LocalDateTime.now());
+        when(settlementQueryService.getMySettlements(eq(5L), eq(2026), eq(9), eq(SettlementListStatus.COMPLETED),
+                any())).thenReturn(new PageImpl<>(List.of(row)));
 
-        mockMvc.perform(get("/api/settlements/me"))
+        mockMvc.perform(get("/api/settlements/me")
+                        .param("year", "2026").param("month", "9").param("status", "COMPLETED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].groupBuyTitle").value("제주 감귤 공동구매"))
                 .andExpect(jsonPath("$.content[0].payout").value(95000));
 
-        verify(settlementQueryService).getMySettlements(eq(5L), any());
+        verify(settlementQueryService).getMySettlements(eq(5L), eq(2026), eq(9), eq(SettlementListStatus.COMPLETED),
+                any());
+    }
+
+    @Test
+    void 내_정산_내역은_year_month_status_생략시_null로_전달한다() throws Exception {
+        login(5L);
+        when(settlementQueryService.getMySettlements(eq(5L), eq(null), eq(null), eq(null), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/settlements/me")).andExpect(status().isOk());
+
+        verify(settlementQueryService).getMySettlements(eq(5L), eq(null), eq(null), eq(null), any());
     }
 
     @Test

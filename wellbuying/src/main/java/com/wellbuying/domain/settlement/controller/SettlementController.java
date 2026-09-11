@@ -1,8 +1,9 @@
 package com.wellbuying.domain.settlement.controller;
 
 import com.wellbuying.auth.jwt.AuthenticatedMember;
+import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
+import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
-import com.wellbuying.domain.settlement.dto.SettlementResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
@@ -37,13 +38,19 @@ public class SettlementController {
         this.settlementStatsService = settlementStatsService;
     }
 
-    // 판매자 본인의 정산 내역 - producerId == 로그인한 회원 id. 정렬은 최신 확정순으로 서비스가 고정한다
-    @Operation(summary = "내 정산 내역 목록 - 확정된 공동구매별 정산(총 매출/수수료/지급 예정액)")
+    // 판매자 본인의 정산 내역 - producerId == 로그인한 회원 id.
+    // year/month는 공동구매 성사월(finalizedAt) 기준이며, 둘 중 하나라도 생략하면 이번 달로 본다.
+    // status 생략 시 대기중(PENDING)+완료(COMPLETED) 전체를 합쳐서 보여준다
+    @Operation(summary = "내 정산 내역 목록 - 월별(공동구매 성사월 기준) + 상태 필터(PENDING/COMPLETED)")
     @GetMapping("/me")
-    public ResponseEntity<Page<SettlementResponse>> getMySettlements(
+    public ResponseEntity<Page<SettlementListItemResponse>> getMySettlements(
             @AuthenticationPrincipal AuthenticatedMember member,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) SettlementListStatus status,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(settlementQueryService.getMySettlements(member.memberId(), pageable));
+        return ResponseEntity.ok(
+                settlementQueryService.getMySettlements(member.memberId(), year, month, status, pageable));
     }
 
     // 매출 추이 그래프 - settlement_item.paidAt 기준(정산 확정 여부 무관), 이번 달 포함 최근 12개월
