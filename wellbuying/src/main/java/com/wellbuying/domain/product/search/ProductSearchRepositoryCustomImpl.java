@@ -138,7 +138,7 @@ public class ProductSearchRepositoryCustomImpl implements ProductSearchRepositor
                         .must(m -> m
                                 .multiMatch(mm -> mm
                                         .query(keyword)
-                                        .fields("productName", "description")))
+                                        .fields("productName", "description", "groupBuyTitle")))
                         .filter(filters)));
     }
 }

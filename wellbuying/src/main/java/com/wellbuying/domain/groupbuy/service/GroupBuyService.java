@@ -151,10 +151,18 @@ public class GroupBuyService {
     }
 
     @Transactional(readOnly = true)
-    public Page<GroupBuySummaryResponse> list(GroupBuyStatus status, Pageable pageable) {
-        Page<GroupBuy> page = status != null
-                ? groupBuyRepository.findByStatus(status, pageable)
-                : groupBuyRepository.findAll(pageable);
+    public Page<GroupBuySummaryResponse> list(GroupBuyStatus status, String keyword, Pageable pageable) {
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        Page<GroupBuy> page;
+        if (status != null && hasKeyword) {
+            page = groupBuyRepository.findByStatusAndTitleContainingIgnoreCase(status, keyword, pageable);
+        } else if (status != null) {
+            page = groupBuyRepository.findByStatus(status, pageable);
+        } else if (hasKeyword) {
+            page = groupBuyRepository.findByTitleContainingIgnoreCase(keyword, pageable);
+        } else {
+            page = groupBuyRepository.findAll(pageable);
+        }
         return toSummaryPage(page);
     }
 

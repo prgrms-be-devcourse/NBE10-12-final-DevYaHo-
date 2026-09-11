@@ -42,11 +42,12 @@ public class AdminProductController {
         this.productService = productService;
     }
 
-    // 상태별 상품 심사 목록 조회 (예: ?status=PENDING으로 승인 대기 목록 조회)
+    // 상태별 상품 심사 목록 조회 (예: ?status=PENDING, ?keyword=키워드)
     @GetMapping
     public ResponseEntity<Page<ProductAdminResponse>> list(@RequestParam ProductStatus status,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(productService.findByStatus(status, pageable));
+        return ResponseEntity.ok(productService.findByStatus(status, keyword, pageable));
     }
 
     // 삭제된 상품 이력 조회

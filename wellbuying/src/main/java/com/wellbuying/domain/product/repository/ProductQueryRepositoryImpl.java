@@ -5,6 +5,7 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
+import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.entity.QProduct;
@@ -13,6 +14,7 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -24,9 +26,11 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
     private static final QProductCount productCount = QProductCount.productCount;
 
     private final JPAQueryFactory queryFactory;
+    private final ProductCategoryRepository productCategoryRepository;
 
-    public ProductQueryRepositoryImpl(JPAQueryFactory queryFactory) {
+    public ProductQueryRepositoryImpl(JPAQueryFactory queryFactory, ProductCategoryRepository productCategoryRepository) {
         this.queryFactory = queryFactory;
+        this.productCategoryRepository = productCategoryRepository;
     }
 
     // 판매 중인 상품을 대상으로 카테고리/가격 필터와 정렬을 적용해 커서 기반 목록 조회
@@ -96,6 +100,8 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
+                        product.categoryId,
+                        product.description,
                         product.status,
                         product.createdAt))
                 .from(product)
@@ -177,8 +183,15 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         };
     }
 
+    // 선택된 카테고리 자신 + 자식 카테고리(2뎁스) 모두 포함하는 IN 조건.
+    // 1뎁스 카테고리 선택 시 해당 카테고리의 자식 상품까지 함께 조회된다.
     private BooleanExpression categoryEq(Long categoryId) {
-        return categoryId != null ? product.categoryId.eq(categoryId) : null;
+        if (categoryId == null) return null;
+        List<Long> ids = new ArrayList<>();
+        ids.add(categoryId);
+        productCategoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(categoryId)
+                .stream().map(ProductCategory::getId).forEach(ids::add);
+        return ids.size() == 1 ? product.categoryId.eq(categoryId) : product.categoryId.in(ids);
     }
 
     private BooleanExpression priceGoe(Integer minPrice) {

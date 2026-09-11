@@ -7,7 +7,7 @@ import { CategoryHoverTab } from "@/components/consumer/CategoryHoverTab";
 type SubNavItem = {
   label: string;
   href: string;
-  isActive: (pathname: string, status: string | null, sort: string | null) => boolean;
+  isActive: (pathname: string, status: string | null, sort: string | null, view: string | null) => boolean;
 };
 
 // home/page.tsx 안에만 있던 서브 내비를 분리 — 탐색/랭킹으로 이동해도 사라지지 않도록 여러 페이지 상단에서 공유.
@@ -16,7 +16,7 @@ const ITEMS: SubNavItem[] = [
   {
     label: "진행중",
     href: "/explore",
-    isActive: (p, status, sort) => p === "/explore" && status !== "scheduled" && !sort,
+    isActive: (p, status, sort, view) => p === "/explore" && status !== "scheduled" && !sort && !view,
   },
   {
     label: "진행예정",
@@ -34,6 +34,11 @@ const ITEMS: SubNavItem[] = [
     href: "/explore?sort=closing",
     isActive: (p, status, sort) => p === "/explore" && sort === "closing",
   },
+  {
+    label: "전체 상품",
+    href: "/explore?view=products",
+    isActive: (p, status, sort, view) => p === "/explore" && view === "products",
+  },
 ];
 
 export function DealsSubNav({
@@ -49,9 +54,10 @@ export function DealsSubNav({
   const searchParams = useSearchParams();
   const status = searchParams.get("status");
   const sort = searchParams.get("sort");
+  const view = searchParams.get("view");
 
   function renderItem(item: SubNavItem) {
-    const active = item.isActive(pathname, status, sort);
+    const active = item.isActive(pathname, status, sort, view);
     return (
       <Link
         key={item.label}

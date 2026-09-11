@@ -20,12 +20,16 @@ import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
+import { getPopularProducts } from "@/lib/api/product";
+import type { ProductSummaryResponse } from "@/lib/api/types";
+import { won } from "@/lib/format";
+import { CATALOG_CATEGORIES, resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const CAROUSEL_INTERVAL_MS = 4500;
 const PROMO_COUNT = 3;
 const POPULAR_COUNT = 4;
+const POPULAR_PRODUCTS_SIDEBAR_COUNT = 5;
 const NOTABLE_COUNT = 8;
 const CLOSING_SOON_COUNT = 8;
 const UPCOMING_COUNT = 4;
@@ -46,6 +50,25 @@ export default function HomePage() {
   const { items: upcomingAll } = useGroupBuyList("READY");
   const [category, setCategory] = useState("전체");
   const [slide, setSlide] = useState(0);
+  const [popularProducts, setPopularProducts] = useState<ProductSummaryResponse[]>([]);
+  const [popularProductsLoading, setPopularProductsLoading] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+    getPopularProducts()
+      .then((res) => {
+        if (!ignore) setPopularProducts(res);
+      })
+      .catch(() => {
+        if (!ignore) setPopularProducts([]);
+      })
+      .finally(() => {
+        if (!ignore) setPopularProductsLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const byCategory = useCallback(
     (items: GroupBuyCardView[]) => (category === "전체" ? items : items.filter((item) => item.category === category)),
@@ -107,7 +130,7 @@ export default function HomePage() {
         </div>
       ) : (
         <>
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
             {activePromo && (
               <div className="space-y-3 lg:col-span-2">
                 <div className="flex items-center gap-2 text-wb-green">
@@ -118,18 +141,35 @@ export default function HomePage() {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="flex h-full flex-col space-y-3">
               <SectionHeading
                 icon={<Flame className="h-5 w-5" />}
                 tone="text-wb-orange"
-                title="지금 인기 중인 공동구매"
-                href="/ranking"
+                title="지금 인기 상품 TOP 10"
+                subtitle="가장 많이 조회된 상품이에요"
+                href="/explore?view=products&sort=POPULAR"
               />
-              <div className="space-y-2">
-                {popular.map((item, index) => (
-                  <PopularDealRow key={item.id} item={item} rank={index + 1} />
+              <div className="flex flex-1 flex-col gap-2">
+                {popularProducts.slice(0, POPULAR_PRODUCTS_SIDEBAR_COUNT).map((item, index) => (
+                  <div key={item.id} className="flex-1">
+                    <PopularProductRow item={item} rank={index + 1} />
+                  </div>
                 ))}
               </div>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading
+              icon={<Flame className="h-5 w-5" />}
+              tone="text-wb-orange"
+              title="지금 인기 중인 공동구매"
+              href="/ranking"
+            />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {popular.map((item) => (
+                <GroupBuyCard key={item.id} item={item} />
+              ))}
             </div>
           </section>
 
@@ -344,6 +384,46 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
       <div className="shrink-0 text-right">
         <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
         <p className="mt-0.5 text-xs text-wb-secondary">{item.currentQuantity.toLocaleString("ko-KR")}개 참여</p>
+      </div>
+    </Link>
+  );
+}
+
+function PopularProductRow({ item, rank }: { item: ProductSummaryResponse; rank: number }) {
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const catalog = resolveCatalogEntry(item.productName);
+
+  return (
+    <Link
+      href={`/products/${item.id}`}
+      className="flex h-full items-center gap-3 rounded-xl border border-wb-line bg-wb-surface p-2.5 transition-shadow hover:shadow-md"
+    >
+      <div className="relative shrink-0">
+        {item.thumbnailUrl && !thumbnailFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
+          <img
+            src={item.thumbnailUrl}
+            alt={item.productName}
+            className="h-14 w-14 rounded-lg object-cover"
+            onError={() => setThumbnailFailed(true)}
+          />
+        ) : (
+          <GroupBuyArtwork entry={catalog} className="h-14 w-14" />
+        )}
+        <span
+          className={`absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-extrabold text-white ${
+            rank <= 3 ? "bg-wb-orange" : "bg-wb-ink/70"
+          }`}
+        >
+          {rank}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm">{item.productName}</p>
+        <p className="mt-0.5 truncate text-xs text-wb-secondary">{won(item.startPrice)}</p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
       </div>
     </Link>
   );

@@ -80,7 +80,7 @@ public class GroupBuyController {
     public ResponseEntity<Page<GroupBuySummaryResponse>> list(
             @RequestParam(required = false) GroupBuyStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(groupBuyService.list(status, pageable));
+        return ResponseEntity.ok(groupBuyService.list(status, null, pageable));
     }
 
     // 내 공동구매 목록 조회 (생산자 본인)

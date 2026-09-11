@@ -8,6 +8,7 @@ import type {
   MemberSummaryResponse,
   PageResponse,
   ProductAdminResponse,
+  ProductDeletedAdminResponse,
   ProductStatus,
   Role,
   SellerInfoResponse,
@@ -43,10 +44,12 @@ export function reactivateSeller(sellerId: number, reason: string): Promise<void
 
 export function listAdminProducts(params: {
   status: ProductStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<ProductAdminResponse>> {
   const query = new URLSearchParams({ status: params.status });
+  if (params.keyword) query.set("keyword", params.keyword);
   if (params.page !== undefined) query.set("page", String(params.page));
   if (params.size !== undefined) query.set("size", String(params.size));
   return http.get<PageResponse<ProductAdminResponse>>(`/api/admin/products?${query.toString()}`, { auth: true });
@@ -58,6 +61,23 @@ export function approveProduct(productId: number, reason: string): Promise<void>
 
 export function rejectProduct(productId: number, reason: string): Promise<void> {
   return http.post<void>(`/api/admin/products/${productId}/reject`, { reason }, { auth: true });
+}
+
+export function listDeletedProducts(params?: {
+  page?: number;
+  size?: number;
+}): Promise<PageResponse<ProductDeletedAdminResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<ProductDeletedAdminResponse>>(`/api/admin/products/deleted${suffix}`, {
+    auth: true,
+  });
+}
+
+export function forceDeleteProduct(productId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/products/${productId}/force-delete`, { reason }, { auth: true });
 }
 
 export function listMembers(params?: {
@@ -77,11 +97,13 @@ export function listMembers(params?: {
 
 export function listAdminGroupBuys(params?: {
   status?: GroupBuyStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<GroupBuySummaryResponse>> {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";
