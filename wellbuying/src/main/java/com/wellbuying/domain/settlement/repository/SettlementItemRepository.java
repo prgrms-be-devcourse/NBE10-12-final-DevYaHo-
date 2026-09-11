@@ -1,0 +1,58 @@
+package com.wellbuying.domain.settlement.repository;
+
+import com.wellbuying.domain.settlement.entity.SettlementItem;
+import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface SettlementItemRepository extends JpaRepository<SettlementItem, Long> {
+
+    // Kafka 재수신으로 같은 결제 완료 이벤트가 다시 소비돼도 중복 적립하지 않기 위한 사전 확인용
+    boolean existsByGroupBuyParticipantId(Long groupBuyParticipantId);
+
+    // 이미 확정된 공동구매에 뒤늦게 결제 완료가 도착하는 경우를 걸러내기 위한 확인용
+    boolean existsByGroupBuyIdAndStatus(Long groupBuyId, SettlementItemStatus status);
+
+    // 정산 확정 배치 대상: 아직 적립 상태(ACCRUED) item이 남아 있고, 그 공동구매의 유예기간이 끝난 group_buy_id.
+    // GroupBuy 엔티티를 함께 조회해 finalized_at 기준으로 거른다 (settlement -> groupbuy 방향 의존은
+    // notification 도메인과 동일하게 허용). limit으로 한 번의 배치에서 처리할 최대 건수를 제한한다
+    // (처리 못한 나머지는 다음 실행에서 자연스럽게 이어진다 - GroupBuyFinalizationWorker와 같은 방식)
+    @Query("""
+            SELECT DISTINCT si.groupBuyId
+            FROM SettlementItem si, GroupBuy gb
+            WHERE si.groupBuyId = gb.id
+              AND si.status = :status
+              AND gb.finalizedAt IS NOT NULL
+              AND gb.finalizedAt < :threshold
+              AND NOT EXISTS (SELECT 1 FROM Settlement s WHERE s.groupBuyId = gb.id)
+            ORDER BY si.groupBuyId
+            """)
+    List<Long> findGroupBuyIdsReadyToConfirm(@Param("status") SettlementItemStatus status,
+            @Param("threshold") LocalDateTime threshold, Limit limit);
+
+    long countByGroupBuyIdAndStatus(Long groupBuyId, SettlementItemStatus status);
+
+    // COALESCE: 대상 행이 없을 때 SUM이 null을 반환하므로 0으로 방어 (ProductSearchEventOutboxRepository와 같은 방식)
+    @Query("""
+            SELECT COALESCE(SUM(si.amount), 0L)
+            FROM SettlementItem si
+            WHERE si.groupBuyId = :groupBuyId AND si.status = :status
+            """)
+    long sumAmountByGroupBuyIdAndStatus(@Param("groupBuyId") Long groupBuyId,
+            @Param("status") SettlementItemStatus status);
+
+    // 확정 배치가 group_buy 단위로 ACCRUED -> CONFIRMED 일괄 전이. 같은 트랜잭션에서 곧바로 합계를 다시
+    // 읽으므로 flush/clear를 켠다 (NotificationRepository.markAllAsRead와 같은 설정)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE SettlementItem si SET si.status = :to
+            WHERE si.groupBuyId = :groupBuyId AND si.status = :from
+            """)
+    int updateStatusByGroupBuyId(@Param("groupBuyId") Long groupBuyId, @Param("from") SettlementItemStatus from,
+            @Param("to") SettlementItemStatus to);
+}
