@@ -11,7 +11,8 @@ import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 재결제 유예기간(공동구매 finalized_at + grace-period-days)이 끝난 공동구매를 모아 정산을 확정한다.
+// 재결제 유예기간(공동구매 finalized_at + repayment.grace-period-days)이 끝난 공동구매를 모아 정산을 확정한다.
+// 이 유예일수는 payment 재결제 가드(PaymentRetryService)와 공유하는 값이다.
 // 한 번의 실행에서 처리할 최대 건수를 제한하고, 확정 자체는 건별 트랜잭션으로 SettlementConfirmationService에
 // 위임한다 (GroupBuyFinalizationWorker와 같은 방식). 처리 못한 나머지는 다음 실행에서 자연스럽게 이어진다.
 @Component
@@ -27,7 +28,7 @@ public class SettlementConfirmationWorker {
 
     public SettlementConfirmationWorker(SettlementItemRepository settlementItemRepository,
             SettlementConfirmationService settlementConfirmationService,
-            @Value("${settlement.confirm.grace-period-days:3}") int gracePeriodDays) {
+            @Value("${repayment.grace-period-days:3}") int gracePeriodDays) {
         this.settlementItemRepository = settlementItemRepository;
         this.settlementConfirmationService = settlementConfirmationService;
         this.gracePeriodDays = gracePeriodDays;

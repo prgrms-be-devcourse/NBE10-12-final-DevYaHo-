@@ -86,14 +86,18 @@ spring:
 opensearch:
   uris: http://${OPENSEARCH_HOST:localhost}:${OPENSEARCH_PORT:9200}
 
+repayment:
+  # 재결제 유효기간(일). 공동구매 finalized_at + 이 일수가 지나면 재결제를 거부한다(PaymentRetryService).
+  # settlement 정산 확정 배치도 같은 값을 유예기간으로 쓴다(SettlementConfirmationWorker) - 둘이 어긋나면
+  # "재결제는 되는데 정산은 이미 확정된" 창이 생기므로 한 곳에서 관리한다
+  grace-period-days: 3
+
 settlement:
   # 플랫폼 수수료율 - 정산 확정 시 총 매출에 곱해 원 단위 버림(FLOOR)으로 수수료를 계산한다
   platform-fee-rate: 0.05
   confirm:
-    # 재결제 유예 종료(공동구매 finalized_at + grace-period-days)를 넘긴 건을 모아 정산 확정하는 배치 주기
+    # finalized_at + repayment.grace-period-days 를 넘긴 건을 모아 정산 확정하는 배치 주기
     fixed-delay-ms: 3600000
-    # 재결제 유예기간(일). 이 기간이 지나면 정산을 확정하고 이후 역정산은 하지 않는다
-    grace-period-days: 3
 
 management:
   endpoints:
