@@ -80,8 +80,7 @@ export function ProductEditModal({
 
   function handleParentChange(id: number) {
     setParentCategoryId(id);
-    const parent = categoryTree.find((c) => c.id === id);
-    setSubCategoryId(parent?.children[0]?.id ?? null);
+    setSubCategoryId(null);
   }
 
   async function handleSubmit() {
@@ -91,11 +90,15 @@ export function ProductEditModal({
       setError("상품명을 입력해주세요.");
       return;
     }
-    const finalCategoryId = subCategoryId ?? parentCategoryId;
-    if (!finalCategoryId) {
+    if (!parentCategoryId) {
       setError("카테고리를 선택해주세요.");
       return;
     }
+    if (subCategories.length > 0 && !subCategoryId) {
+      setError("하위 카테고리를 선택해주세요.");
+      return;
+    }
+    const finalCategoryId = subCategoryId ?? parentCategoryId;
     if (!Number.isFinite(startPrice) || startPrice < 0) {
       setError("판매가는 0원 이상으로 입력해주세요.");
       return;
@@ -194,7 +197,11 @@ export function ProductEditModal({
         <Button
           className="w-full"
           loading={submitting}
-          disabled={!categoriesLoading && categoryTree.length === 0}
+          disabled={
+            (!categoriesLoading && categoryTree.length === 0) ||
+            !parentCategoryId ||
+            (subCategories.length > 0 && !subCategoryId)
+          }
           onClick={handleSubmit}
         >
           수정 완료

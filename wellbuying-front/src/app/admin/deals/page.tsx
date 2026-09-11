@@ -193,6 +193,12 @@ function GroupBuyListSection() {
   }
 
   useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     let ignore = false;
     setItems(null);
 

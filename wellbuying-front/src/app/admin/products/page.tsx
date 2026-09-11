@@ -74,6 +74,12 @@ function ForceDeletePanel() {
   }
 
   useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     let ignore = false;
     setError(null);
     setItems(null);
