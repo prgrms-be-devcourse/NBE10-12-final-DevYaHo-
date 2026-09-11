@@ -55,4 +55,61 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
             """)
     int updateStatusByGroupBuyId(@Param("groupBuyId") Long groupBuyId, @Param("from") SettlementItemStatus from,
             @Param("to") SettlementItemStatus to);
+
+    // 매출 추이 그래프 - 이 판매자의 결제를 주/월 단위(:unit)로 묶어 합계한다. paidAt(실제 결제 시점) 기준이라
+    // 정산 확정 여부와 무관하다 (SettlementStatsService 클래스 주석 참고). JPQL은 date_trunc를 지원하지
+    // 않아 네이티브 쿼리로 작성 - 컬럼 별칭을 SettlementTrendRow의 getter 이름과 맞춘다
+    @Query(value = """
+            SELECT date_trunc(:unit, si.paid_at) AS "periodStart",
+                   COALESCE(SUM(si.amount), 0) AS "totalSales",
+                   COUNT(*) AS "itemCount"
+            FROM settlement_item si
+            WHERE si.producer_id = :producerId AND si.paid_at >= :from
+            GROUP BY "periodStart"
+            ORDER BY "periodStart"
+            """, nativeQuery = true)
+    List<SettlementTrendRow> findTrend(@Param("producerId") Long producerId, @Param("unit") String unit,
+            @Param("from") LocalDateTime from);
+
+    // 이번 달 요약 카드 - 기간 범위 매출 (상태 무관, [from, to) 반열림 구간)
+    @Query("""
+            SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si
+            WHERE si.producerId = :producerId AND si.paidAt >= :from AND si.paidAt < :to
+            """)
+    long sumAmountByProducerIdAndPaidAtRange(@Param("producerId") Long producerId, @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    @Query("""
+            SELECT COUNT(si) FROM SettlementItem si
+            WHERE si.producerId = :producerId AND si.paidAt >= :from AND si.paidAt < :to
+            """)
+    long countByProducerIdAndPaidAtRange(@Param("producerId") Long producerId, @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    // "정산 대기 중" 카드 - ACCRUED 전체 스냅샷 (월 무관, 기간 조건 없음)
+    @Query("""
+            SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si
+            WHERE si.producerId = :producerId AND si.status = :status
+            """)
+    long sumAmountByProducerIdAndStatus(@Param("producerId") Long producerId,
+            @Param("status") SettlementItemStatus status);
+
+    long countByProducerIdAndStatus(Long producerId, SettlementItemStatus status);
+
+    // "이번 달 정산 완료" 카드 - 이번 달 매출 중 이미 CONFIRMED까지 끝난 몫
+    @Query("""
+            SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si
+            WHERE si.producerId = :producerId AND si.paidAt >= :from AND si.paidAt < :to AND si.status = :status
+            """)
+    long sumAmountByProducerIdAndPaidAtRangeAndStatus(@Param("producerId") Long producerId,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+            @Param("status") SettlementItemStatus status);
+
+    @Query("""
+            SELECT COUNT(si) FROM SettlementItem si
+            WHERE si.producerId = :producerId AND si.paidAt >= :from AND si.paidAt < :to AND si.status = :status
+            """)
+    long countByProducerIdAndPaidAtRangeAndStatus(@Param("producerId") Long producerId,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+            @Param("status") SettlementItemStatus status);
 }
