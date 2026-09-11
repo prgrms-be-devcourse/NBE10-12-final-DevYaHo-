@@ -400,3 +400,22 @@ export type ProfileImageUploadUrlResponse = {
   uploadUrl: string;
   profileImageUrl: string;
 };
+
+// 정산 확정 내역 (settlement 도메인 - GET /api/settlements/me, GET /api/admin/settlements)
+// CONFIRMED = 정산액 확정, 지급 대기 / PAID = 실제 지급 완료 (아직 지급 실행 연동 전이라 항상 CONFIRMED)
+export type SettlementStatus = "CONFIRMED" | "PAID";
+
+export type SettlementResponse = {
+  settlementId: number;
+  groupBuyId: number;
+  // 공동구매가 조회 시점에 조회되지 않으면(드묾) null
+  groupBuyTitle: string | null;
+  producerId: number;
+  producerName: string | null;
+  itemCount: number;
+  totalSales: number;
+  platformFee: number;
+  payout: number;
+  status: SettlementStatus;
+  confirmedAt: string;
+};
