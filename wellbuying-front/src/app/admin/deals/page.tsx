@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PauseCircle, ShoppingBag } from "lucide-react";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
@@ -175,15 +175,32 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
 }
 
 function GroupBuyListSection() {
+  const [page, setPage] = useState(0);
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [items, setItems] = useState<GroupBuySummaryResponse[] | null>(null);
+  const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleKeywordChange(value: string) {
+    setKeyword(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedKeyword(value);
+      setPage(0);
+    }, 300);
+  }
 
   useEffect(() => {
     let ignore = false;
+    setItems(null);
 
-    listAdminGroupBuys({ size: 50 })
+    listAdminGroupBuys({ keyword: debouncedKeyword || undefined, page, size: 20 })
       .then((response) => {
-        if (!ignore) setItems(response.content);
+        if (ignore) return;
+        setItems(response.content);
+        setTotalPages(response.page.totalPages);
       })
       .catch((e) => {
         if (ignore) return;
@@ -194,43 +211,64 @@ function GroupBuyListSection() {
     return () => {
       ignore = true;
     };
-  }, []);
-
-  if (items === null) {
-    return <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>;
-  }
+  }, [debouncedKeyword, page]);
 
   return (
     <div className="space-y-3">
+      <input
+        type="text"
+        value={keyword}
+        onChange={(e) => handleKeywordChange(e.target.value)}
+        placeholder="공동구매 제목으로 검색"
+        className="w-full rounded-lg border border-wb-line bg-white px-4 py-2.5 text-sm outline-none focus:border-wb-green"
+      />
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {items === null ? (
+        <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items.length === 0 ? (
         <EmptyState icon={ShoppingBag} title="등록된 공동구매가 없어요" message="아직 개설된 공동구매가 없어요." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-wb-line bg-wb-surface">
-          <div className="grid grid-cols-[2fr_1fr_100px_100px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
-            <span>공동구매</span>
-            <span>진행률</span>
-            <span>상태</span>
-            <span>판매정지</span>
-          </div>
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="grid grid-cols-[2fr_1fr_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
-            >
-              <div className="min-w-0">
-                <p className="line-clamp-1 text-sm font-bold">{item.title}</p>
-                <p className="line-clamp-1 text-xs text-wb-secondary">{item.productName}</p>
-              </div>
-              <p className="text-xs font-bold">
-                {item.currentQuantity.toLocaleString("ko-KR")} / {item.maxQuantity.toLocaleString("ko-KR")}개
-              </p>
-              <GroupBuyStatusTag status={item.status} />
-              {item.suspended ? <StatusPill tone="red">정지됨</StatusPill> : <span className="text-xs text-wb-secondary">-</span>}
+        <>
+          <div className="overflow-hidden rounded-2xl border border-wb-line bg-wb-surface">
+            <div className="grid grid-cols-[2fr_1fr_100px_100px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
+              <span>공동구매</span>
+              <span>진행률</span>
+              <span>상태</span>
+              <span>판매정지</span>
             </div>
-          ))}
-        </div>
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="grid grid-cols-[2fr_1fr_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
+              >
+                <div className="min-w-0">
+                  <p className="line-clamp-1 text-sm font-bold">{item.title}</p>
+                  <p className="line-clamp-1 text-xs text-wb-secondary">{item.productName}</p>
+                </div>
+                <p className="text-xs font-bold">
+                  {item.currentQuantity.toLocaleString("ko-KR")} / {item.maxQuantity.toLocaleString("ko-KR")}개
+                </p>
+                <GroupBuyStatusTag status={item.status} />
+                {item.suspended ? <StatusPill tone="red">정지됨</StatusPill> : <span className="text-xs text-wb-secondary">-</span>}
+              </div>
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-2">
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                이전
+              </Button>
+              <span className="flex items-center px-2 text-xs text-wb-secondary">
+                {page + 1} / {totalPages}
+              </span>
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                다음
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

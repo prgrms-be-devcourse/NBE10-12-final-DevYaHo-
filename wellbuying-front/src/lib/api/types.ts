@@ -218,6 +218,8 @@ export type ProductMineResponse = {
   productName: string;
   startPrice: number;
   thumbnailUrl: string | null;
+  categoryId: number;
+  description: string | null;
   status: ProductStatus;
   createdAt: string;
 };
@@ -418,4 +420,66 @@ export type SettlementResponse = {
   payout: number;
   status: SettlementStatus;
   confirmedAt: string;
+};
+
+export type SearchSortType = "RELEVANCE" | "POPULAR";
+
+export type ProductSearchResponse = {
+  id: number;
+  productName: string;
+  startPrice: number;
+  thumbnailUrl: string;
+  viewCount: number;
+  hasActiveGroupBuy: boolean;
+  groupBuyId: number | null;
+  groupBuyStatus: string | null;
+  currentUnitPrice: number | null;
+  currentQuantity: number | null;
+  targetQuantity: number | null;
+  maxQuantity: number | null;
+  endAt: string | null;
+};
+
+export type CursorPageResponse<T> = {
+  content: T[];
+  nextCursor: string | null;
+  hasNext: boolean;
+};
+
+export type ProductSortType = "LATEST" | "POPULAR" | "PRICE_ASC" | "PRICE_DESC";
+
+export type ProductSummaryResponse = {
+  id: number;
+  productName: string;
+  startPrice: number;
+  thumbnailUrl: string | null;
+  viewCount: number;
+};
+
+export type ProductUpdateRequest = {
+  categoryId: number;
+  productName: string;
+  description?: string;
+  startPrice: number;
+  thumbnailUrl?: string;
+};
+
+export type ProductDeleteRequest = {
+  reason: string;
+};
+
+// GET /api/admin/products/deleted 응답 - 삭제된 상품 이력 조회
+export type ProductDeletedAdminResponse = {
+  id: number;
+  sellerId: number;
+  productName: string;
+  deletedAt: string;
+  deletedBy: number;
+  deleteReason: string;
+};
+
+// GET /api/products/autocomplete 응답 - 상품명 자동완성
+export type ProductAutocompleteResponse = {
+  id: number;
+  productName: string;
 };

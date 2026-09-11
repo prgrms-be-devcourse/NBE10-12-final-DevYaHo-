@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Package, Plus } from "lucide-react";
 import { ProductCreateModal } from "@/components/producer/ProductCreateModal";
+import { ProductDeleteModal } from "@/components/producer/ProductDeleteModal";
+import { ProductEditModal } from "@/components/producer/ProductEditModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -28,6 +30,8 @@ export default function ProducerProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editTarget, setEditTarget] = useState<ProductMineResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProductMineResponse | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -88,12 +92,37 @@ export default function ProducerProductsPage() {
               </div>
               <p className="text-lg font-bold">{product.productName}</p>
               <p className="text-sm text-wb-secondary">{product.startPrice.toLocaleString()}원</p>
+              <div className="flex gap-2 pt-1">
+                <Button variant="secondary" className="flex-1 text-xs" onClick={() => setEditTarget(product)}>
+                  수정
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 text-xs hover:bg-red-600/90"
+                  onClick={() => setDeleteTarget(product)}
+                >
+                  삭제
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
       <ProductCreateModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={reload} />
+
+      <ProductEditModal
+        open={editTarget !== null}
+        product={editTarget}
+        onClose={() => setEditTarget(null)}
+        onUpdated={reload}
+      />
+
+      <ProductDeleteModal
+        open={deleteTarget !== null}
+        product={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={(id) => setItems((prev) => prev.filter((p) => p.id !== id))}
+      />
     </div>
   );
 }

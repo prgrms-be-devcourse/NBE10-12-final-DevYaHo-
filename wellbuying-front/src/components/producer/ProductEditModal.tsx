@@ -6,18 +6,30 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { TextField } from "@/components/ui/TextField";
 import { listCategories } from "@/lib/api/category";
-import { createProduct } from "@/lib/api/product";
+import { updateProduct } from "@/lib/api/product";
 import { ApiError } from "@/lib/api/http";
-import type { CategoryTreeResponse } from "@/lib/api/types";
+import type { CategoryTreeResponse, ProductMineResponse } from "@/lib/api/types";
 
-export function ProductCreateModal({
+function resolveCategory(tree: CategoryTreeResponse[], categoryId: number): { parentId: number; subId: number | null } {
+  for (const parent of tree) {
+    if (parent.id === categoryId) return { parentId: parent.id, subId: null };
+    for (const child of parent.children) {
+      if (child.id === categoryId) return { parentId: parent.id, subId: child.id };
+    }
+  }
+  return { parentId: categoryId, subId: null };
+}
+
+export function ProductEditModal({
   open,
+  product,
   onClose,
-  onCreated,
+  onUpdated,
 }: {
   open: boolean;
+  product: ProductMineResponse | null;
   onClose: () => void;
-  onCreated: () => void;
+  onUpdated: () => void;
 }) {
   const [categoryTree, setCategoryTree] = useState<CategoryTreeResponse[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -34,8 +46,14 @@ export function ProductCreateModal({
   const subCategories = selectedParent?.children ?? [];
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !product) return;
     let ignore = false;
+
+    setProductName(product.productName);
+    setStartPrice(product.startPrice);
+    setThumbnailUrl(product.thumbnailUrl ?? "");
+    setDescription(product.description ?? "");
+    setError(null);
 
     async function loadCategories() {
       setCategoriesLoading(true);
@@ -43,6 +61,9 @@ export function ProductCreateModal({
         const tree = await listCategories();
         if (!ignore) {
           setCategoryTree(tree);
+          const { parentId, subId } = resolveCategory(tree, product!.categoryId);
+          setParentCategoryId(parentId);
+          setSubCategoryId(subId);
         }
       } catch {
         if (!ignore) setCategoryTree([]);
@@ -55,56 +76,43 @@ export function ProductCreateModal({
     return () => {
       ignore = true;
     };
-  }, [open]);
+  }, [open, product]);
 
   function handleParentChange(id: number) {
     setParentCategoryId(id);
-    setSubCategoryId(null);
-  }
-
-  function reset() {
-    setProductName("");
-    setDescription("");
-    setStartPrice(10_000);
-    setThumbnailUrl("");
-    setError(null);
-    setParentCategoryId(null);
-    setSubCategoryId(null);
+    const parent = categoryTree.find((c) => c.id === id);
+    setSubCategoryId(parent?.children[0]?.id ?? null);
   }
 
   async function handleSubmit() {
+    if (!product) return;
     setError(null);
     if (!productName.trim()) {
       setError("상품명을 입력해주세요.");
       return;
     }
-    if (!parentCategoryId) {
+    const finalCategoryId = subCategoryId ?? parentCategoryId;
+    if (!finalCategoryId) {
       setError("카테고리를 선택해주세요.");
       return;
     }
-    if (subCategories.length > 0 && !subCategoryId) {
-      setError("하위 카테고리를 선택해주세요.");
-      return;
-    }
-    const finalCategoryId = subCategoryId ?? parentCategoryId;
-    if (!Number.isFinite(startPrice) || startPrice <= 0) {
-      setError("판매가는 0원보다 크게 입력해주세요.");
+    if (!Number.isFinite(startPrice) || startPrice < 0) {
+      setError("판매가는 0원 이상으로 입력해주세요.");
       return;
     }
     setSubmitting(true);
     try {
-      await createProduct({
+      await updateProduct(product.id, {
         categoryId: finalCategoryId,
         productName,
         description: description.trim() || undefined,
         startPrice,
         thumbnailUrl: thumbnailUrl.trim() || undefined,
       });
-      reset();
-      onCreated();
+      onUpdated();
       onClose();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "상품 등록 중 오류가 발생했어요.");
+      setError(e instanceof ApiError ? e.message : "상품 수정 중 오류가 발생했어요.");
     } finally {
       setSubmitting(false);
     }
@@ -113,12 +121,9 @@ export function ProductCreateModal({
   return (
     <Modal
       open={open}
-      onClose={() => {
-        reset();
-        onClose();
-      }}
-      title="상품 등록"
-      subtitle="공동구매를 열 상품 정보를 입력해주세요."
+      onClose={onClose}
+      title="상품 수정"
+      subtitle="수정할 상품 정보를 입력해주세요."
       width="480px"
     >
       <div className="space-y-4">
@@ -137,9 +142,6 @@ export function ProductCreateModal({
                 onChange={(e) => handleParentChange(Number(e.target.value))}
                 className="h-11 flex-1 rounded-lg border border-wb-line bg-wb-surface px-3 text-sm font-semibold outline-none"
               >
-                <option value="" disabled>
-                  카테고리 선택
-                </option>
                 {categoryTree.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.categoryName}
@@ -152,9 +154,6 @@ export function ProductCreateModal({
                   onChange={(e) => setSubCategoryId(Number(e.target.value))}
                   className="h-11 flex-1 rounded-lg border border-wb-line bg-wb-surface px-3 text-sm font-semibold outline-none"
                 >
-                  <option value="" disabled>
-                    하위 카테고리 선택
-                  </option>
                   {subCategories.map((sub) => (
                     <option key={sub.id} value={sub.id}>
                       {sub.categoryName}
@@ -195,14 +194,10 @@ export function ProductCreateModal({
         <Button
           className="w-full"
           loading={submitting}
-          disabled={
-            (!categoriesLoading && categoryTree.length === 0) ||
-            !parentCategoryId ||
-            (subCategories.length > 0 && !subCategoryId)
-          }
+          disabled={!categoriesLoading && categoryTree.length === 0}
           onClick={handleSubmit}
         >
-          상품 등록
+          수정 완료
         </Button>
       </div>
     </Modal>
