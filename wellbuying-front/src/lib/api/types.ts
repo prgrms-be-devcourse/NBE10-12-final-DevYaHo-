@@ -401,7 +401,7 @@ export type ProfileImageUploadUrlResponse = {
   profileImageUrl: string;
 };
 
-// 정산 확정 내역 (settlement 도메인 - GET /api/settlements/me, GET /api/admin/settlements)
+// 정산 확정 내역 (settlement 도메인 - GET /api/admin/settlements, 관리자 전용)
 // CONFIRMED = 정산액 확정, 지급 대기 / PAID = 실제 지급 완료 (아직 지급 실행 연동 전이라 항상 CONFIRMED)
 export type SettlementStatus = "CONFIRMED" | "PAID";
 
@@ -418,4 +418,60 @@ export type SettlementResponse = {
   payout: number;
   status: SettlementStatus;
   confirmedAt: string;
+};
+
+// 판매자 정산 목록의 필터/표시 상태 (GET /api/settlements/me) - 관리자용 SettlementStatus와는 별개
+export type SettlementListStatus = "PENDING" | "COMPLETED";
+
+// 월별 정산 목록 한 건. finalizedAt(공동구매 성사월) 기준으로 월에 귀속된다.
+// PENDING이면 settlementId/confirmedAt이 null (아직 확정 전이라 존재하지 않음)
+export type SettlementListItemResponse = {
+  settlementId: number | null;
+  groupBuyId: number;
+  groupBuyTitle: string | null;
+  producerId: number;
+  producerName: string | null;
+  itemCount: number;
+  totalSales: number;
+  platformFee: number;
+  payout: number;
+  status: SettlementListStatus;
+  finalizedAt: string | null;
+  confirmedAt: string | null;
+};
+
+export type SettlementTrendGranularity = "MONTHLY" | "WEEKLY";
+
+// groupBuyCount는 그 구간에 결제가 있었던 "서로 다른 공동구매" 건수 (참여자 수가 아님 -
+// 한 공동구매에 참여자가 여럿이어도 성사 건수는 1건)
+export type SettlementTrendPointResponse = {
+  periodStart: string;
+  totalSales: number;
+  groupBuyCount: number;
+};
+
+// 이번 달 요약 카드 3개(이번 달 매출 / 정산 대기 중 / 이번 달 정산 완료)에 필요한 값을 한 번에 담는다
+export type SettlementMonthlySummaryResponse = {
+  yearMonth: string;
+  thisMonthTotalSales: number;
+  thisMonthItemCount: number;
+  previousMonthTotalSales: number;
+  pendingAmount: number;
+  pendingItemCount: number;
+  thisMonthSettledAmount: number;
+  thisMonthSettledItemCount: number;
+};
+
+// PENDING 건 상세 - 확정 참여자 중 몇 명이 결제까지 끝냈는지
+export type SettlementProgressResponse = {
+  totalParticipants: number;
+  paidParticipants: number;
+};
+
+// COMPLETED 건 상세 - 결제한 참여자 한 명
+export type SettlementParticipantResponse = {
+  memberId: number;
+  memberName: string | null;
+  amount: number;
+  paidAt: string;
 };
