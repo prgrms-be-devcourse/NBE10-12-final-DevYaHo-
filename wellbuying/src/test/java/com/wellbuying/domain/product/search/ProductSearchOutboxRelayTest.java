@@ -180,8 +180,8 @@ class ProductSearchOutboxRelayTest {
         when(product.getId()).thenReturn(1L);
         when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
         when(productRepository.findByIdInAndDeletedAtIsNull(List.of(1L))).thenReturn(List.of(product));
-        GroupBuyProductSummaryResponse summary =
-                new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
+        GroupBuyProductSummaryResponse summary = new GroupBuyProductSummaryResponse(100L, "감귤 공동구매",
+                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L))).thenReturn(Map.of(1L, summary));
         when(productCountRepository.findAllById(any())).thenReturn(List.of());
 
