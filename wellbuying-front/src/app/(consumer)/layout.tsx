@@ -1,8 +1,8 @@
 "use client";
 
 import { Heart, LayoutDashboard, Leaf, Settings, ShoppingBag } from "lucide-react";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
+import { BrandMark } from "@/components/shell/BrandMark";
 import { HeaderSearchBar } from "@/components/shell/HeaderSearchBar";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -23,11 +23,11 @@ const ADMIN_ACCOUNT_LINKS: NavItem[] = [
 
 export default function ConsumerLayout({ children }: { children: React.ReactNode }) {
   const { member } = useAuth();
-  // 창작자센터 버튼은 관리자를 제외하고 노출. SELLER면 대시보드, 그 외(BUYER 등)는 신청 페이지
+  // 판매자공간 버튼은 관리자를 제외하고 노출. SELLER면 대시보드, 그 외(BUYER 등)는 신청 페이지
   const workspaceLinks: NavItem[] = member?.role === "ADMIN" ? [] : [
     {
       href: member?.role === "SELLER" ? "/producer/dashboard" : "/seller/apply",
-      label: "창작자센터",
+      label: "판매자공간",
       icon: Leaf,
     },
   ];
@@ -35,17 +35,16 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
   const accountLinks = member?.role === "ADMIN" ? ADMIN_ACCOUNT_LINKS : BASE_ACCOUNT_LINKS;
 
   return (
-    <RequireAuth>
-      <AppShell
-        title="WellBuying"
-        titleHref="/home"
-        navItems={NAV_ITEMS}
-        workspaceLinks={workspaceLinks}
-        accountLinks={accountLinks}
-        searchSlot={<HeaderSearchBar />}
-      >
-        {children}
-      </AppShell>
-    </RequireAuth>
+    <AppShell
+      title="WellBuying"
+      titleHref="/"
+      titleIcon={<BrandMark />}
+      navItems={NAV_ITEMS}
+      workspaceLinks={workspaceLinks}
+      accountLinks={accountLinks}
+      searchSlot={<HeaderSearchBar />}
+    >
+      {children}
+    </AppShell>
   );
 }

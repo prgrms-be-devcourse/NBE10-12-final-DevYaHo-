@@ -22,7 +22,7 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
       ? { href: "/producer/dashboard", label: "대시보드로", icon: BarChart3 }
       : member?.role === "ADMIN"
         ? { href: "/admin/dashboard", label: "대시보드로", icon: BarChart3 }
-        : { href: "/home", label: "홈으로", icon: ShoppingCart };
+        : { href: "/", label: "홈으로", icon: ShoppingCart };
 
   // 관리자는 소비자 활동(찜/참여 내역)이 의미가 없으므로 내 정보만 노출
   const accountItems = member?.role === "ADMIN" ? ACCOUNT_LINKS.filter((item) => item.href === "/profile") : ACCOUNT_LINKS;
@@ -31,7 +31,7 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
     <RequireAuth>
       <AppShell
         title="WellBuying"
-        titleHref="/home"
+        titleHref="/"
         navItems={accountItems}
         workspaceLinks={[backLink]}
         accountLinks={accountItems}

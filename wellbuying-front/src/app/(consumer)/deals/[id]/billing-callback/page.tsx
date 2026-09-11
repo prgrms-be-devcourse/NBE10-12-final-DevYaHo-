@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Banner } from "@/components/ui/Banner";
 import { registerBillingKey } from "@/lib/api/billingKey";
 import { ApiError } from "@/lib/api/http";
@@ -66,8 +67,10 @@ function CallbackBody() {
 
 export default function DealBillingCallbackPage() {
   return (
-    <Suspense fallback={<main className="px-6 py-10 text-sm text-wb-secondary">불러오는 중...</main>}>
-      <CallbackBody />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<main className="px-6 py-10 text-sm text-wb-secondary">불러오는 중...</main>}>
+        <CallbackBody />
+      </Suspense>
+    </RequireAuth>
   );
 }

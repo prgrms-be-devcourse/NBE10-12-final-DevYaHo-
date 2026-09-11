@@ -23,7 +23,7 @@ import { Tag } from "@/components/ui/Tag";
 import { getPopularProducts } from "@/lib/api/product";
 import type { ProductSummaryResponse } from "@/lib/api/types";
 import { won } from "@/lib/format";
-import { CATALOG_CATEGORIES, resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
+import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const CAROUSEL_INTERVAL_MS = 4500;
@@ -114,7 +114,7 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 px-6 py-9">
-      <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
+      <DealsSubNav categoryValue={category} onCategoryChange={setCategory} />
 
       <div>
         <p className="text-sm font-semibold text-wb-green">좋은 아침이에요</p>

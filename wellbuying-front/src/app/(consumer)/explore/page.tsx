@@ -9,7 +9,6 @@ import { ProductCard } from "@/components/deal/ProductCard";
 import { ProductSearchCard } from "@/components/deal/ProductSearchCard";
 import { Button } from "@/components/ui/Button";
 import { listCategories } from "@/lib/api/category";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList } from "@/lib/groupBuy/useGroupBuyList";
 import { useProductList } from "@/lib/product/useProductList";
 import { useProductSearch } from "@/lib/product/useProductSearch";
@@ -222,7 +221,7 @@ export default function ExplorePage() {
           {isSearchMode ? (
             <div />
           ) : (
-            <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
+            <DealsSubNav categoryValue={category} onCategoryChange={setCategory} />
           )}
           {isSearchMode ? (
             <select

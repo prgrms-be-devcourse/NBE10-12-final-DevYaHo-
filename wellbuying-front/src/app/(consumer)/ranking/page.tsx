@@ -5,7 +5,6 @@ import { PackageSearch } from "lucide-react";
 import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { Button } from "@/components/ui/Button";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const PAGE_SIZE = 12;
@@ -30,7 +29,7 @@ export default function RankingPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-6 py-9">
-      <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
+      <DealsSubNav categoryValue={category} onCategoryChange={setCategory} />
 
       <div>
         <h1 className="text-3xl font-bold">인기 공동구매</h1>

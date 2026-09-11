@@ -12,7 +12,6 @@ type SubNavItem = {
 
 // home/page.tsx 안에만 있던 서브 내비를 분리 — 탐색/랭킹으로 이동해도 사라지지 않도록 여러 페이지 상단에서 공유.
 const ITEMS: SubNavItem[] = [
-  { label: "홈", href: "/home", isActive: (p) => p === "/home" },
   {
     label: "진행중",
     href: "/explore",
@@ -42,11 +41,9 @@ const ITEMS: SubNavItem[] = [
 ];
 
 export function DealsSubNav({
-  categories,
   categoryValue,
   onCategoryChange,
 }: {
-  categories?: string[];
   categoryValue?: string;
   onCategoryChange?: (category: string) => void;
 }) {
@@ -73,11 +70,10 @@ export function DealsSubNav({
 
   return (
     <nav className="flex flex-wrap items-center gap-1 text-sm font-semibold text-wb-secondary">
-      {renderItem(ITEMS[0])}
-      {categories && categoryValue !== undefined && onCategoryChange && (
-        <CategoryHoverTab categories={categories} value={categoryValue} onChange={onCategoryChange} />
+      {categoryValue !== undefined && onCategoryChange && (
+        <CategoryHoverTab value={categoryValue} onChange={onCategoryChange} />
       )}
-      {ITEMS.slice(1).map(renderItem)}
+      {ITEMS.map(renderItem)}
     </nav>
   );
 }
