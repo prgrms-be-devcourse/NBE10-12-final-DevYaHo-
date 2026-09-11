@@ -104,7 +104,7 @@ class SettlementControllerTest {
         mockMvc.perform(get("/api/settlements/me/trend").param("granularity", "WEEKLY"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].totalSales").value(100000))
-                .andExpect(jsonPath("$[0].itemCount").value(3));
+                .andExpect(jsonPath("$[0].groupBuyCount").value(3));
 
         verify(settlementStatsService).getTrend(eq(5L), eq(SettlementTrendGranularity.WEEKLY));
     }

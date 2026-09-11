@@ -66,12 +66,14 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
             @Param("to") SettlementItemStatus to);
 
     // 매출 추이 그래프 - 이 판매자의 결제를 주/월 단위(:unit)로 묶어 합계한다. paidAt(실제 결제 시점) 기준이라
-    // 정산 확정 여부와 무관하다 (SettlementStatsService 클래스 주석 참고). JPQL은 date_trunc를 지원하지
-    // 않아 네이티브 쿼리로 작성 - 컬럼 별칭을 SettlementTrendRow의 getter 이름과 맞춘다
+    // 정산 확정 여부와 무관하다 (SettlementStatsService 클래스 주석 참고). groupBuyCount는 그 구간에 결제가
+    // 있었던 "서로 다른 공동구매" 건수 - COUNT(*)(참여자/결제 행 수)가 아니라 COUNT(DISTINCT group_buy_id)를
+    // 쓴다(한 공동구매에 참여자가 여럿이어도 성사 건수는 1건). JPQL은 date_trunc를 지원하지 않아 네이티브
+    // 쿼리로 작성 - 컬럼 별칭을 SettlementTrendRow의 getter 이름과 맞춘다
     @Query(value = """
             SELECT date_trunc(:unit, si.paid_at) AS "periodStart",
                    COALESCE(SUM(si.amount), 0) AS "totalSales",
-                   COUNT(*) AS "itemCount"
+                   COUNT(DISTINCT si.group_buy_id) AS "groupBuyCount"
             FROM settlement_item si
             WHERE si.producer_id = :producerId AND si.paid_at >= :from
             GROUP BY "periodStart"

@@ -39,7 +39,7 @@ class SettlementStatsServiceTest {
         SettlementTrendRow row = mock(SettlementTrendRow.class);
         when(row.getPeriodStart()).thenReturn(LocalDateTime.of(2026, 9, 1, 0, 0));
         when(row.getTotalSales()).thenReturn(100_000L);
-        when(row.getItemCount()).thenReturn(5L);
+        when(row.getGroupBuyCount()).thenReturn(5L);
         when(settlementItemRepository.findTrend(eq(PRODUCER_ID), eq("month"), eq(expectedFrom)))
                 .thenReturn(List.of(row));
 
@@ -49,7 +49,7 @@ class SettlementStatsServiceTest {
         SettlementTrendPointResponse point = points.get(0);
         assertThat(point.periodStart()).isEqualTo(LocalDateTime.of(2026, 9, 1, 0, 0));
         assertThat(point.totalSales()).isEqualTo(100_000L);
-        assertThat(point.itemCount()).isEqualTo(5);
+        assertThat(point.groupBuyCount()).isEqualTo(5);
     }
 
     @Test

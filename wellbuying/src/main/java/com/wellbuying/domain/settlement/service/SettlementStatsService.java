@@ -34,7 +34,7 @@ public class SettlementStatsService {
         List<SettlementTrendRow> rows = settlementItemRepository.findTrend(producerId, granularity.truncUnit(), from);
         return rows.stream()
                 .map(row -> new SettlementTrendPointResponse(row.getPeriodStart(), row.getTotalSales(),
-                        row.getItemCount().intValue()))
+                        row.getGroupBuyCount().intValue()))
                 .toList();
     }
 
