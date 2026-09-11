@@ -4,6 +4,7 @@ import { Heart, LayoutDashboard, Leaf, Settings, ShoppingBag } from "lucide-reac
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { BrandMark } from "@/components/shell/BrandMark";
 import { HeaderSearchBar } from "@/components/shell/HeaderSearchBar";
+import { CategoryHoverTab } from "@/components/consumer/CategoryHoverTab";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 // 찜/참여 내역/내 정보는 각각 /favorites, /orders, /profile로 이동한다 -
@@ -42,6 +43,7 @@ export default function ConsumerLayout({ children }: { children: React.ReactNode
       navItems={NAV_ITEMS}
       workspaceLinks={workspaceLinks}
       accountLinks={accountLinks}
+      categorySlot={<CategoryHoverTab />}
       searchSlot={<HeaderSearchBar />}
     >
       {children}

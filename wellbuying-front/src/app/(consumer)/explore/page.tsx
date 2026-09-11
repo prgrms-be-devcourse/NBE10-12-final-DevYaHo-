@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
-import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProductCard } from "@/components/deal/ProductCard";
 import { ProductSearchCard } from "@/components/deal/ProductSearchCard";
@@ -57,7 +56,7 @@ export default function ExplorePage() {
   const isProductsView = searchParams.get("view") === "products";
 
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
-  const [category, setCategory] = useState("전체");
+  const [category, setCategory] = useState(() => searchParams.get("category") ?? "전체");
   const [sort, setSort] = useState<Sort>(() => {
     const param = searchParams.get("sort");
     return isSort(param) ? param : "popular";
@@ -163,6 +162,7 @@ export default function ExplorePage() {
 
   useEffect(() => {
     setQuery(searchParams.get("q") ?? "");
+    setCategory(searchParams.get("category") ?? "전체");
     const param = searchParams.get("sort");
     if (isSort(param)) setSort(param);
     if (isSearchSort(param)) setSearchSort(param);
@@ -217,12 +217,7 @@ export default function ExplorePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-9">
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          {isSearchMode ? (
-            <div />
-          ) : (
-            <DealsSubNav categoryValue={category} onCategoryChange={setCategory} />
-          )}
+        <div className="flex items-center justify-end gap-3">
           {isSearchMode ? (
             <select
               value={searchSort}

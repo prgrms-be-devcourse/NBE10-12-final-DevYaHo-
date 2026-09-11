@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   Grid3x3,
@@ -26,9 +27,14 @@ function iconFor(categoryName: string): LucideIcon {
 
 // "홈" 옆에 놓이는 카테고리 탭 - 마우스 포인터가 올라가 있는 동안만 드롭다운으로 최상위 카테고리를
 // 아이콘과 함께 그리드로 보여준다. 카테고리 목록은 /api/categories에서 동적으로 받아온다.
-export function CategoryHoverTab({ value, onChange }: { value: string; onChange: (category: string) => void }) {
+// 타일을 고르면 페이지 내부 필터링 대신 /explore?category=이름 으로 이동한다.
+export function CategoryHoverTab() {
   const [open, setOpen] = useState(false);
   const [categoryNames, setCategoryNames] = useState<string[]>([]);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeCategory = pathname === "/explore" ? (searchParams.get("category") ?? "전체") : null;
 
   useEffect(() => {
     let ignore = false;
@@ -45,12 +51,12 @@ export function CategoryHoverTab({ value, onChange }: { value: string; onChange:
   }, []);
 
   function select(category: string) {
-    onChange(category);
     setOpen(false);
+    router.push(category === "전체" ? "/explore" : `/explore?category=${encodeURIComponent(category)}`);
   }
 
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button
         type="button"
         className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-semibold ${
@@ -63,10 +69,21 @@ export function CategoryHoverTab({ value, onChange }: { value: string; onChange:
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 grid w-[360px] grid-cols-2 gap-x-4 gap-y-1 rounded-xl border border-wb-line bg-wb-surface p-3 shadow-md sm:grid-cols-3">
-          <CategoryTile label="전체" Icon={Grid3x3} active={value === "전체"} onClick={() => select("전체")} />
+        <div className="grid grid-cols-3 gap-x-4 gap-y-1 border-t border-wb-line pt-3 sm:grid-cols-4 lg:grid-cols-5">
+          <CategoryTile
+            label="전체"
+            Icon={Grid3x3}
+            active={activeCategory === "전체"}
+            onClick={() => select("전체")}
+          />
           {categoryNames.map((name) => (
-            <CategoryTile key={name} label={name} Icon={iconFor(name)} active={value === name} onClick={() => select(name)} />
+            <CategoryTile
+              key={name}
+              label={name}
+              Icon={iconFor(name)}
+              active={activeCategory === name}
+              onClick={() => select(name)}
+            />
           ))}
         </div>
       )}

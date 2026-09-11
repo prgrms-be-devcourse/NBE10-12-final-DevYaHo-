@@ -24,6 +24,7 @@ export function AppShell({
   accountLinks,
   layout = "topnav",
   searchSlot,
+  categorySlot,
   children,
 }: {
   title: string;
@@ -34,6 +35,7 @@ export function AppShell({
   accountLinks?: NavItem[];
   layout?: "topnav" | "sidebar";
   searchSlot?: React.ReactNode;
+  categorySlot?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -194,6 +196,8 @@ export function AppShell({
             )}
           </div>
         </div>
+
+        {categorySlot && <div className="mx-auto max-w-6xl px-6 py-2">{categorySlot}</div>}
       </header>
 
       {layout === "sidebar" ? (
