@@ -39,8 +39,8 @@ class ProductSearchDocumentTest {
 
     @Test
     void of_summary가_있으면_hasActiveGroupBuy가_true이고_요약_값이_매핑된다() {
-        GroupBuyProductSummaryResponse summary =
-                new GroupBuyProductSummaryResponse(100L, GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
+        GroupBuyProductSummaryResponse summary = new GroupBuyProductSummaryResponse(100L, "감귤 공동구매",
+                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
 
         ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), summary, 0L);
 
@@ -50,6 +50,7 @@ class ProductSearchDocumentTest {
         assertThat(doc.currentQuantity()).isEqualTo(5);
         assertThat(doc.targetQuantity()).isEqualTo(10);
         assertThat(doc.groupBuyId()).isEqualTo(100L);
+        assertThat(doc.groupBuyTitle()).isEqualTo("감귤 공동구매");
         assertThat(doc.maxQuantity()).isEqualTo(100);
         assertThat(doc.endAt()).isEqualTo(LocalDateTime.of(2026, 9, 30, 23, 59));
     }
