@@ -4,8 +4,11 @@ import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
 import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
+import com.wellbuying.domain.settlement.dto.SettlementParticipantResponse;
+import com.wellbuying.domain.settlement.dto.SettlementProgressResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
+import com.wellbuying.domain.settlement.service.SettlementDetailService;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
 import com.wellbuying.domain.settlement.service.SettlementStatsService;
 import com.wellbuying.global.config.OpenApiConfig;
@@ -19,6 +22,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,11 +35,13 @@ public class SettlementController {
 
     private final SettlementQueryService settlementQueryService;
     private final SettlementStatsService settlementStatsService;
+    private final SettlementDetailService settlementDetailService;
 
     public SettlementController(SettlementQueryService settlementQueryService,
-            SettlementStatsService settlementStatsService) {
+            SettlementStatsService settlementStatsService, SettlementDetailService settlementDetailService) {
         this.settlementQueryService = settlementQueryService;
         this.settlementStatsService = settlementStatsService;
+        this.settlementDetailService = settlementDetailService;
     }
 
     // 판매자 본인의 정산 내역 - producerId == 로그인한 회원 id.
@@ -69,5 +75,21 @@ public class SettlementController {
     public ResponseEntity<SettlementMonthlySummaryResponse> getMonthlySummary(
             @AuthenticationPrincipal AuthenticatedMember member) {
         return ResponseEntity.ok(settlementStatsService.getMonthlySummary(member.memberId()));
+    }
+
+    // 정산 대기중 건 상세 - 몇 명 중 몇 명이 결제했는지 진행도
+    @Operation(summary = "정산 대기중 건 상세 - 결제 진행도(확정 참여자 중 결제 완료 수)")
+    @GetMapping("/me/{groupBuyId}/progress")
+    public ResponseEntity<SettlementProgressResponse> getProgress(
+            @AuthenticationPrincipal AuthenticatedMember member, @PathVariable Long groupBuyId) {
+        return ResponseEntity.ok(settlementDetailService.getProgress(member.memberId(), groupBuyId));
+    }
+
+    // 정산 완료 건 상세 - 결제한 참여자 명단
+    @Operation(summary = "정산 완료 건 상세 - 결제한 참여자 명단")
+    @GetMapping("/me/{groupBuyId}/participants")
+    public ResponseEntity<List<SettlementParticipantResponse>> getParticipants(
+            @AuthenticationPrincipal AuthenticatedMember member, @PathVariable Long groupBuyId) {
+        return ResponseEntity.ok(settlementDetailService.getParticipants(member.memberId(), groupBuyId));
     }
 }

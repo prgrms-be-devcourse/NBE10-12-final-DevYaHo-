@@ -12,8 +12,11 @@ import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
 import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
+import com.wellbuying.domain.settlement.dto.SettlementParticipantResponse;
+import com.wellbuying.domain.settlement.dto.SettlementProgressResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
+import com.wellbuying.domain.settlement.service.SettlementDetailService;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
 import com.wellbuying.domain.settlement.service.SettlementStatsService;
 import java.time.LocalDateTime;
@@ -45,6 +48,9 @@ class SettlementControllerTest {
 
     @MockitoBean
     private SettlementStatsService settlementStatsService;
+
+    @MockitoBean
+    private SettlementDetailService settlementDetailService;
 
     @AfterEach
     void clearSecurityContext() {
@@ -126,5 +132,32 @@ class SettlementControllerTest {
                 .andExpect(jsonPath("$.pendingAmount").value(150000));
 
         verify(settlementStatsService).getMonthlySummary(5L);
+    }
+
+    @Test
+    void 진행도_상세는_로그인_회원_id와_groupBuyId를_그대로_서비스에_전달한다() throws Exception {
+        login(5L);
+        when(settlementDetailService.getProgress(5L, 42L)).thenReturn(new SettlementProgressResponse(8L, 5L));
+
+        mockMvc.perform(get("/api/settlements/me/42/progress"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalParticipants").value(8))
+                .andExpect(jsonPath("$.paidParticipants").value(5));
+
+        verify(settlementDetailService).getProgress(5L, 42L);
+    }
+
+    @Test
+    void 참여자_명단_상세는_로그인_회원_id와_groupBuyId를_그대로_서비스에_전달한다() throws Exception {
+        login(5L);
+        when(settlementDetailService.getParticipants(5L, 42L))
+                .thenReturn(List.of(new SettlementParticipantResponse(7L, "이구매", 10_000, LocalDateTime.now())));
+
+        mockMvc.perform(get("/api/settlements/me/42/participants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].memberName").value("이구매"))
+                .andExpect(jsonPath("$[0].amount").value(10000));
+
+        verify(settlementDetailService).getParticipants(5L, 42L);
     }
 }

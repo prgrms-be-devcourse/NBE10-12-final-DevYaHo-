@@ -39,6 +39,13 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
 
     long countByGroupBuyIdAndStatus(Long groupBuyId, SettlementItemStatus status);
 
+    // 정산 상세 - "결제 완료 인원" 수. ACCRUED/CONFIRMED 상태 무관하게 행이 존재한다는 것 자체가
+    // 결제가 끝났다는 뜻이라 상태로 거르지 않는다 (05-monthly-settlement-list.md의 progress 상세 참고)
+    long countByGroupBuyId(Long groupBuyId);
+
+    // 정산 상세 - 결제한 참여자 명단(COMPLETED 상세). 결제 순서대로 보여준다
+    List<SettlementItem> findByGroupBuyIdOrderByPaidAtAsc(Long groupBuyId);
+
     // COALESCE: 대상 행이 없을 때 SUM이 null을 반환하므로 0으로 방어 (ProductSearchEventOutboxRepository와 같은 방식)
     @Query("""
             SELECT COALESCE(SUM(si.amount), 0L)
