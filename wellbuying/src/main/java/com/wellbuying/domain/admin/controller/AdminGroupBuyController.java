@@ -42,13 +42,14 @@ public class AdminGroupBuyController {
         this.groupBuyService = groupBuyService;
     }
 
-    // 전체 공동구매 목록 조회 (상태 필터 선택)
-    @Operation(summary = "전체 공동구매 목록 조회 (상태 필터 선택)")
+    // 전체 공동구매 목록 조회 (상태 필터, 제목 키워드 검색 선택)
+    @Operation(summary = "전체 공동구매 목록 조회 (상태 필터, 키워드 검색 선택)")
     @GetMapping
     public ResponseEntity<Page<GroupBuySummaryResponse>> list(
             @RequestParam(required = false) GroupBuyStatus status,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(groupBuyService.list(status, pageable));
+        return ResponseEntity.ok(groupBuyService.list(status, keyword, pageable));
     }
 
     // 상태별 판매정지 요청 목록 조회 (예: ?status=PENDING으로 처리 대기 목록 조회)
