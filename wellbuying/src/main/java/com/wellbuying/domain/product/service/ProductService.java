@@ -154,10 +154,13 @@ public class ProductService {
         return productRepository.findBySeller(sellerId, pageable);
     }
 
-    // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회
+    // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회, keyword가 있으면 상품명 LIKE 검색
     @Transactional(readOnly = true)
-    public Page<ProductAdminResponse> findByStatus(ProductStatus status, Pageable pageable) {
-        return productRepository.findByStatusAndDeletedAtIsNull(status, pageable).map(ProductAdminResponse::of);
+    public Page<ProductAdminResponse> findByStatus(ProductStatus status, String keyword, Pageable pageable) {
+        Page<Product> page = (keyword != null && !keyword.isBlank())
+                ? productRepository.findByStatusAndDeletedAtIsNullAndProductNameContainingIgnoreCase(status, keyword, pageable)
+                : productRepository.findByStatusAndDeletedAtIsNull(status, pageable);
+        return page.map(ProductAdminResponse::of);
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)

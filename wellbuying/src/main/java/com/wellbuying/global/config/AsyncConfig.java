@@ -56,6 +56,22 @@ public class AsyncConfig {
         return executor;
     }
 
+    // 검색 인덱스 보정 배치 수동 트리거 전용 스레드풀 - ProductSearchAdminController.triggerReconcile에서 사용
+    // 단일 스레드(core=max=1) + 큐 1개: 이미 실행 중인 reconcile이 있으면 최대 1개만 대기하고 추가 요청은 거절(DiscardPolicy)
+    // reconcile()이 동시에 두 번 이상 실행되면 중복 재색인이 발생하므로 단일 스레드로 제한
+    @Bean(name = "searchReconcileExecutor")
+    public Executor searchReconcileExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("search-reconcile-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.initialize();
+        return executor;
+    }
+
     // 프로필 이미지 pending 태그 제거/이전 이미지 삭제 전용 스레드풀 - ProfileImageEventListener의 @Async("s3ConfirmExecutor")에서 사용
     // DiscardPolicy: 실패해도 재시도/보상 트랜잭션 없이 로그만 남기는 best-effort 정리 작업이라, 큐가 찬 경우 Tomcat 스레드가 S3를 동기 호출하게 만드는 CallerRunsPolicy보다
     // 작업을 버리는 편이 메인 API 응답 지연을 막는 데 낫다
