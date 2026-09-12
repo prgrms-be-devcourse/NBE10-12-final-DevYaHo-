@@ -216,35 +216,21 @@ export default function ExplorePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-9">
-      <div className="space-y-4">
-        <div className="flex items-center justify-end gap-3">
-          {isSearchMode ? (
-            <select
-              value={searchSort}
-              onChange={(e) => setSearchSort(e.target.value as SearchSortType)}
-              className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-            >
-              {Object.entries(SEARCH_SORT_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-            >
-              {Object.entries(SORT_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          )}
+      {isSearchMode && (
+        <div className="flex items-center justify-end">
+          <select
+            value={searchSort}
+            onChange={(e) => setSearchSort(e.target.value as SearchSortType)}
+            className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
+          >
+            {Object.entries(SEARCH_SORT_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
+      )}
 
       <div>
         <h1 className="text-3xl font-bold">

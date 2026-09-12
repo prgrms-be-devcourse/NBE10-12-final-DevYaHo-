@@ -25,10 +25,12 @@ function iconFor(categoryName: string): LucideIcon {
   return CATEGORY_ICONS[categoryName] ?? Tag;
 }
 
-// "홈" 옆에 놓이는 카테고리 탭 - 마우스 포인터가 올라가 있는 동안만 드롭다운으로 최상위 카테고리를
-// 아이콘과 함께 그리드로 보여준다. 카테고리 목록은 /api/categories에서 동적으로 받아온다.
+// "홈" 옆에 놓이는 카테고리 탭 - 마우스 포인터가 올라가 있는 동안만 카테고리 그리드를
+// 아이콘과 함께 보여준다. 그리드는 탭 줄 아래 일반 흐름(in-flow) 블록으로 펼쳐져서
+// 모달처럼 떠 있지 않고 헤더 자체가 늘어나며 아래 콘텐츠를 밀어내는 느낌을 준다.
+// 카테고리 목록은 /api/categories에서 동적으로 받아온다.
 // 타일을 고르면 페이지 내부 필터링 대신 /explore?category=이름 으로 이동한다.
-export function CategoryHoverTab() {
+export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [categoryNames, setCategoryNames] = useState<string[]>([]);
   const router = useRouter();
@@ -57,34 +59,39 @@ export function CategoryHoverTab() {
 
   return (
     <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button
-        type="button"
-        className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-semibold ${
-          open ? "bg-wb-canvas text-wb-ink" : "text-wb-secondary hover:bg-wb-canvas hover:text-wb-ink"
-        }`}
-      >
-        <LayoutGrid className="h-3.5 w-3.5" />
-        카테고리
-        <ChevronDown className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex items-center gap-6">
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 text-sm font-semibold ${
+            open ? "text-wb-ink" : "text-wb-secondary hover:text-wb-ink"
+          }`}
+        >
+          <LayoutGrid className="h-4 w-4" />
+          카테고리
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+        {rightSlot}
+      </div>
 
       {open && (
-        <div className="grid grid-cols-3 gap-x-4 gap-y-1 border-t border-wb-line pt-3 sm:grid-cols-4 lg:grid-cols-5">
-          <CategoryTile
-            label="전체"
-            Icon={Grid3x3}
-            active={activeCategory === "전체"}
-            onClick={() => select("전체")}
-          />
-          {categoryNames.map((name) => (
+        <div className="mt-4 border-t border-wb-line bg-wb-surface">
+          <div className="grid grid-cols-4 gap-x-10 gap-y-4 py-6">
             <CategoryTile
-              key={name}
-              label={name}
-              Icon={iconFor(name)}
-              active={activeCategory === name}
-              onClick={() => select(name)}
+              label="전체"
+              Icon={Grid3x3}
+              active={activeCategory === "전체"}
+              onClick={() => select("전체")}
             />
-          ))}
+            {categoryNames.map((name) => (
+              <CategoryTile
+                key={name}
+                label={name}
+                Icon={iconFor(name)}
+                active={activeCategory === name}
+                onClick={() => select(name)}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
