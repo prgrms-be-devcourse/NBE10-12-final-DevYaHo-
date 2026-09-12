@@ -58,10 +58,12 @@ export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode })
   }
 
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div className="relative">
       <div className="flex items-center gap-6">
         <button
           type="button"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
           className={`flex items-center gap-1.5 text-sm font-semibold ${
             open ? "text-wb-ink" : "text-wb-secondary hover:text-wb-ink"
           }`}
@@ -74,7 +76,11 @@ export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode })
       </div>
 
       {open && (
-        <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-20 w-screen -translate-x-1/2 bg-wb-surface">
+        <div
+          className="absolute left-1/2 top-[calc(100%+0.5rem)] z-20 w-screen -translate-x-1/2 bg-wb-surface"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+        >
           <div className="mx-auto max-w-6xl px-6">
             <div className="grid grid-cols-4 gap-x-10 gap-y-4 py-6">
               <CategoryTile
