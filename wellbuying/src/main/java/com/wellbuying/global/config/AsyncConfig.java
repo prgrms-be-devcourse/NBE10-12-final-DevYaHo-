@@ -2,6 +2,8 @@ package com.wellbuying.global.config;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -10,6 +12,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @Configuration
 @EnableAsync
 public class AsyncConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(AsyncConfig.class);
 
     // 메일 발송 전용 스레드풀 - MailService.sendHtmlEmail의 @Async("mailExecutor")에서 사용
     @Bean(name = "mailExecutor")
@@ -84,7 +88,10 @@ public class AsyncConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("notification-sse-");
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        // 큐가 차서 버려지는 push가 있는지 운영 중에 추적할 수 있도록 DiscardPolicy 대신 로그를 남기고 버린다
+        executor.setRejectedExecutionHandler((task, exec) -> log.warn(
+                "알림 SSE push 작업이 큐 초과로 버려짐 - activeCount: {}, queueSize: {}",
+                exec.getActiveCount(), exec.getQueue().size()));
         executor.setWaitForTasksToCompleteOnShutdown(false);
         executor.initialize();
         return executor;
