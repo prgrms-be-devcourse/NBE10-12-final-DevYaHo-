@@ -15,6 +15,7 @@ import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
 import com.wellbuying.domain.notification.event.GroupBuyCompletedPayload;
 import com.wellbuying.domain.notification.event.GroupBuyFailedPayload;
+import com.wellbuying.domain.notification.event.NotificationCreatedEvent;
 import com.wellbuying.domain.notification.event.PaymentCompletedPayload;
 import com.wellbuying.domain.notification.event.PaymentFailedPayload;
 import com.wellbuying.domain.notification.repository.NotificationRepository;
@@ -60,6 +61,11 @@ class NotificationServiceTest {
         assertThat(saved.getGroupBuyId()).isEqualTo(1L);
         assertThat(saved.getProductId()).isEqualTo(10L);
         assertThat(saved.getType()).isEqualTo(NotificationType.GROUP_BUY_COMPLETED);
+
+        ArgumentCaptor<NotificationCreatedEvent> eventCaptor = ArgumentCaptor.forClass(NotificationCreatedEvent.class);
+        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(100L);
+        assertThat(eventCaptor.getValue().notification().type()).isEqualTo(NotificationType.GROUP_BUY_COMPLETED);
     }
 
     // Kafka 재처리로 같은 성사 이벤트가 다시 들어와도 이미 알림이 있으면 저장하지 않는다
@@ -72,6 +78,7 @@ class NotificationServiceTest {
         service.notifyCompleted(new GroupBuyCompletedPayload(1L, 10L, 100L));
 
         verify(notificationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     // exists 확인 시점엔 없었지만(false), 동시에 들어온 다른 스레드가 먼저 커밋해 save()가 유니크 제약
@@ -86,6 +93,7 @@ class NotificationServiceTest {
         service.notifyCompleted(new GroupBuyCompletedPayload(1L, 10L, 100L));
 
         verify(notificationRepository, times(1)).save(any());
+        verify(eventPublisher, never()).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     // 결제 완료 이벤트는 페이로드에 이미 memberId가 있으므로, 참여자 조회 없이 바로 알림 1건을 저장한다.
@@ -106,6 +114,11 @@ class NotificationServiceTest {
         assertThat(saved.getGroupBuyId()).isEqualTo(1L);
         assertThat(saved.getProductId()).isNull();
         assertThat(saved.getType()).isEqualTo(NotificationType.PAYMENT_COMPLETED);
+
+        ArgumentCaptor<NotificationCreatedEvent> eventCaptor = ArgumentCaptor.forClass(NotificationCreatedEvent.class);
+        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(100L);
+        assertThat(eventCaptor.getValue().notification().type()).isEqualTo(NotificationType.PAYMENT_COMPLETED);
     }
 
     // Kafka 재처리로 같은 결제 완료 이벤트가 다시 들어와도 이미 알림이 있으면 저장하지 않는다
@@ -118,6 +131,7 @@ class NotificationServiceTest {
         service.notifyPaymentCompleted(new PaymentCompletedPayload(1L, 100L));
 
         verify(notificationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     // 결제 실패 이벤트도 완료와 동일한 방식(memberId가 이미 페이로드에 있음)으로 저장되는지 검증
@@ -137,6 +151,11 @@ class NotificationServiceTest {
         assertThat(saved.getGroupBuyId()).isEqualTo(1L);
         assertThat(saved.getProductId()).isNull();
         assertThat(saved.getType()).isEqualTo(NotificationType.PAYMENT_FAILED);
+
+        ArgumentCaptor<NotificationCreatedEvent> eventCaptor = ArgumentCaptor.forClass(NotificationCreatedEvent.class);
+        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().memberId()).isEqualTo(100L);
+        assertThat(eventCaptor.getValue().notification().type()).isEqualTo(NotificationType.PAYMENT_FAILED);
     }
 
     @Test
@@ -148,6 +167,7 @@ class NotificationServiceTest {
         service.notifyPaymentFailed(new PaymentFailedPayload(1L, 100L));
 
         verify(notificationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     // 실패 이벤트는 memberId가 없으므로, 확정 참여자 중 아직 알림을 못 받은 memberId를 NOT EXISTS
@@ -158,6 +178,7 @@ class NotificationServiceTest {
         NotificationService service = new NotificationService(notificationRepository, eventPublisher);
         when(notificationRepository.findUnnotifiedMemberIds(1L, GroupBuyPartStatus.CONFIRMED,
                 NotificationType.GROUP_BUY_FAILED)).thenReturn(List.of(100L, 200L));
+        when(notificationRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0, List.class));
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
@@ -166,6 +187,12 @@ class NotificationServiceTest {
         verify(notificationRepository, never()).save(any());
         assertThat(captor.getValue()).hasSize(2)
                 .extracting(Notification::getMemberId)
+                .containsExactlyInAnyOrder(100L, 200L);
+
+        ArgumentCaptor<NotificationCreatedEvent> eventCaptor = ArgumentCaptor.forClass(NotificationCreatedEvent.class);
+        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues())
+                .extracting(NotificationCreatedEvent::memberId)
                 .containsExactlyInAnyOrder(100L, 200L);
     }
 
@@ -188,12 +215,14 @@ class NotificationServiceTest {
         NotificationService service = new NotificationService(notificationRepository, eventPublisher);
         when(notificationRepository.findUnnotifiedMemberIds(1L, GroupBuyPartStatus.CONFIRMED,
                 NotificationType.GROUP_BUY_FAILED)).thenReturn(List.of(100L, 100L));
+        when(notificationRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0, List.class));
 
         service.notifyFailed(new GroupBuyFailedPayload(1L, 10L));
 
         ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
         verify(notificationRepository, times(1)).saveAll(captor.capture());
         assertThat(captor.getValue()).hasSize(1);
+        verify(eventPublisher, times(1)).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     // 클라이언트가 Pageable에 다른 정렬(예: ?sort=id,asc)을 실어 보내도, 리포지토리에는 항상

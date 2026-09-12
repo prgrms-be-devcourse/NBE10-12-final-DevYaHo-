@@ -16,17 +16,25 @@ public class SseEmitterRepository {
 
     private final Map<Long, List<SseEmitter>> emittersByMemberId = new ConcurrentHashMap<>();
 
+    // add/remove 모두 리스트 mutation을 compute 계열의 재매핑 함수 "안에서" 수행해야 한다.
+    // computeIfAbsent(...).add(...)처럼 리스트를 반환받은 뒤 바깥에서 add하면, 그 사이에 다른
+    // 스레드의 remove가 끼어들어 리스트를 맵에서 지워버리는 순간 이 add는 이미 버려진(orphan)
+    // 리스트에 등록되는 레이스가 생긴다 - 이렇게 하면 같은 key에 대한 add/remove가 서로 배타적으로
+    // 실행되어(ConcurrentHashMap이 bin 단위로 락을 잡음) 안전하다.
     public void add(Long memberId, SseEmitter emitter) {
-        emittersByMemberId.computeIfAbsent(memberId, key -> new CopyOnWriteArrayList<>()).add(emitter);
+        emittersByMemberId.compute(memberId, (key, emitters) -> {
+            List<SseEmitter> result = emitters != null ? emitters : new CopyOnWriteArrayList<>();
+            result.add(emitter);
+            return result;
+        });
     }
 
-    // 빈 리스트가 남아도 메모리 부담이 미미하므로 맵에서 키 자체를 지우지는 않는다 - 동시에 새
-    // emitter가 등록되는 순간과 겹쳐 리스트를 통째로 잃어버리는 레이스를 피하기 위함
+    // 리스트가 비면 키 자체를 맵에서 제거해 로그아웃/이탈한 유저의 빈 리스트가 쌓이는 걸 막는다
     public void remove(Long memberId, SseEmitter emitter) {
-        List<SseEmitter> emitters = emittersByMemberId.get(memberId);
-        if (emitters != null) {
+        emittersByMemberId.computeIfPresent(memberId, (key, emitters) -> {
             emitters.remove(emitter);
-        }
+            return emitters.isEmpty() ? null : emitters;
+        });
     }
 
     public List<SseEmitter> findByMemberId(Long memberId) {

@@ -78,8 +78,8 @@ public class NotificationService {
                         payload.productId(), NotificationType.GROUP_BUY_FAILED.defaultMessage()))
                 .toList();
 
-        notificationRepository.saveAll(newNotifications);
-        newNotifications.forEach(notification -> eventPublisher.publishEvent(
+        List<Notification> saved = notificationRepository.saveAll(newNotifications);
+        saved.forEach(notification -> eventPublisher.publishEvent(
                 new NotificationCreatedEvent(notification.getMemberId(), NotificationResponse.of(notification))));
     }
 
