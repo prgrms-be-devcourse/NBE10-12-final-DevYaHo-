@@ -3,7 +3,9 @@ import { getProducts } from "@/lib/api/product";
 import { ApiError } from "@/lib/api/http";
 import type { ProductSortType, ProductSummaryResponse } from "@/lib/api/types";
 
-export function useProductList(options?: { category?: number | null; sort?: ProductSortType; size?: number }) {
+export function useProductList(
+  options?: { category?: number | null; sort?: ProductSortType; size?: number; enabled?: boolean },
+) {
   const [items, setItems] = useState<ProductSummaryResponse[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasNext, setHasNext] = useState(false);
@@ -13,8 +15,11 @@ export function useProductList(options?: { category?: number | null; sort?: Prod
   const category = options?.category ?? undefined;
   const sort = options?.sort ?? "LATEST";
   const size = options?.size ?? 20;
+  // 상품 탭("상품" 뷰)에서 보여줄 때만 필요한 목록이라, 다른 화면에서는 fetch 자체를 건너뛴다
+  const enabled = options?.enabled ?? true;
 
   useEffect(() => {
+    if (!enabled) return;
     let ignore = false;
 
     async function loadFirst() {
@@ -37,7 +42,7 @@ export function useProductList(options?: { category?: number | null; sort?: Prod
     return () => {
       ignore = true;
     };
-  }, [category, sort, size]);
+  }, [category, sort, size, enabled]);
 
   async function loadMore() {
     if (!hasNext || !cursor || loadingMore) return;

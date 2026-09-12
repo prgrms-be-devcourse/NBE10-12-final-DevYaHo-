@@ -107,7 +107,7 @@ export default function ExplorePage() {
     hasNext: productListHasNext,
     error: productListError,
     loadMore: loadMoreProductList,
-  } = useProductList({ category: productCategoryId, sort: productSort, size: 20 });
+  } = useProductList({ category: productCategoryId, sort: productSort, size: 20, enabled: isProductsView });
 
   const productListSentinelRef = useRef<HTMLDivElement | null>(null);
 
