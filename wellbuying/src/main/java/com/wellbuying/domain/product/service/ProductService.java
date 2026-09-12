@@ -27,6 +27,7 @@ import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
 import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
@@ -108,7 +109,16 @@ public class ProductService {
                         Collectors.mapping(ProductImage::getImageUrl, Collectors.toList())));
         List<String> galleryImageUrls = imageUrlsByType.getOrDefault(ImageType.GALLERY, List.of());
         List<String> descriptionImageUrls = imageUrlsByType.getOrDefault(ImageType.DESCRIPTION, List.of());
-        return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls);
+        GroupBuy activeGroupBuy = findRepresentativeActiveGroupBuy(productId);
+        return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls, activeGroupBuy);
+    }
+
+    // 상품 상세에 안내할 대표 공동구매 - ONGOING을 READY보다 우선한다
+    // (GroupBuyService.getActiveSummariesByProductIds와 동일한 규칙), 같은 상태끼리는 최근에(id가 큰 쪽) 개설된 건을 고른다
+    private GroupBuy findRepresentativeActiveGroupBuy(Long productId) {
+        return groupBuyRepository.findFirstByProductIdAndStatusOrderByIdDesc(productId, GroupBuyStatus.ONGOING)
+                .or(() -> groupBuyRepository.findFirstByProductIdAndStatusOrderByIdDesc(productId, GroupBuyStatus.READY))
+                .orElse(null);
     }
 
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리

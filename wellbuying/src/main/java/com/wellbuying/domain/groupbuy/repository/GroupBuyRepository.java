@@ -4,6 +4,7 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,10 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long>, Group
 
     // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
     boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
+
+    // 상품 상세 화면에서 "지금 진행 중인 공동구매로 이동" 안내용 - 상태 하나당 가장 최근(id가 큰) 1건.
+    // ProductService.getDetail()이 ONGOING을 먼저 찾고 없으면 READY를 찾는 순서로 호출해 대표 공동구매를 고른다
+    Optional<GroupBuy> findFirstByProductIdAndStatusOrderByIdDesc(Long productId, GroupBuyStatus status);
 
     // 검색 색인(OpenSearch) 배치 갱신용 - 여러 상품의 지정된 상태 공동구매를 한 번의 IN 쿼리로 조회 (상품 수만큼 개별 호출하지 않는다)
     List<GroupBuy> findByProductIdInAndStatusIn(List<Long> productIds, List<GroupBuyStatus> statuses);

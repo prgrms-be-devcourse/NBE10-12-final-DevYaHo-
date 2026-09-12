@@ -101,4 +101,29 @@ class GroupBuyRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(results).hasSize(2);
     }
+
+    // 상품 상세 화면의 대표 공동구매 조회 - ONGOING이 있으면 ONGOING을, 같은 상태가 여러 건이면 가장 최근(id가 큰) 건을 반환한다
+    @Test
+    void findFirstByProductIdAndStatusOrderByIdDesc는_해당_상태의_가장_최근_건을_반환한다() {
+        save(GroupBuyStatus.READY, LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(8));
+        GroupBuy olderOngoing = save(GroupBuyStatus.ONGOING, LocalDateTime.now().minusDays(1),
+                LocalDateTime.now().plusDays(1));
+        GroupBuy newerOngoing = save(GroupBuyStatus.ONGOING, LocalDateTime.now().minusDays(1),
+                LocalDateTime.now().plusDays(1));
+
+        var result = groupBuyRepository.findFirstByProductIdAndStatusOrderByIdDesc(10L, GroupBuyStatus.ONGOING);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getId()).isEqualTo(Math.max(olderOngoing.getId(), newerOngoing.getId()));
+    }
+
+    // 조회 대상 상태의 공동구매가 없으면 빈 Optional을 반환한다
+    @Test
+    void findFirstByProductIdAndStatusOrderByIdDesc는_대상이_없으면_빈값을_반환한다() {
+        save(GroupBuyStatus.READY, LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(8));
+
+        var result = groupBuyRepository.findFirstByProductIdAndStatusOrderByIdDesc(10L, GroupBuyStatus.ONGOING);
+
+        assertThat(result).isEmpty();
+    }
 }

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wellbuying.domain.admin.repository.AdminActionLogRepository;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
@@ -114,7 +115,32 @@ class ProductServiceTest {
 
         ProductDetailResponse result = productService.getDetail(10L);
 
-        assertThat(result).isEqualTo(new ProductDetailResponse(10L, "상품", "설명", 3000, "url", true, List.of(), List.of()));
+        assertThat(result).isEqualTo(
+                new ProductDetailResponse(10L, "상품", "설명", 3000, "url", true, List.of(), List.of(), null, null));
+    }
+
+    // 진행 중(ONGOING)인 공동구매가 있으면 그 id/상태를 함께 반환한다
+    @Test
+    void getDetail_진행중인_공동구매가_있으면_함께_반환한다() {
+        ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, adminActionLogRepository, productImageUploadService, eventPublisher, productImageRepository);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(10L);
+        when(product.getProductName()).thenReturn("상품");
+        when(product.getDescription()).thenReturn("설명");
+        when(product.getStartPrice()).thenReturn(3000);
+        when(product.getThumbnailUrl()).thenReturn("url");
+        when(product.isApproved()).thenReturn(true);
+        when(productRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(product));
+        GroupBuy activeGroupBuy = mock(GroupBuy.class);
+        when(activeGroupBuy.getId()).thenReturn(77L);
+        when(activeGroupBuy.getStatus()).thenReturn(GroupBuyStatus.ONGOING);
+        when(groupBuyRepository.findFirstByProductIdAndStatusOrderByIdDesc(10L, GroupBuyStatus.ONGOING))
+                .thenReturn(Optional.of(activeGroupBuy));
+
+        ProductDetailResponse result = productService.getDetail(10L);
+
+        assertThat(result.activeGroupBuyId()).isEqualTo(77L);
+        assertThat(result.activeGroupBuyStatus()).isEqualTo("ONGOING");
     }
 
     // 존재하지 않는 상품 ID로 조회하면 PRODUCT_NOT_FOUND 예외를 던진다
