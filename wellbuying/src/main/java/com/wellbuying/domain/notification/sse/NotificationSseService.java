@@ -58,9 +58,11 @@ public class NotificationSseService {
                 emitter.send(SseEmitter.event()
                         .name(EVENT_NOTIFICATION)
                         .data(event.notification(), MediaType.APPLICATION_JSON));
-            } catch (IOException e) {
-                // 이미 끊긴 연결에 쓰다 실패한 것 - onError/onCompletion 콜백이 정리해주므로 여기선 로그만 남긴다
-                log.debug("SSE 전송 실패 - 연결이 이미 끊긴 것으로 보임. memberId: {}", event.memberId());
+            } catch (Exception e) {
+                // IOException(끊긴 연결에 쓰기 실패) 외에도, 이미 완료/타임아웃된 emitter에 send()를 호출하면
+                // IllegalStateException이 던져질 수 있다 - 좁게 잡으면 그 순간 루프가 멈춰서 같은 유저의
+                // 나머지 emitter(다른 탭)에는 알림이 전달되지 않으므로 넓게 잡아 다음 emitter로 계속 진행한다
+                log.debug("SSE 전송 실패 - memberId: {}, cause: {}", event.memberId(), e.getMessage());
             }
         }
     }
@@ -72,9 +74,11 @@ public class NotificationSseService {
         for (SseEmitter emitter : repository.findAll()) {
             try {
                 emitter.send(SseEmitter.event().comment("ping"));
-            } catch (IOException e) {
-                // 정상 종료가 아니라 실패이므로 complete()가 아니라 completeWithError()로 onError 콜백을
-                // 확실히 태워 repository에서 제거되도록 한다
+            } catch (Exception e) {
+                // 좁게 IOException만 잡으면, 이미 완료/타임아웃된 emitter에서 던지는 IllegalStateException 같은
+                // 런타임 예외가 스케줄러 스레드까지 새어나가 이번 주기의 나머지 emitter는 하트비트도 못 받고
+                // 정리(completeWithError)도 안 된 채 남는다 - 넓게 잡아 다음 emitter로 계속 진행한다
+                log.debug("하트비트 전송 실패로 인한 emitter 정리 - cause: {}", e.getMessage());
                 emitter.completeWithError(e);
             }
         }
