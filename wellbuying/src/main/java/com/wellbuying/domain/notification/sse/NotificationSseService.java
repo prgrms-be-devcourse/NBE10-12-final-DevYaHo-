@@ -6,6 +6,7 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
@@ -47,6 +48,9 @@ public class NotificationSseService {
         return emitter;
     }
 
+    // AFTER_COMMIT 콜백은 기본적으로 커밋한 스레드(Kafka 컨슈머 스레드)에서 동기 실행되므로, emitter.send()가
+    // 느려지면 그 스레드가 묶여 다음 메시지 처리가 밀릴 수 있다 - 전용 스레드풀로 넘겨 호출자 스레드를 막지 않는다
+    @Async("notificationSseExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onNotificationCreated(NotificationCreatedEvent event) {
         for (SseEmitter emitter : repository.findByMemberId(event.memberId())) {
@@ -69,7 +73,9 @@ public class NotificationSseService {
             try {
                 emitter.send(SseEmitter.event().comment("ping"));
             } catch (IOException e) {
-                emitter.complete();
+                // 정상 종료가 아니라 실패이므로 complete()가 아니라 completeWithError()로 onError 콜백을
+                // 확실히 태워 repository에서 제거되도록 한다
+                emitter.completeWithError(e);
             }
         }
     }
