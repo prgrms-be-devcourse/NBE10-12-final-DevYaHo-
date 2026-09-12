@@ -94,9 +94,18 @@ export default function ProductDetailPage() {
         <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>
       )}
 
-      <div className="rounded-2xl border border-wb-line bg-wb-canvas p-4 text-sm text-wb-secondary">
-        아직 진행 중인 공동구매가 없어요. 공동구매가 열리면 이 페이지에서 안내해드릴게요.
-      </div>
+      {product.activeGroupBuyId ? (
+        <Link
+          href={`/deals/${product.activeGroupBuyId}`}
+          className="block rounded-2xl border border-wb-green bg-wb-canvas p-4 text-sm font-semibold text-wb-green"
+        >
+          {product.activeGroupBuyStatus === "ONGOING" ? "지금 진행 중인 공동구매 보러가기 →" : "공동구매 오픈 예정 보러가기 →"}
+        </Link>
+      ) : (
+        <div className="rounded-2xl border border-wb-line bg-wb-canvas p-4 text-sm text-wb-secondary">
+          아직 진행 중인 공동구매가 없어요. 공동구매가 열리면 이 페이지에서 안내해드릴게요.
+        </div>
+      )}
 
       <Link href="/explore" className="text-sm font-semibold text-wb-green">
         ← 둘러보기로 돌아가기

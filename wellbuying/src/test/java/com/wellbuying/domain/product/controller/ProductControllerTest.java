@@ -106,7 +106,8 @@ class ProductControllerTest {
     // 상품 단건 조회 시 200과 함께 상세 필드가 반환된다
     @Test
     void getProduct_존재하는_상품이면_상세정보를_반환한다() throws Exception {
-        ProductDetailResponse response = new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of());
+        ProductDetailResponse response =
+                new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of(), null, null);
         when(productService.getDetail(1L)).thenReturn(response);
 
         mockMvc.perform(get("/api/products/1"))
@@ -118,7 +119,7 @@ class ProductControllerTest {
     // keyword 파라미터로 검색 시 200과 함께 결과 목록이 반환된다
     @Test
     void searchProducts_키워드로_검색하면_결과를_반환한다() throws Exception {
-        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null);
+        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null, null);
         CursorPageResponse<ProductSearchResponse> searchResult = new CursorPageResponse<>(List.of(response), null, false);
         when(productSearchService.search(any(), any(), any(), anyInt(), any())).thenReturn(searchResult);
 

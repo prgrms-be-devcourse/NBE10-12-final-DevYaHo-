@@ -55,7 +55,10 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
 
 // sort: Spring Pageable 형식("속성,방향", 예: "viewCount,desc") - 서버가 이 기준으로 정렬해서 내려주므로
 // size로 잘라도(예: 상위 4개) 순서가 항상 정확하다. 미지정 시 서버 기본 정렬(createdAt desc)을 따른다
-export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: string; size?: number }) {
+export function useGroupBuyList(
+  status: GroupBuyStatus,
+  options?: { sort?: string; size?: number; categoryId?: number; enabled?: boolean },
+) {
   const [items, setItems] = useState<GroupBuyCardView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,20 +66,25 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
   const [totalPages, setTotalPages] = useState(0);
   const sort = options?.sort;
   const size = options?.size ?? 50;
+  const categoryId = options?.categoryId;
+  // 카테고리 이름 -> id 변환이 비동기로 끝나는 동안(예: page.tsx의 productCategories 로딩 중)
+  // categoryId가 아직 확정되지 않은 상태 - 기본값 true라 categoryId를 안 쓰는 화면은 그대로 동작한다
+  const enabled = options?.enabled ?? true;
 
-  // sort/size/status가 바뀌면 이전 조건으로 보던 페이지 번호는 더 이상 의미가 없으므로 1페이지로 되돌린다
+  // sort/size/status/categoryId가 바뀌면 이전 조건으로 보던 페이지 번호는 더 이상 의미가 없으므로 1페이지로 되돌린다
   useEffect(() => {
     setPage(0);
-  }, [status, sort, size]);
+  }, [status, sort, size, categoryId]);
 
   useEffect(() => {
+    if (!enabled) return;
     let ignore = false;
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const result = await listGroupBuys({ status, size, sort, page });
+        const result = await listGroupBuys({ status, size, sort, page, categoryId });
         if (!ignore) {
           setItems(result.content.map(toCardView));
           setTotalPages(result.page.totalPages);
@@ -92,7 +100,7 @@ export function useGroupBuyList(status: GroupBuyStatus, options?: { sort?: strin
     return () => {
       ignore = true;
     };
-  }, [status, sort, size, page]);
+  }, [status, sort, size, page, categoryId, enabled]);
 
   return { items, loading, error, page, totalPages, setPage };
 }

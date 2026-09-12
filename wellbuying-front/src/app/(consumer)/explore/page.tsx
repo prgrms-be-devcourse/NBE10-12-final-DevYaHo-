@@ -3,13 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
-import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProductCard } from "@/components/deal/ProductCard";
 import { ProductSearchCard } from "@/components/deal/ProductSearchCard";
 import { Button } from "@/components/ui/Button";
 import { listCategories } from "@/lib/api/category";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList } from "@/lib/groupBuy/useGroupBuyList";
 import { useProductList } from "@/lib/product/useProductList";
 import { useProductSearch } from "@/lib/product/useProductSearch";
@@ -58,7 +56,7 @@ export default function ExplorePage() {
   const isProductsView = searchParams.get("view") === "products";
 
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
-  const [category, setCategory] = useState("전체");
+  const [category, setCategory] = useState(() => searchParams.get("category") ?? "전체");
   const [sort, setSort] = useState<Sort>(() => {
     const param = searchParams.get("sort");
     return isSort(param) ? param : "popular";
@@ -71,13 +69,21 @@ export default function ExplorePage() {
   const [productParentCategoryId, setProductParentCategoryId] = useState<number | null>(null);
   const [productSubCategoryId, setProductSubCategoryId] = useState<number | null>(null);
   const [productCategories, setProductCategories] = useState<CategoryTreeResponse[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
   const productCategoryId = productSubCategoryId ?? productParentCategoryId;
   const selectedProductParent = productCategories.find((c) => c.id === productParentCategoryId) ?? null;
   const productSubCategories = selectedProductParent?.children ?? [];
 
+  // 헤더 카테고리 탭(CategoryHoverTab)이 넘기는 category는 최상위 카테고리 "이름"이라, 서버에 넘길
+  // categoryId로 바꾸려면 최상위 카테고리 목록이 필요하다 - 상품 뷰 여부와 무관하게 항상 받아온다
+  const categoryId = category === "전체" ? undefined : productCategories.find((c) => c.categoryName === category)?.id;
+  // "전체"가 아닌데 categoryId를 아직 못 찾은 건, 목록이 안 실려서인지("아직 로딩 중" - 대기해야 함)
+  // 정말 없는 카테고리라서인지("로딩 끝났는데도 매칭 실패" - 무필터로 보여줘도 됨) 구분해야 한다.
+  // categoriesLoaded로 그 둘을 나눠, 로딩 중엔 categoryId=undefined인 채로 목록을 조회하지 않게 막는다
+  const categoryReady = category === "전체" || categoriesLoaded;
+
   useEffect(() => {
-    if (!isProductsView) return;
     let ignore = false;
     listCategories()
       .then((tree) => {
@@ -85,11 +91,14 @@ export default function ExplorePage() {
       })
       .catch(() => {
         if (!ignore) setProductCategories([]);
+      })
+      .finally(() => {
+        if (!ignore) setCategoriesLoaded(true);
       });
     return () => {
       ignore = true;
     };
-  }, [isProductsView]);
+  }, []);
 
   const {
     items: productListItems,
@@ -98,7 +107,7 @@ export default function ExplorePage() {
     hasNext: productListHasNext,
     error: productListError,
     loadMore: loadMoreProductList,
-  } = useProductList({ category: productCategoryId, sort: productSort, size: 20 });
+  } = useProductList({ category: productCategoryId, sort: productSort, size: 20, enabled: isProductsView });
 
   const productListSentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -128,14 +137,14 @@ export default function ExplorePage() {
     page: ongoingPage,
     totalPages: ongoingTotalPages,
     setPage: setOngoingPage,
-  } = useGroupBuyList("ONGOING", { sort: sortParam, size: PAGE_SIZE });
+  } = useGroupBuyList("ONGOING", { sort: sortParam, size: PAGE_SIZE, categoryId, enabled: categoryReady });
   const {
     items: scheduled,
     loading: scheduledLoading,
     page: scheduledPage,
     totalPages: scheduledTotalPages,
     setPage: setScheduledPage,
-  } = useGroupBuyList("READY", { sort: sortParam, size: PAGE_SIZE });
+  } = useGroupBuyList("READY", { sort: sortParam, size: PAGE_SIZE, categoryId, enabled: categoryReady });
 
   // 검색 모드에서는 같은 검색 API를 필터만 다르게 두 번 호출한다 - 위는 전체 상품, 아래는 그중
   // 지금 공동구매 진행 중인 것만. GroupBuy.title 같은 문구는 검색 인덱스에 없어서 이 방법이 최선이다.
@@ -164,15 +173,11 @@ export default function ExplorePage() {
 
   useEffect(() => {
     setQuery(searchParams.get("q") ?? "");
+    setCategory(searchParams.get("category") ?? "전체");
     const param = searchParams.get("sort");
     if (isSort(param)) setSort(param);
     if (isSearchSort(param)) setSearchSort(param);
   }, [searchParams]);
-
-  useEffect(() => {
-    setOngoingPage(0);
-    setScheduledPage(0);
-  }, [category, query, setOngoingPage, setScheduledPage]);
 
   // 아래쪽 "진행 중인 공동구매" 섹션 전용 무한 스크롤 - sentinel이 뷰포트에 들어오면 다음
   // 커서를 불러온다. 위쪽 "상품" 섹션은 버튼 방식이라 이 관찰 대상이 아니다.
@@ -197,16 +202,16 @@ export default function ExplorePage() {
 
   const baseDeals = scheduledView ? scheduled : ongoing;
 
+  // 카테고리는 useGroupBuyList에 categoryId로 넘겨 서버에서 필터링한다 - 여기서는 검색어만 클라이언트에서 한 번 더 좁힌다
   const filtered = useMemo(() => {
     return baseDeals.filter((item) => {
-      const matchesCategory = category === "전체" || item.category === category;
       const matchesQuery =
         query.trim().length === 0 ||
         item.title.toLowerCase().includes(query.toLowerCase()) ||
         item.producerName.toLowerCase().includes(query.toLowerCase());
-      return matchesCategory && matchesQuery;
+      return matchesQuery;
     });
-  }, [baseDeals, category, query]);
+  }, [baseDeals, query]);
 
   function resetFilters() {
     setQuery("");
@@ -217,40 +222,21 @@ export default function ExplorePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-9">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          {isSearchMode ? (
-            <div />
-          ) : (
-            <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
-          )}
-          {isSearchMode ? (
-            <select
-              value={searchSort}
-              onChange={(e) => setSearchSort(e.target.value as SearchSortType)}
-              className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-            >
-              {Object.entries(SEARCH_SORT_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-            >
-              {Object.entries(SORT_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          )}
+      {isSearchMode && (
+        <div className="flex items-center justify-end">
+          <select
+            value={searchSort}
+            onChange={(e) => setSearchSort(e.target.value as SearchSortType)}
+            className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
+          >
+            {Object.entries(SEARCH_SORT_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
+      )}
 
       <div>
         <h1 className="text-3xl font-bold">

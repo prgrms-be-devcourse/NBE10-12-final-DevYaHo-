@@ -38,7 +38,7 @@ function OAuthCallbackContent() {
     exchangeOAuthCode(code)
       .then(async () => {
         await refreshMember();
-        router.replace("/home");
+        router.replace("/");
       })
       .catch((e) => {
         setExchangeError(e instanceof ApiError ? e.message : "소셜 로그인 처리 중 오류가 발생했어요.");

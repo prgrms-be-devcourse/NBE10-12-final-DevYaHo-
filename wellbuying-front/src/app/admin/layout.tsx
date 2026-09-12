@@ -7,7 +7,7 @@ import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { listAdminProducts } from "@/lib/api/admin";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
 
-const WORKSPACE_LINKS: NavItem[] = [{ href: "/home", label: "소비자 모드", icon: ShoppingCart }];
+const WORKSPACE_LINKS: NavItem[] = [{ href: "/", label: "소비자 모드", icon: ShoppingCart }];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { readySettlementCount } = useDemoStore();

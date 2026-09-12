@@ -1,37 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { PackageSearch } from "lucide-react";
-import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { Button } from "@/components/ui/Button";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const PAGE_SIZE = 12;
 
 export default function RankingPage() {
-  const { items, loading, page, totalPages, setPage } = useGroupBuyList("ONGOING", {
+  const { items: ranked, loading, page, totalPages, setPage } = useGroupBuyList("ONGOING", {
     sort: "viewCount,desc",
     size: PAGE_SIZE,
   });
-  const [category, setCategory] = useState("전체");
-
-  // 카테고리를 바꾸면 이전 페이지 번호가 새 필터 기준으로는 의미가 없으므로 1페이지로 되돌린다
-  useEffect(() => {
-    setPage(0);
-  }, [category, setPage]);
-
-  // 서버에 카테고리 필터 파라미터가 없어, 현재 페이지에 이미 불러온(viewCount 내림차순) 항목 안에서만 걸러낸다
-  const ranked = useMemo(
-    () => (category === "전체" ? items : items.filter((item) => item.category === category)),
-    [items, category],
-  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-6 py-9">
-      <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
-
       <div>
         <h1 className="text-3xl font-bold">인기 공동구매</h1>
         <p className="mt-1 text-sm text-wb-secondary">지금 가장 조회수가 높은 공동구매예요.</p>

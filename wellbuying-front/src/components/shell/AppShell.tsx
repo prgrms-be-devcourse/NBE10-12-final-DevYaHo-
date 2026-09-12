@@ -18,20 +18,24 @@ export type NavItem = {
 export function AppShell({
   title,
   titleHref,
+  titleIcon,
   navItems,
   workspaceLinks,
   accountLinks,
   layout = "topnav",
   searchSlot,
+  categorySlot,
   children,
 }: {
   title: string;
   titleHref?: string;
+  titleIcon?: React.ReactNode;
   navItems: NavItem[];
   workspaceLinks?: NavItem[];
   accountLinks?: NavItem[];
   layout?: "topnav" | "sidebar";
   searchSlot?: React.ReactNode;
+  categorySlot?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -51,11 +55,15 @@ export function AppShell({
   }
 
   const titleEl = titleHref ? (
-    <Link href={titleHref} className="text-sm font-extrabold tracking-tight text-wb-green">
+    <Link href={titleHref} className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-wb-green">
+      {titleIcon}
       {title}
     </Link>
   ) : (
-    <span className="text-sm font-extrabold tracking-tight text-wb-green">{title}</span>
+    <span className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-wb-green">
+      {titleIcon}
+      {title}
+    </span>
   );
 
   function renderNavLink(item: NavItem, active: boolean, sidebar: boolean) {
@@ -121,6 +129,15 @@ export function AppShell({
               );
             })}
 
+            {!member && (
+              <Link
+                href="/login"
+                className="flex h-9 items-center rounded-lg bg-wb-green px-4 text-xs font-bold text-white transition-colors hover:bg-wb-green/90"
+              >
+                로그인
+              </Link>
+            )}
+
             {member && <NotificationBell />}
 
             {member && (
@@ -179,6 +196,8 @@ export function AppShell({
             )}
           </div>
         </div>
+
+        {categorySlot && <div className="mx-auto max-w-6xl px-6 py-2">{categorySlot}</div>}
       </header>
 
       {layout === "sidebar" ? (
