@@ -12,9 +12,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
+public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long>, GroupBuyQueryRepository {
 
-    // 목록/검색 - 상태별 필터링
+    // 목록/검색 - 상태별 필터링 (카테고리 필터 없는 단순 조회 - repository 자체 테스트에서 사용)
     Page<GroupBuy> findByStatus(GroupBuyStatus status, Pageable pageable);
 
     // 관리자 공동구매 키워드 검색용 (제목 부분 일치)

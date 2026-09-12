@@ -77,27 +77,29 @@ export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode })
 
       {open && (
         <div
-          className="absolute left-1/2 top-[calc(100%+0.5rem)] z-20 w-screen -translate-x-1/2 bg-wb-surface"
+          className="absolute left-1/2 top-full z-20 w-screen -translate-x-1/2 pt-2"
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
         >
-          <div className="mx-auto max-w-6xl px-6">
-            <div className="grid grid-cols-4 gap-x-10 gap-y-4 py-6">
-              <CategoryTile
-                label="전체"
-                Icon={Grid3x3}
-                active={activeCategory === "전체"}
-                onClick={() => select("전체")}
-              />
-              {categoryNames.map((name) => (
+          <div className="bg-wb-surface">
+            <div className="mx-auto max-w-6xl px-6">
+              <div className="grid grid-cols-4 gap-x-10 gap-y-4 py-6">
                 <CategoryTile
-                  key={name}
-                  label={name}
-                  Icon={iconFor(name)}
-                  active={activeCategory === name}
-                  onClick={() => select(name)}
+                  label="전체"
+                  Icon={Grid3x3}
+                  active={activeCategory === "전체"}
+                  onClick={() => select("전체")}
                 />
-              ))}
+                {categoryNames.map((name) => (
+                  <CategoryTile
+                    key={name}
+                    label={name}
+                    Icon={iconFor(name)}
+                    active={activeCategory === name}
+                    onClick={() => select(name)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
