@@ -118,7 +118,7 @@ class ProductControllerTest {
     // keyword 파라미터로 검색 시 200과 함께 결과 목록이 반환된다
     @Test
     void searchProducts_키워드로_검색하면_결과를_반환한다() throws Exception {
-        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null);
+        ProductSearchResponse response = new ProductSearchResponse(1L, "비타민C", 5000, "url", 0L, false, null, null, null, null, null, null, null, null);
         CursorPageResponse<ProductSearchResponse> searchResult = new CursorPageResponse<>(List.of(response), null, false);
         when(productSearchService.search(any(), any(), any(), anyInt(), any())).thenReturn(searchResult);
 
