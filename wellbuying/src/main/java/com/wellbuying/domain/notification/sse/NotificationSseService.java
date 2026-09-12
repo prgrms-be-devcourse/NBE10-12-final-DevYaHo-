@@ -61,8 +61,11 @@ public class NotificationSseService {
             } catch (Exception e) {
                 // IOException(끊긴 연결에 쓰기 실패) 외에도, 이미 완료/타임아웃된 emitter에 send()를 호출하면
                 // IllegalStateException이 던져질 수 있다 - 좁게 잡으면 그 순간 루프가 멈춰서 같은 유저의
-                // 나머지 emitter(다른 탭)에는 알림이 전달되지 않으므로 넓게 잡아 다음 emitter로 계속 진행한다
-                log.debug("SSE 전송 실패 - memberId: {}, cause: {}", event.memberId(), e.getMessage());
+                // 나머지 emitter(다른 탭)에는 알림이 전달되지 않으므로 넓게 잡아 다음 emitter로 계속 진행한다.
+                // 다음 하트비트 주기(최대 20초)까지 기다리지 않고 실패 시점에 바로 completeWithError로
+                // onError 콜백을 태워 repository에서 제거한다
+                log.debug("SSE 전송 실패로 인한 emitter 정리 - memberId: {}, cause: {}", event.memberId(), e.getMessage());
+                emitter.completeWithError(e);
             }
         }
     }
