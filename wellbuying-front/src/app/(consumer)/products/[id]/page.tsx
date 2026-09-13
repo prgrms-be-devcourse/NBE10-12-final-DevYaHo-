@@ -88,7 +88,7 @@ export default function ProductDetailPage() {
         <p className="text-xl font-bold">{won(product.startPrice)}</p>
       </div>
 
-      {!product.available && <Banner tone="error">현재 구매할 수 없는 상품이에요.</Banner>}
+      {!product.approved && <Banner tone="error">현재 구매할 수 없는 상품이에요.</Banner>}
 
       {(product.description || catalog.detail) && (
         <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>

@@ -199,7 +199,7 @@ export type ProductDetailResponse = {
   description: string | null;
   startPrice: number;
   thumbnailUrl: string | null;
-  available: boolean;
+  approved: boolean;
   activeGroupBuyId: number | null;
   activeGroupBuyStatus: GroupBuyStatus | null;
 };
