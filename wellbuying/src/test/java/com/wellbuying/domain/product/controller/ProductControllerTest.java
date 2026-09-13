@@ -107,7 +107,7 @@ class ProductControllerTest {
     @Test
     void getProduct_존재하는_상품이면_상세정보를_반환한다() throws Exception {
         ProductDetailResponse response =
-                new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of(), null, null);
+                new ProductDetailResponse(1L, "상품", "설명", 10000, "url", true, List.of(), List.of(), List.of());
         when(productService.getDetail(1L)).thenReturn(response);
 
         mockMvc.perform(get("/api/products/1"))

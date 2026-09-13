@@ -26,7 +26,7 @@ export type GroupBuyCardView = {
   detail: string;
 };
 
-function toDaysLeft(endAt: string): number {
+export function toDaysLeft(endAt: string): number {
   const diffMs = new Date(endAt).getTime() - Date.now();
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }

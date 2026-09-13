@@ -200,8 +200,13 @@ export type ProductDetailResponse = {
   startPrice: number;
   thumbnailUrl: string | null;
   approved: boolean;
-  activeGroupBuyId: number | null;
-  activeGroupBuyStatus: GroupBuyStatus | null;
+  activeGroupBuys: {
+    id: number;
+    title: string;
+    status: GroupBuyStatus;
+    endAt: string;
+    currentUnitPrice: number;
+  }[];
 };
 
 export type ProductCreateRequest = {

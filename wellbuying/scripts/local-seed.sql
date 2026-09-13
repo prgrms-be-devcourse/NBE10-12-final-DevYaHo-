@@ -23,12 +23,14 @@ DELETE FROM group_buy_part;
 DELETE FROM group_buy_price;
 DELETE FROM group_buy;
 DELETE FROM product_count;
+DELETE FROM product_image;
 DELETE FROM product;
 DELETE FROM product_category;
 DELETE FROM buyer_address;
 DELETE FROM seller_info;
 DELETE FROM notification;
 DELETE FROM social_account;
+DELETE FROM admin_action_log;
 DELETE FROM members;
 
 -- ── 회원 ─────────────────────────────────────────────
@@ -57,7 +59,8 @@ SELECT id, '서울특별시 강남구 테헤란로 123', '4층 401호', '06234'
 FROM members WHERE email = 'buyer@wellbuying.local';
 
 -- ── 카테고리 ─────────────────────────────────────────
-INSERT INTO product_category (category_name) VALUES ('농산물'), ('수산물'), ('가공식품');
+-- 정육/뷰티/생활용품은 오픈소스 더미 데이터(DummyJSON, https://dummyjson.com)로 상품을 대량 채우기 위해 추가
+INSERT INTO product_category (category_name) VALUES ('농산물'), ('수산물'), ('가공식품'), ('정육'), ('뷰티'), ('생활용품');
 
 -- ── 상품 (전부 승인 완료) ─────────────────────────────
 INSERT INTO product (seller_id, category_id, product_name, description, start_price, thumbnail_url, status)
@@ -67,10 +70,83 @@ CROSS JOIN LATERAL (VALUES
     ('농산물',   '해남 꿀고구마 5kg',      '수확 직후 저온 숙성한 해남산 꿀고구마입니다.',      18000, 'https://picsum.photos/seed/sweetpotato/600/400'),
     ('농산물',   '제주 노지 감귤 10kg',    '노지에서 자연 그대로 키운 제주 감귤.',              25000, 'https://picsum.photos/seed/tangerine/600/400'),
     ('수산물',   '완도 활전복 1kg',        '당일 조업한 완도 활전복을 산 채로 보냅니다.',        45000, 'https://picsum.photos/seed/abalone/600/400'),
-    ('가공식품', '전통 방식 조청 500g',    '가마솥에서 8시간 고아낸 조청.',                     12000, 'https://picsum.photos/seed/syrup/600/400')
+    ('가공식품', '전통 방식 조청 500g',    '가마솥에서 8시간 고아낸 조청.',                     12000, 'https://picsum.photos/seed/syrup/600/400'),
+    -- 아래부터는 DummyJSON(오픈소스 더미 API) 상품을 국문으로 각색해 대량 시딩용으로 추가한 것.
+    -- 가격은 USD 가격에 대략 1300원을 곱해 반올림한 값으로, 실제 시세와 무관하다.
+    ('농산물',   '아삭 사과 1kg',            '아삭하고 신선한 사과, 간식이나 다양한 요리에 잘 어울립니다.', 2600,    'https://cdn.dummyjson.com/product-images/groceries/apple/thumbnail.webp'),
+    ('농산물',   '아삭 오이 5입',            '아삭하고 수분 가득한 오이, 샐러드나 간식으로 좋습니다.',      1900,    'https://cdn.dummyjson.com/product-images/groceries/cucumber/thumbnail.webp'),
+    ('가공식품', '요리용 식용유 900ml',      '튀김, 볶음 등 다양한 요리에 쓰기 좋은 식용유.',              6500,    'https://cdn.dummyjson.com/product-images/groceries/cooking-oil/thumbnail.webp'),
+    ('가공식품', '신선 달걀 한 판(30구)',    '베이킹, 요리, 아침식사에 두루 쓰이는 신선한 달걀.',          3900,    'https://cdn.dummyjson.com/product-images/groceries/eggs/thumbnail.webp'),
+    ('정육',     '소고기 스테이크용 400g',   '그릴이나 구이에 좋은 고급 소고기 스테이크.',                16900,   'https://cdn.dummyjson.com/product-images/groceries/beef-steak/thumbnail.webp'),
+    ('정육',     '냉장 닭가슴살 1kg',        '다양한 요리에 활용하기 좋은 신선하고 부드러운 닭고기.',      13000,   'https://cdn.dummyjson.com/product-images/groceries/chicken-meat/thumbnail.webp'),
+    ('뷰티',     '래쉬 프린세스 마스카라',   '풍성하고 길어 보이는 속눈썹을 만들어주는 인기 마스카라.',    13000,   'https://cdn.dummyjson.com/product-images/beauty/essence-mascara-lash-princess/thumbnail.webp'),
+    ('뷰티',     '거울 내장 아이섀도 팔레트', '다양한 색상의 아이섀도로 눈매 연출, 휴대용 거울 내장.',      26000,   'https://cdn.dummyjson.com/product-images/beauty/eyeshadow-palette-with-mirror/thumbnail.webp'),
+    ('뷰티',     '피지 컨트롤 세팅 파우더', '피지를 잡아주는 미세한 입자의 세팅 파우더.',                19500,   'https://cdn.dummyjson.com/product-images/beauty/powder-canister/thumbnail.webp'),
+    ('뷰티',     '레드 립스틱',              '선명한 컬러감의 클래식 레드 립스틱, 크리미한 발림성.',        16900,   'https://cdn.dummyjson.com/product-images/beauty/red-lipstick/thumbnail.webp'),
+    ('뷰티',     '레드 네일 폴리시',         '빠르게 건조되는 살롱급 발색의 레드 네일 폴리시.',            11700,   'https://cdn.dummyjson.com/product-images/beauty/red-nail-polish/thumbnail.webp'),
+    ('뷰티',     '슈퍼리브스 핸드솝',        '슈퍼리브스 성분으로 촉촉하게 씻어내는 핸드솝.',              11700,   'https://cdn.dummyjson.com/product-images/skin-care/attitude-super-leaves-hand-soap/thumbnail.webp'),
+    ('뷰티',     '시어버터 모이스처 바디워시', '시어버터 성분으로 촉촉함을 더하는 바디워시.',              16900,   'https://cdn.dummyjson.com/product-images/skin-care/olay-ultra-moisture-shea-butter-body-wash/thumbnail.webp'),
+    ('뷰티',     '맨즈 바디앤페이스 로션',   '남성 피부에 오래가는 보습을 주는 로션.',                    13000,   'https://cdn.dummyjson.com/product-images/skin-care/vaseline-men-body-and-face-lotion/thumbnail.webp'),
+    ('생활용품', '침대 프레임(퀸)',          '고급스러운 소재로 제작된 침실용 침대 프레임.',              2470000, 'https://cdn.dummyjson.com/product-images/furniture/annibale-colombo-bed/thumbnail.webp'),
+    ('생활용품', '업홀스터리 3인 소파',      '고급 업홀스터리로 마감된 거실용 소파.',                      3250000, 'https://cdn.dummyjson.com/product-images/furniture/annibale-colombo-sofa/thumbnail.webp'),
+    ('생활용품', '체리목 협탁',              '침실에 포인트를 더하는 수납형 협탁.',                        390000,  'https://cdn.dummyjson.com/product-images/furniture/bedside-table-african-cherry/thumbnail.webp'),
+    ('생활용품', '이그제큐티브 오피스 체어', '인체공학적인 디자인의 모던 오피스 체어.',                    650000,  'https://cdn.dummyjson.com/product-images/furniture/knoll-saarinen-executive-conference-chair/thumbnail.webp'),
+    ('생활용품', '원목 세면대 & 거울 세트',  '원목 세면대와 매칭 거울로 구성된 욕실 세트.',                1040000, 'https://cdn.dummyjson.com/product-images/furniture/wooden-bathroom-sink-with-mirror/thumbnail.webp'),
+    ('생활용품', '장식용 그네 소품',         '정교한 디테일로 공간에 포인트를 더하는 장식 그네.',          78000,   'https://cdn.dummyjson.com/product-images/home-decoration/decoration-swing/thumbnail.webp'),
+    ('생활용품', '패밀리 포토 프레임',       '여러 장의 사진을 담을 수 있는 감성적인 가족 액자.',          39000,   'https://cdn.dummyjson.com/product-images/home-decoration/family-tree-photo-frame/thumbnail.webp'),
+    ('생활용품', '조화 인테리어 화분',       '관리 부담 없이 그린 인테리어를 완성하는 조화 식물.',          52000,   'https://cdn.dummyjson.com/product-images/home-decoration/house-showpiece-plant/thumbnail.webp'),
+    ('생활용품', '토분 화분',                '실내외 어디에나 어울리는 세련된 디자인의 화분.',              19500,   'https://cdn.dummyjson.com/product-images/home-decoration/plant-pot/thumbnail.webp'),
+    ('생활용품', '테이블 스탠드 조명',       '은은한 분위기를 더하는 모던 테이블 조명.',                    65000,   'https://cdn.dummyjson.com/product-images/home-decoration/table-lamp/thumbnail.webp'),
+    ('생활용품', '대나무 뒤집개',            '친환경 대나무 소재의 다용도 뒤집개.',                        10400,   'https://cdn.dummyjson.com/product-images/kitchen-accessories/bamboo-spatula/thumbnail.webp'),
+    ('생활용품', '블랙 알루미늄 컵',         '냉온 음료 모두 어울리는 세련된 블랙 컵.',                    7800,    'https://cdn.dummyjson.com/product-images/kitchen-accessories/black-aluminium-cup/thumbnail.webp'),
+    ('생활용품', '블랙 거품기',              '인체공학 손잡이의 실용적인 거품기.',                          13000,   'https://cdn.dummyjson.com/product-images/kitchen-accessories/black-whisk/thumbnail.webp'),
+    ('생활용품', '박스형 블렌더',            '스무디, 쉐이크에 좋은 강력한 컴팩트 블렌더.',                52000,   'https://cdn.dummyjson.com/product-images/kitchen-accessories/boxed-blender/thumbnail.webp'),
+    ('생활용품', '탄소강 웍',                '고르게 열을 전달하는 튼튼한 탄소강 웍.',                      39000,   'https://cdn.dummyjson.com/product-images/kitchen-accessories/carbon-steel-wok/thumbnail.webp'),
+    ('생활용품', '원목 도마',                '위생적인 조리를 위한 튼튼한 도마.',                          16900,   'https://cdn.dummyjson.com/product-images/kitchen-accessories/chopping-board/thumbnail.webp')
 ) AS p(cat, name, descr, price, thumb)
 JOIN product_category c ON c.category_name = p.cat
 WHERE m.email = 'seller@wellbuying.local';
+
+-- ── 상품 갤러리 이미지 (DummyJSON 원본 이미지를 그대로 사용) ────
+INSERT INTO product_image (product_id, image_url, sort_order, image_type)
+SELECT p.id, img.image_url, img.sort_order, 'GALLERY'
+FROM product p
+JOIN (VALUES
+    ('아삭 사과 1kg', 'https://cdn.dummyjson.com/product-images/groceries/apple/1.webp', 0),
+    ('아삭 오이 5입', 'https://cdn.dummyjson.com/product-images/groceries/cucumber/1.webp', 0),
+    ('요리용 식용유 900ml', 'https://cdn.dummyjson.com/product-images/groceries/cooking-oil/1.webp', 0),
+    ('신선 달걀 한 판(30구)', 'https://cdn.dummyjson.com/product-images/groceries/eggs/1.webp', 0),
+    ('소고기 스테이크용 400g', 'https://cdn.dummyjson.com/product-images/groceries/beef-steak/1.webp', 0),
+    ('냉장 닭가슴살 1kg', 'https://cdn.dummyjson.com/product-images/groceries/chicken-meat/1.webp', 0),
+    ('냉장 닭가슴살 1kg', 'https://cdn.dummyjson.com/product-images/groceries/chicken-meat/2.webp', 1),
+    ('래쉬 프린세스 마스카라', 'https://cdn.dummyjson.com/product-images/beauty/essence-mascara-lash-princess/1.webp', 0),
+    ('거울 내장 아이섀도 팔레트', 'https://cdn.dummyjson.com/product-images/beauty/eyeshadow-palette-with-mirror/1.webp', 0),
+    ('피지 컨트롤 세팅 파우더', 'https://cdn.dummyjson.com/product-images/beauty/powder-canister/1.webp', 0),
+    ('레드 립스틱', 'https://cdn.dummyjson.com/product-images/beauty/red-lipstick/1.webp', 0),
+    ('레드 네일 폴리시', 'https://cdn.dummyjson.com/product-images/beauty/red-nail-polish/1.webp', 0),
+    ('슈퍼리브스 핸드솝', 'https://cdn.dummyjson.com/product-images/skin-care/attitude-super-leaves-hand-soap/1.webp', 0),
+    ('슈퍼리브스 핸드솝', 'https://cdn.dummyjson.com/product-images/skin-care/attitude-super-leaves-hand-soap/2.webp', 1),
+    ('시어버터 모이스처 바디워시', 'https://cdn.dummyjson.com/product-images/skin-care/olay-ultra-moisture-shea-butter-body-wash/1.webp', 0),
+    ('맨즈 바디앤페이스 로션', 'https://cdn.dummyjson.com/product-images/skin-care/vaseline-men-body-and-face-lotion/1.webp', 0),
+    ('침대 프레임(퀸)', 'https://cdn.dummyjson.com/product-images/furniture/annibale-colombo-bed/1.webp', 0),
+    ('침대 프레임(퀸)', 'https://cdn.dummyjson.com/product-images/furniture/annibale-colombo-bed/2.webp', 1),
+    ('업홀스터리 3인 소파', 'https://cdn.dummyjson.com/product-images/furniture/annibale-colombo-sofa/1.webp', 0),
+    ('체리목 협탁', 'https://cdn.dummyjson.com/product-images/furniture/bedside-table-african-cherry/1.webp', 0),
+    ('이그제큐티브 오피스 체어', 'https://cdn.dummyjson.com/product-images/furniture/knoll-saarinen-executive-conference-chair/1.webp', 0),
+    ('원목 세면대 & 거울 세트', 'https://cdn.dummyjson.com/product-images/furniture/wooden-bathroom-sink-with-mirror/1.webp', 0),
+    ('장식용 그네 소품', 'https://cdn.dummyjson.com/product-images/home-decoration/decoration-swing/1.webp', 0),
+    ('패밀리 포토 프레임', 'https://cdn.dummyjson.com/product-images/home-decoration/family-tree-photo-frame/1.webp', 0),
+    ('조화 인테리어 화분', 'https://cdn.dummyjson.com/product-images/home-decoration/house-showpiece-plant/1.webp', 0),
+    ('토분 화분', 'https://cdn.dummyjson.com/product-images/home-decoration/plant-pot/1.webp', 0),
+    ('테이블 스탠드 조명', 'https://cdn.dummyjson.com/product-images/home-decoration/table-lamp/1.webp', 0),
+    ('대나무 뒤집개', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/bamboo-spatula/1.webp', 0),
+    ('블랙 알루미늄 컵', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/black-aluminium-cup/1.webp', 0),
+    ('블랙 거품기', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/black-whisk/1.webp', 0),
+    ('박스형 블렌더', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/boxed-blender/1.webp', 0),
+    ('탄소강 웍', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/carbon-steel-wok/1.webp', 0),
+    ('원목 도마', 'https://cdn.dummyjson.com/product-images/kitchen-accessories/chopping-board/1.webp', 0)
+) AS img(product_name, image_url, sort_order)
+ON img.product_name = p.product_name;
 
 INSERT INTO product_count (product_id, view_count, like_count, groupbuy_participant_count)
 SELECT id, 120, 14, 0 FROM product;
@@ -262,6 +338,7 @@ COMMIT;
 
 SELECT 'members' AS t, count(*) FROM members
 UNION ALL SELECT 'product', count(*) FROM product
+UNION ALL SELECT 'product_image', count(*) FROM product_image
 UNION ALL SELECT 'group_buy', count(*) FROM group_buy
 UNION ALL SELECT 'group_buy_price', count(*) FROM group_buy_price
 UNION ALL SELECT 'group_buy_part', count(*) FROM group_buy_part
