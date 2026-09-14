@@ -66,6 +66,10 @@ jobs:
             ~/.docker/config.json > /tmp/docker_config.json
           mv /tmp/docker_config.json ~/.docker/config.json
 
+      # 임시 진단용: docker CLI 레벨 인증은 정상인지, Testcontainers/docker-java 레벨 문제인지 구분하기 위함
+      - name: (디버그) 순수 docker pull로 인증 경로 검증
+        run: docker pull ghcr.io/prgrms-be-devcourse/wellbuying-opensearch-test:2.19.1-nori
+
       - name: Gradle 테스트 실행
         run: ./gradlew test --no-daemon
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -44,7 +45,7 @@ const TABS: Tab[] = [
 ];
 
 // 카테고리 탭 옆에 놓는 상태별 바로가기 탭
-export function ExploreStatusTabs() {
+function ExploreStatusTabsInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -63,5 +64,13 @@ export function ExploreStatusTabs() {
         );
       })}
     </nav>
+  );
+}
+
+export function ExploreStatusTabs() {
+  return (
+    <Suspense fallback={null}>
+      <ExploreStatusTabsInner />
+    </Suspense>
   );
 }

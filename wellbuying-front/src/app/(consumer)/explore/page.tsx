@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
@@ -49,7 +49,7 @@ function isSort(value: string | null): value is Sort {
   return !!value && value in SORT_PARAM;
 }
 
-export default function ExplorePage() {
+function ExploreContent() {
   const searchParams = useSearchParams();
   const isProductsView = searchParams.get("view") === "products";
 
@@ -466,5 +466,13 @@ export default function ExplorePage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-sm text-wb-secondary">불러오는 중...</div>}>
+      <ExploreContent />
+    </Suspense>
   );
 }
