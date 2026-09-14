@@ -21,7 +21,8 @@ public record GroupBuySummaryResponse(
         long viewCount,
         LocalDateTime createdAt,
         int currentUnitPrice,
-        String description
+        String description,
+        String thumbnailUrl
 ) {
 
     // product가 null이면(이론상 항상 존재하지만, 이 응답이 추가되기 전에 만들어진 레거시 행 대비) 빈 값으로 안전하게 처리
@@ -43,6 +44,7 @@ public record GroupBuySummaryResponse(
                 groupBuy.getViewCount(),
                 groupBuy.getCreatedAt(),
                 currentUnitPrice,
-                product != null ? product.getDescription() : null);
+                product != null ? product.getDescription() : null,
+                product != null ? product.getThumbnailUrl() : null);
     }
 }

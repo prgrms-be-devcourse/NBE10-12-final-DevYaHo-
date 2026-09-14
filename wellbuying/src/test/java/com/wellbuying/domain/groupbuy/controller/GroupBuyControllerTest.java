@@ -128,8 +128,9 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
     void 셀러가_공동구매_생성에_성공한다() throws Exception {
         Member seller = saveSeller("groupbuy-create-success@example.com");
         ProductCategory category = productCategoryRepository.save(ProductCategory.create(null, "식품", 0));
-        Product product = productRepository.save(
-                Product.register(seller.getId(), category.getId(), "유기농 토마토", null, 15_000, null));
+        Product product = Product.register(seller.getId(), category.getId(), "유기농 토마토", null, 15_000, null);
+        product.approve();
+        product = productRepository.save(product);
         String startAt = LocalDateTime.now().plusDays(1).format(FORMATTER);
         String endAt = LocalDateTime.now().plusDays(8).format(FORMATTER);
         String requestBody = """
