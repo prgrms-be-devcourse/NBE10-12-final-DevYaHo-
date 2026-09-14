@@ -7,6 +7,7 @@ import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import {
   approveSuspensionRequest,
@@ -14,9 +15,9 @@ import {
   listSuspensionRequests,
   rejectSuspensionRequest,
 } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
-import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus } from "@/lib/api/types";
+import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus, PageResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
 
@@ -48,30 +49,17 @@ const SUSPENSION_STATUS_LABEL: Record<GroupBuySuspensionStatus, string> = {
 
 function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus }) {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<GroupBuySuspensionRequestResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
-
-    listSuspensionRequests({ status, page })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "판매정지 요청 목록을 불러오지 못했어요.");
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [status, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<GroupBuySuspensionRequestResponse>>(
+    "admin-suspension-requests",
+    { status, page, reloadToken },
+    () => listSuspensionRequests({ status, page }),
+    "판매정지 요청 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveSuspensionRequest,
@@ -80,13 +68,13 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    invalidatePagedQuery("admin-suspension-requests");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
   }
 
-  if (items === null) {
+  if (loading && items === null) {
     return <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>;
   }
 
@@ -94,7 +82,7 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {items === null || items.length === 0 ? (
         <EmptyState icon={PauseCircle} title="해당 상태의 요청이 없어요" message="다른 탭을 확인해보세요." />
       ) : (
         <div className="space-y-3">
@@ -138,29 +126,7 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page === 0}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            이전
-          </Button>
-          <span className="flex items-center px-2 text-xs text-wb-secondary">
-            {page + 1} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <ActionReasonModal
         open={pendingAction !== null}
@@ -178,9 +144,6 @@ function GroupBuyListSection() {
   const [page, setPage] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
-  const [items, setItems] = useState<GroupBuySummaryResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -198,26 +161,14 @@ function GroupBuyListSection() {
     };
   }, []);
 
-  useEffect(() => {
-    let ignore = false;
-    setItems(null);
-
-    listAdminGroupBuys({ keyword: debouncedKeyword || undefined, page, size: 20 })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "공동구매 목록을 불러오지 못했어요.");
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [debouncedKeyword, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<GroupBuySummaryResponse>>(
+    "admin-group-buys",
+    { keyword: debouncedKeyword, page },
+    () => listAdminGroupBuys({ keyword: debouncedKeyword || undefined, page, size: 20 }),
+    "공동구매 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   return (
     <div className="space-y-3">
@@ -230,9 +181,9 @@ function GroupBuyListSection() {
       />
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items === null ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={ShoppingBag} title="등록된 공동구매가 없어요" message="아직 개설된 공동구매가 없어요." />
       ) : (
         <>
@@ -261,19 +212,7 @@ function GroupBuyListSection() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                이전
-              </Button>
-              <span className="flex items-center px-2 text-xs text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                다음
-              </Button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
     </div>

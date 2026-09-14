@@ -100,7 +100,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
                 </div>
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>판매자 #{item.sellerId}</Tag>
+                    <Tag>{item.sellerEmail}</Tag>
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>
@@ -163,8 +163,8 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
   );
 }
 
-// ProductStatus엔 ALL이 없어 상태별 API 3번을 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
-// 페이지네이션 대신 상품명 검색만 제공한다
+// ProductStatus엔 ALL이 없어 상태별 API를 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
+// 페이지네이션 대신 상품명 검색만 제공한다. 검토 대기(PENDING)는 "등록 심사" 탭에서 다루므로 여기서는 제외한다.
 function AllProductsPanel() {
   const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -174,13 +174,12 @@ function AllProductsPanel() {
     let ignore = false;
 
     Promise.all([
-      listAdminProducts({ status: "PENDING", size: 100 }),
       listAdminProducts({ status: "APPROVED", size: 100 }),
       listAdminProducts({ status: "REJECTED", size: 100 }),
     ])
-      .then(([pending, approved, rejected]) => {
+      .then(([approved, rejected]) => {
         if (ignore) return;
-        const merged = [...pending.content, ...approved.content, ...rejected.content].sort(
+        const merged = [...approved.content, ...rejected.content].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
         setItems(merged);
@@ -229,7 +228,7 @@ function AllProductsPanel() {
                 </div>
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>판매자 #{item.sellerId}</Tag>
+                    <Tag>{item.sellerEmail}</Tag>
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>

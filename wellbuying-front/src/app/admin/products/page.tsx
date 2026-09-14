@@ -136,7 +136,7 @@ function ForceDeletePanel() {
                 <tr className="border-b border-wb-line bg-wb-canvas text-left text-xs font-bold text-wb-secondary">
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">상품명</th>
-                  <th className="px-4 py-3">판매자 ID</th>
+                  <th className="px-4 py-3">판매자 이메일</th>
                   <th className="px-4 py-3">시작가</th>
                   <th className="px-4 py-3">등록일</th>
                   <th className="px-4 py-3"></th>
@@ -147,7 +147,7 @@ function ForceDeletePanel() {
                   <tr key={item.id} className="border-b border-wb-line last:border-0 hover:bg-wb-canvas/50">
                     <td className="px-4 py-3 text-wb-secondary">{item.id}</td>
                     <td className="px-4 py-3 font-medium">{item.productName}</td>
-                    <td className="px-4 py-3 text-wb-secondary">{item.sellerId}</td>
+                    <td className="px-4 py-3 text-wb-secondary">{item.sellerEmail}</td>
                     <td className="px-4 py-3">{item.startPrice.toLocaleString("ko-KR")}원</td>
                     <td className="px-4 py-3 text-wb-secondary">{formatDateTime(item.createdAt)}</td>
                     <td className="px-4 py-3">

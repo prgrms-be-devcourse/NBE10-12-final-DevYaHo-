@@ -197,7 +197,10 @@ public class ProductService {
         Page<Product> page = (keyword != null && !keyword.isBlank())
                 ? productRepository.findByStatusAndDeletedAtIsNullAndProductNameContainingIgnoreCase(status, keyword, pageable)
                 : productRepository.findByStatusAndDeletedAtIsNull(status, pageable);
-        return page.map(ProductAdminResponse::of);
+        List<Long> sellerIds = page.getContent().stream().map(Product::getSellerId).distinct().toList();
+        Map<Long, String> sellerEmailsById = memberRepository.findAllById(sellerIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getEmail));
+        return page.map(product -> ProductAdminResponse.of(product, sellerEmailsById.getOrDefault(product.getSellerId(), "")));
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)

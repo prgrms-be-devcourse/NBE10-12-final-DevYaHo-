@@ -235,6 +235,7 @@ export type ProductMineResponse = {
 export type ProductAdminResponse = {
   id: number;
   sellerId: number;
+  sellerEmail: string;
   categoryId: number;
   productName: string;
   startPrice: number;
