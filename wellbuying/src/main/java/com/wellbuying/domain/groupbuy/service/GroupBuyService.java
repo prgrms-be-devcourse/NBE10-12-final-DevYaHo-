@@ -268,6 +268,25 @@ public class GroupBuyService {
         recordSuspensionAction(requestId, adminId, AdminActionType.APPROVE, reason);
     }
 
+    // 관리자 강제 판매정지 - 생산자의 요청 없이 관리자가 직접 이상 있는 ONGOING 공동구매를 정지시킨다.
+    // 대기 없이 즉시 승인 상태인 판매정지 요청을 생성해서 기존 이력 조회 로직(target_type=GROUP_BUY_SUSPENSION_REQUEST)을
+    // 그대로 재사용한다 - PENDING으로 한 번도 저장되지 않으므로 "대기 중 요청 1건" 유니크 제약과도 충돌하지 않는다
+    @Transactional
+    public void forceSuspend(Long groupBuyId, Long adminId, String reason) {
+        GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
+        if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
+        }
+        GroupBuySuspensionRequest request = GroupBuySuspensionRequest.request(groupBuyId, adminId, reason);
+        request.approve();
+        groupBuySuspensionRequestRepository.save(request);
+        groupBuy.suspend();
+        recordSuspensionAction(request.getId(), adminId, AdminActionType.APPROVE, reason);
+    }
+
     // 판매정지 요청 반려 - 요청만 REJECTED로 전환, 공동구매 상태는 변경하지 않음
     @Transactional
     public void rejectSuspensionRequest(Long requestId, Long adminId, String reason) {

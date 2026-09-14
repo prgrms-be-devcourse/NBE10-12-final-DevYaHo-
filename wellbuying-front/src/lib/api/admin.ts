@@ -133,6 +133,11 @@ export function rejectSuspensionRequest(id: number, reason: string): Promise<voi
   return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/reject`, { reason }, { auth: true });
 }
 
+// 생산자 요청 없이 관리자가 이상 있는 ONGOING 공동구매를 직접 판매정지
+export function forceSuspendGroupBuy(id: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/groupBuys/${id}/force-suspend`, { reason }, { auth: true });
+}
+
 // 상품 승인/반려 이력
 export function listProductActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
   const query = new URLSearchParams();

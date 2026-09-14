@@ -239,4 +239,72 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("page.totalElements").description("전체 개수"),
                                 fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
+
+    // ADMIN이 생산자 요청 없이 ONGOING 공동구매를 강제 판매정지하면 204를 반환하고 suspended=true로 바뀌는지 검증
+    @Test
+    void 관리자가_공동구매_강제_판매정지에_성공한다() throws Exception {
+        Member admin = saveMember("admin-force-suspend@example.com", Role.ADMIN);
+        Member producer = saveMember("producer-force-suspend@example.com", Role.SELLER);
+        GroupBuy groupBuy = saveOngoingGroupBuy(producer.getId());
+
+        mockMvc.perform(post("/api/admin/groupBuys/{id}/force-suspend", groupBuy.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"이상 거래 의심으로 강제 정지\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNoContent())
+                .andDo(document("admin/groupbuy-force-suspend-success"));
+
+        GroupBuy updated = groupBuyRepository.findById(groupBuy.getId()).orElseThrow();
+        assertThat(updated.isSuspended()).isTrue();
+
+        mockMvc.perform(get("/api/admin/groupBuys/suspension-requests/action-logs")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].targetLabel").value("산지 직송 유기농 토마토"))
+                .andExpect(jsonPath("$.content[0].action").value("APPROVE"))
+                .andExpect(jsonPath("$.content[0].reason").value("이상 거래 의심으로 강제 정지"));
+    }
+
+    // ADMIN이 아니면 강제 판매정지에 실패하는지 검증
+    @Test
+    void 관리자가_아니면_공동구매_강제_판매정지에_실패한다() throws Exception {
+        Member producer = saveMember("producer-force-suspend-forbidden@example.com", Role.SELLER);
+        GroupBuy groupBuy = saveOngoingGroupBuy(producer.getId());
+
+        mockMvc.perform(post("/api/admin/groupBuys/{id}/force-suspend", groupBuy.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"이상 거래 의심으로 강제 정지\"}")
+                        .with(authentication(authOf(producer))))
+                .andExpect(status().isForbidden());
+    }
+
+    // 이미 판매정지된 공동구매를 다시 강제 정지하면 409와 GROUPBUY_409_SUSPENDED를 반환하는지 검증
+    @Test
+    void 이미_정지된_공동구매는_강제_판매정지에_실패한다() throws Exception {
+        Member admin = saveMember("admin-force-suspend-already@example.com", Role.ADMIN);
+        Member producer = saveMember("producer-force-suspend-already@example.com", Role.SELLER);
+        GroupBuy groupBuy = saveOngoingGroupBuy(producer.getId());
+        groupBuy.suspend();
+        groupBuyRepository.save(groupBuy);
+
+        mockMvc.perform(post("/api/admin/groupBuys/{id}/force-suspend", groupBuy.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"이상 거래 의심으로 강제 정지\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GROUPBUY_409_SUSPENDED"));
+    }
+
+    // 존재하지 않는 공동구매를 강제 정지하면 404와 GROUPBUY_404_NOT_FOUND를 반환하는지 검증
+    @Test
+    void 존재하지_않는_공동구매는_강제_판매정지에_실패한다() throws Exception {
+        Member admin = saveMember("admin-force-suspend-not-found@example.com", Role.ADMIN);
+
+        mockMvc.perform(post("/api/admin/groupBuys/{id}/force-suspend", 999_999L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"이상 거래 의심으로 강제 정지\"}")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUPBUY_404_NOT_FOUND"));
+    }
 }

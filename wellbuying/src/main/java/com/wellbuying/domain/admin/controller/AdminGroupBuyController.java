@@ -88,4 +88,14 @@ public class AdminGroupBuyController {
             @PageableDefault(size = 20, sort = "occurredAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(groupBuyService.listSuspensionActionLogs(pageable));
     }
+
+    // 관리자 강제 판매정지 - 생산자 요청 없이 이상 있는 ONGOING 공동구매를 관리자가 직접 정지
+    @Operation(summary = "관리자 강제 판매정지 - 생산자 요청 없이 ONGOING 공동구매를 직접 정지")
+    @PostMapping("/{id}/force-suspend")
+    public ResponseEntity<Void> forceSuspend(@PathVariable Long id,
+            @AuthenticationPrincipal AuthenticatedMember admin,
+            @Valid @RequestBody AdminActionReasonRequest request) {
+        groupBuyService.forceSuspend(id, admin.memberId(), request.reason());
+        return ResponseEntity.noContent().build();
+    }
 }
