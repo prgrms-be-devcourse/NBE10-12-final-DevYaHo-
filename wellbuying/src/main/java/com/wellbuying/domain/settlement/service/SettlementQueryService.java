@@ -4,10 +4,12 @@ import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.repository.MemberRepository;
+import com.wellbuying.domain.settlement.dto.AdminSettlementSummaryResponse;
 import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
 import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementResponse;
 import com.wellbuying.domain.settlement.entity.Settlement;
+import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
 import com.wellbuying.domain.settlement.entity.SettlementStatus;
 import com.wellbuying.domain.settlement.repository.SettlementItemRepository;
 import com.wellbuying.domain.settlement.repository.SettlementPendingRow;
@@ -91,14 +93,40 @@ public class SettlementQueryService {
         return paginate(merged, pageable);
     }
 
-    // 관리자 전체 정산 내역. status가 null이면 전체 (기존 그대로 - 판매자 목록과 무관)
+    // 관리자 전체 정산 내역. status가 null이면 전체, keyword가 있으면 공동구매 제목으로 검색
+    // (Settlement엔 제목이 없어 groupBuyRepository에서 먼저 id를 찾은 뒤 그 id로 좁힌다)
     @Transactional(readOnly = true)
-    public Page<SettlementResponse> getAllSettlements(SettlementStatus status, Pageable pageable) {
+    public Page<SettlementResponse> getAllSettlements(SettlementStatus status, String keyword, Pageable pageable) {
         Pageable sorted = sortedByConfirmedAtDesc(pageable);
-        Page<Settlement> settlements = status == null
-                ? settlementRepository.findAll(sorted)
-                : settlementRepository.findByStatus(status, sorted);
+        Page<Settlement> settlements;
+        if (keyword != null && !keyword.isBlank()) {
+            List<Long> matchedGroupBuyIds = groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword);
+            settlements = matchedGroupBuyIds.isEmpty() ? Page.empty(sorted)
+                    : status == null
+                            ? settlementRepository.findByGroupBuyIdIn(matchedGroupBuyIds, sorted)
+                            : settlementRepository.findByStatusAndGroupBuyIdIn(status, matchedGroupBuyIds, sorted);
+        } else {
+            settlements = status == null
+                    ? settlementRepository.findAll(sorted)
+                    : settlementRepository.findByStatus(status, sorted);
+        }
         return toResponsePage(settlements);
+    }
+
+    // 관리자 정산 대시보드 상단 요약 카드 - 판매자 구분 없는 전체 집계
+    @Transactional(readOnly = true)
+    public AdminSettlementSummaryResponse getAdminSummary() {
+        YearMonth thisMonth = YearMonth.now();
+        LocalDateTime from = thisMonth.atDay(1).atStartOfDay();
+        LocalDateTime to = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
+
+        long pendingCount = settlementItemRepository.countDistinctGroupBuyIdByStatus(SettlementItemStatus.ACCRUED);
+        long pendingAmount = settlementItemRepository.sumAmountByStatus(SettlementItemStatus.ACCRUED);
+        long thisMonthConfirmedCount = settlementRepository.countByConfirmedAtBetween(from, to);
+        long thisMonthConfirmedAmount = settlementRepository.sumPayoutByConfirmedAtRange(from, to);
+
+        return new AdminSettlementSummaryResponse(pendingCount, pendingAmount, thisMonthConfirmedCount,
+                thisMonthConfirmedAmount);
     }
 
     // 클라이언트가 넘긴 sort를 그대로 쓰면 리포지토리 정렬과 겹쳐 꼬일 수 있어(OrderQueryService 참고),

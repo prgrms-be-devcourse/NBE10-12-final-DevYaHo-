@@ -107,6 +107,14 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
 
     long countByProducerIdAndStatus(Long producerId, SettlementItemStatus status);
 
+    // 관리자 정산 대시보드 "정산 대기" 요약 카드 - 판매자 구분 없이 전체 ACCRUED 금액/건수.
+    // 건수는 참여자(행) 수가 아니라 서로 다른 공동구매 수 - 정산은 공동구매 단위로 확정되기 때문
+    @Query("SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si WHERE si.status = :status")
+    long sumAmountByStatus(@Param("status") SettlementItemStatus status);
+
+    @Query("SELECT COUNT(DISTINCT si.groupBuyId) FROM SettlementItem si WHERE si.status = :status")
+    long countDistinctGroupBuyIdByStatus(@Param("status") SettlementItemStatus status);
+
     // "이번 달 정산 완료" 카드 - 이번 달 매출 중 이미 CONFIRMED까지 끝난 몫
     @Query("""
             SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si

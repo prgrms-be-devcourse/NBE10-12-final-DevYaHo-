@@ -41,24 +41,24 @@ class AdminSettlementControllerTest {
 
     @Test
     void status_파라미터가_있으면_그대로_서비스로_전달한다() throws Exception {
-        when(settlementQueryService.getAllSettlements(eq(SettlementStatus.CONFIRMED), any()))
+        when(settlementQueryService.getAllSettlements(eq(SettlementStatus.CONFIRMED), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(row())));
 
         mockMvc.perform(get("/api/admin/settlements").param("status", "CONFIRMED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].producerName").value("푸른살림"));
 
-        verify(settlementQueryService).getAllSettlements(eq(SettlementStatus.CONFIRMED), any());
+        verify(settlementQueryService).getAllSettlements(eq(SettlementStatus.CONFIRMED), isNull(), any());
     }
 
     @Test
     void status_파라미터가_없으면_null로_전달한다() throws Exception {
-        when(settlementQueryService.getAllSettlements(isNull(), any()))
+        when(settlementQueryService.getAllSettlements(isNull(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(row())));
 
         mockMvc.perform(get("/api/admin/settlements"))
                 .andExpect(status().isOk());
 
-        verify(settlementQueryService).getAllSettlements(isNull(), any());
+        verify(settlementQueryService).getAllSettlements(isNull(), isNull(), any());
     }
 }

@@ -1,5 +1,6 @@
 package com.wellbuying.domain.admin.controller;
 
+import com.wellbuying.domain.settlement.dto.AdminSettlementSummaryResponse;
 import com.wellbuying.domain.settlement.dto.SettlementResponse;
 import com.wellbuying.domain.settlement.entity.SettlementStatus;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
@@ -31,11 +32,18 @@ public class AdminSettlementController {
         this.settlementQueryService = settlementQueryService;
     }
 
-    @Operation(summary = "전체 정산 내역 목록 - status로 필터 (미지정 시 전체), 최신 확정순")
+    @Operation(summary = "전체 정산 내역 목록 - status로 필터(미지정 시 전체), keyword로 공동구매 제목 검색, 최신 확정순")
     @GetMapping
     public ResponseEntity<Page<SettlementResponse>> list(
             @RequestParam(required = false) SettlementStatus status,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(settlementQueryService.getAllSettlements(status, pageable));
+            @RequestParam(required = false) String keyword,
+            @PageableDefault(size = 10) Pageable pageable) {
+        return ResponseEntity.ok(settlementQueryService.getAllSettlements(status, keyword, pageable));
+    }
+
+    @Operation(summary = "정산 대시보드 상단 요약 카드 - 정산 대기 건수/금액, 이번 달 정산 완료 건수/금액")
+    @GetMapping("/summary")
+    public ResponseEntity<AdminSettlementSummaryResponse> summary() {
+        return ResponseEntity.ok(settlementQueryService.getAdminSummary());
     }
 }

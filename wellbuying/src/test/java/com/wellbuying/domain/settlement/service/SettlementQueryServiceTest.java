@@ -216,7 +216,7 @@ class SettlementQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(settlement(42L, 5L))));
         stubJoins(42L, "제주 감귤 공동구매", LocalDateTime.now(), 5L, "푸른살림");
 
-        Page<SettlementResponse> page = service().getAllSettlements(SettlementStatus.CONFIRMED, pageable);
+        Page<SettlementResponse> page = service().getAllSettlements(SettlementStatus.CONFIRMED, null, pageable);
 
         assertThat(page.getContent()).hasSize(1);
         verify(settlementRepository).findByStatus(eq(SettlementStatus.CONFIRMED), any());
@@ -229,7 +229,7 @@ class SettlementQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(settlement(42L, 5L))));
         stubJoins(42L, "제주 감귤 공동구매", LocalDateTime.now(), 5L, "푸른살림");
 
-        service().getAllSettlements(null, pageable);
+        service().getAllSettlements(null, null, pageable);
 
         verify(settlementRepository).findAll(any(Pageable.class));
         verify(settlementRepository, never()).findByStatus(any(), any());
