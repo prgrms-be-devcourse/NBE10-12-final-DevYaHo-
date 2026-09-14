@@ -7,6 +7,8 @@ import java.util.Collection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AdminActionLogRepository extends JpaRepository<AdminActionLog, Long> {
 
@@ -18,7 +20,26 @@ public interface AdminActionLogRepository extends JpaRepository<AdminActionLog, 
     Page<AdminActionLog> findAllByTargetTypeAndActionInOrderByOccurredAtDesc(AdminActionTargetType targetType,
             Collection<AdminActionType> actions, Pageable pageable);
 
-    // 제목 검색용 - target_id가 미리 조회해둔 후보 목록(예: 제목이 일치하는 공동구매의 판매정지 요청 id)에 속하는 이력만 조회
-    Page<AdminActionLog> findAllByTargetTypeAndTargetIdInOrderByOccurredAtDesc(AdminActionTargetType targetType,
-            Collection<Long> targetIds, Pageable pageable);
+    // 공동구매 판매정지 처리이력 전용 제목 검색 - admin_action_log(target_id=요청 id)는 제목을 갖고 있지
+    // 않고, target_id/target_type은 여러 도메인을 가리키는 제네릭 컬럼이라 JPA 연관관계도 없다. 이전엔
+    // 제목 -> groupBuyId 목록 -> requestId 목록을 애플리케이션에서 순차 조회해 IN 절로 넘겼는데, 검색어가
+    // 넓으면 중간 id 목록이 커지는 문제가 있어 GroupBuySuspensionRequest/GroupBuy와 WHERE 등가조건으로
+    // 조인해 DB에서 한 번에 필터링한다 (SettlementItemRepository의 settlement->groupbuy 조인과 같은 방식).
+    // targetType 조건으로 반드시 이 유형만 걸러야 target_id가 다른 도메인 PK와 우연히 겹치는 사고를 막는다
+    @Query(value = """
+            SELECT a FROM AdminActionLog a, GroupBuySuspensionRequest r, GroupBuy g
+            WHERE a.targetId = r.id AND r.groupBuyId = g.id
+              AND a.targetType = :targetType
+              AND LOWER(g.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            ORDER BY a.occurredAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(a) FROM AdminActionLog a, GroupBuySuspensionRequest r, GroupBuy g
+            WHERE a.targetId = r.id AND r.groupBuyId = g.id
+              AND a.targetType = :targetType
+              AND LOWER(g.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            """)
+    Page<AdminActionLog> findAllByTargetTypeAndGroupBuySuspensionRequestTitleContainingIgnoreCase(
+            @Param("targetType") AdminActionTargetType targetType, @Param("keyword") String keyword,
+            Pageable pageable);
 }

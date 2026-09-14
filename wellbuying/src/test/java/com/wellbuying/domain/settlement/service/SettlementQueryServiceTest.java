@@ -236,6 +236,31 @@ class SettlementQueryServiceTest {
     }
 
     @Test
+    void 관리자_조회는_keyword와_status가_모두_있으면_상태_제목_조인_쿼리를_쓴다() {
+        when(settlementRepository.findByStatusAndGroupBuyTitleContainingIgnoreCase(eq(SettlementStatus.CONFIRMED),
+                eq("감귤"), any())).thenReturn(new PageImpl<>(List.of(settlement(42L, 5L))));
+        stubJoins(42L, "제주 감귤 공동구매", LocalDateTime.now(), 5L, "푸른살림");
+
+        Page<SettlementResponse> page = service().getAllSettlements(SettlementStatus.CONFIRMED, "감귤", pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(settlementRepository, never()).findByStatus(any(), any());
+        verify(settlementRepository, never()).findByGroupBuyTitleContainingIgnoreCase(any(), any());
+    }
+
+    @Test
+    void 관리자_조회는_keyword만_있으면_제목_조인_쿼리를_쓴다() {
+        when(settlementRepository.findByGroupBuyTitleContainingIgnoreCase(eq("감귤"), any()))
+                .thenReturn(new PageImpl<>(List.of(settlement(42L, 5L))));
+        stubJoins(42L, "제주 감귤 공동구매", LocalDateTime.now(), 5L, "푸른살림");
+
+        Page<SettlementResponse> page = service().getAllSettlements(null, "감귤", pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(settlementRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
     void 관리자_월별_조회는_PENDING이면_판매자_구분없는_findPendingByFinalizedAtRange를_쓴다() {
         SettlementPendingRow row = pendingRow(42L, "제주 감귤 공동구매", 5L, 3L, 100_000L);
         when(settlementItemRepository.findPendingByFinalizedAtRange(any(), any(), any()))
@@ -266,15 +291,15 @@ class SettlementQueryServiceTest {
     }
 
     @Test
-    void 관리자_월별_조회는_keyword_매칭이_없으면_빈_페이지를_반환한다() {
-        when(groupBuyRepository.findIdByTitleContainingIgnoreCase("존재안함")).thenReturn(List.of());
+    void 관리자_월별_조회는_keyword가_있으면_제목_조인_쿼리로_직접_조회한다() {
+        when(settlementRepository.findByGroupBuyFinalizedAtRangeAndTitleContainingIgnoreCase(any(), any(),
+                eq("존재안함"), any())).thenReturn(new PageImpl<>(List.of()));
 
         Page<SettlementListItemResponse> page =
                 service().getAllSettlementsForMonth(null, null, SettlementListStatus.COMPLETED, "존재안함", pageable);
 
         assertThat(page.getContent()).isEmpty();
-        verify(settlementRepository, never()).findByGroupBuyFinalizedAtRangeAndGroupBuyIdIn(any(), any(), any(),
-                any());
+        verify(settlementRepository, never()).findByGroupBuyFinalizedAtRange(any(), any(), any());
     }
 
     @Test
@@ -288,7 +313,7 @@ class SettlementQueryServiceTest {
         when(settlementItemRepository.sumAmountByPaidAtRange(previousMonthStart, monthStart)).thenReturn(800_000L);
         when(settlementItemRepository.countDistinctGroupBuyIdByStatus(any())).thenReturn(4L);
         when(settlementItemRepository.sumAmountByStatus(any())).thenReturn(150_000L);
-        when(settlementRepository.countByConfirmedAtBetween(monthStart, nextMonthStart)).thenReturn(6L);
+        when(settlementRepository.countByConfirmedAtRange(monthStart, nextMonthStart)).thenReturn(6L);
         when(settlementRepository.sumPayoutByConfirmedAtRange(monthStart, nextMonthStart)).thenReturn(700_000L);
 
         var summary = service().getAdminSummary();

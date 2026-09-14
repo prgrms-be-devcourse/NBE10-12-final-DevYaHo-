@@ -3,7 +3,6 @@ package com.wellbuying.domain.settlement.repository;
 import com.wellbuying.domain.settlement.entity.SettlementItem;
 import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
@@ -206,7 +205,8 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
     Page<SettlementPendingRow> findPendingByFinalizedAtRange(@Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to, Pageable pageable);
 
-    // 관리자 "정산 대기중" 월별 리스트 + 공동구매 제목 검색(keyword) - groupBuyId 목록으로 미리 좁힌 뒤 조회
+    // 관리자 "정산 대기중" 월별 리스트 + 공동구매 제목 검색(keyword) - 제목 -> groupBuyId 목록을 애플리케이션
+    // 메모리로 먼저 가져와 IN 절로 넘기지 않고, group_buy와의 JOIN에 제목 조건을 바로 걸어 DB에서 한 번에 필터링한다
     @Query(value = """
             SELECT si.group_buy_id AS "groupBuyId", gb.title AS "groupBuyTitle", si.producer_id AS "producerId",
                    COUNT(*) AS "itemCount", SUM(si.amount) AS "totalSales"
@@ -214,7 +214,7 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
             JOIN group_buy gb ON gb.id = si.group_buy_id
             WHERE si.status = 'ACCRUED'
               AND gb.finalized_at >= :from AND gb.finalized_at < :to
-              AND si.group_buy_id IN (:groupBuyIds)
+              AND LOWER(gb.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
             GROUP BY si.group_buy_id, gb.title, si.producer_id, gb.finalized_at
             ORDER BY gb.finalized_at DESC
             """,
@@ -225,10 +225,11 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
                 JOIN group_buy gb ON gb.id = si.group_buy_id
                 WHERE si.status = 'ACCRUED'
                   AND gb.finalized_at >= :from AND gb.finalized_at < :to
-                  AND si.group_buy_id IN (:groupBuyIds)
+                  AND LOWER(gb.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 GROUP BY si.group_buy_id
             ) sub
             """, nativeQuery = true)
-    Page<SettlementPendingRow> findPendingByFinalizedAtRangeAndGroupBuyIdIn(@Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to, @Param("groupBuyIds") Collection<Long> groupBuyIds, Pageable pageable);
+    Page<SettlementPendingRow> findPendingByFinalizedAtRangeAndTitleContainingIgnoreCase(
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, @Param("keyword") String keyword,
+            Pageable pageable);
 }

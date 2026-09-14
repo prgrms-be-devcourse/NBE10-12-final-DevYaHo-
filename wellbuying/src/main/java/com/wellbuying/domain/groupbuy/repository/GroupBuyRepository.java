@@ -23,13 +23,6 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long>, Group
     // 관리자 공동구매 키워드 검색용 (상태 전체, 제목 부분 일치)
     Page<GroupBuy> findByTitleContainingIgnoreCase(String keyword, Pageable pageable);
 
-    // 판매정지 심사/처리이력 탭의 제목 검색용 - group_buy_suspension_request/admin_action_log는 제목을
-    // 직접 갖고 있지 않아, 제목으로 먼저 공동구매 id를 찾은 뒤 그 id로 역참조 조회한다.
-    // "findIdBy..." 파생 쿼리는 일부 버전에서 엔티티 프로젝션으로 해석돼 Long 변환에 실패하는 경우가 있어
-    // 명시적으로 id만 select하는 JPQL을 쓴다
-    @Query("SELECT g.id FROM GroupBuy g WHERE lower(g.title) LIKE lower(concat('%', :keyword, '%'))")
-    List<Long> findIdByTitleContainingIgnoreCase(@Param("keyword") String keyword);
-
     // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
     boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
 

@@ -246,20 +246,14 @@ public class GroupBuyService {
     }
 
     // 관리자의 상태별 판매정지 요청 목록 조회 - 공동구매 제목을 함께 보여주기 위해 배치 조회 후 조합.
-    // keyword가 있으면 공동구매 제목으로 먼저 대상 id를 찾은 뒤 그 id에 속하는 요청만 조회한다
-    // (요청 테이블 자체엔 제목이 없어 직접 LIKE를 걸 수 없다)
+    // keyword가 있으면 GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다(요청 테이블 자체엔 제목이 없다)
     @Transactional(readOnly = true)
     public Page<GroupBuySuspensionRequestResponse> listSuspensionRequests(GroupBuySuspensionStatus status,
             String keyword, Pageable pageable) {
-        Page<GroupBuySuspensionRequest> page;
-        if (keyword != null && !keyword.isBlank()) {
-            List<Long> matchedGroupBuyIds = groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword);
-            page = matchedGroupBuyIds.isEmpty() ? Page.empty(pageable)
-                    : groupBuySuspensionRequestRepository.findAllByStatusAndGroupBuyIdIn(status, matchedGroupBuyIds,
-                            pageable);
-        } else {
-            page = groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
-        }
+        Page<GroupBuySuspensionRequest> page = (keyword != null && !keyword.isBlank())
+                ? groupBuySuspensionRequestRepository.findAllByStatusAndGroupBuyTitleContainingIgnoreCase(status,
+                        keyword, pageable)
+                : groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
         List<Long> groupBuyIds = page.getContent().stream().map(GroupBuySuspensionRequest::getGroupBuyId).distinct()
                 .toList();
         Map<Long, String> titlesById = groupBuyRepository.findAllById(groupBuyIds).stream()
@@ -309,21 +303,14 @@ public class GroupBuyService {
     }
 
     // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용.
-    // keyword가 있으면 공동구매 제목 -> 그 공동구매의 판매정지 요청 id 목록 -> 그 id들의 이력 순으로 좁혀서 조회한다
+    // keyword가 있으면 GroupBuySuspensionRequest/GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다
     @Transactional(readOnly = true)
     public Page<AdminActionLogResponse> listSuspensionActionLogs(String keyword, Pageable pageable) {
-        Page<AdminActionLog> page;
-        if (keyword != null && !keyword.isBlank()) {
-            List<Long> matchedGroupBuyIds = groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword);
-            List<Long> matchedRequestIds = matchedGroupBuyIds.isEmpty() ? List.of()
-                    : groupBuySuspensionRequestRepository.findIdByGroupBuyIdIn(matchedGroupBuyIds);
-            page = matchedRequestIds.isEmpty() ? Page.empty(pageable)
-                    : adminActionLogRepository.findAllByTargetTypeAndTargetIdInOrderByOccurredAtDesc(
-                            AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, matchedRequestIds, pageable);
-        } else {
-            page = adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
-                    AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
-        }
+        Page<AdminActionLog> page = (keyword != null && !keyword.isBlank())
+                ? adminActionLogRepository.findAllByTargetTypeAndGroupBuySuspensionRequestTitleContainingIgnoreCase(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, keyword, pageable)
+                : adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
         List<Long> requestIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
         Map<Long, Long> groupBuyIdsByRequestId = groupBuySuspensionRequestRepository.findAllById(requestIds).stream()
                 .collect(Collectors.toMap(GroupBuySuspensionRequest::getId, GroupBuySuspensionRequest::getGroupBuyId));

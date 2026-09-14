@@ -94,21 +94,21 @@ public class SettlementQueryService {
     }
 
     // 관리자 전체 정산 내역. status가 null이면 전체, keyword가 있으면 공동구매 제목으로 검색
-    // (Settlement엔 제목이 없어 groupBuyRepository에서 먼저 id를 찾은 뒤 그 id로 좁힌다)
+    // (Settlement엔 제목이 없어 GroupBuy와 조인해 DB에서 한 번에 필터링한다)
     @Transactional(readOnly = true)
     public Page<SettlementResponse> getAllSettlements(SettlementStatus status, String keyword, Pageable pageable) {
         Pageable sorted = sortedByConfirmedAtDesc(pageable);
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
         Page<Settlement> settlements;
-        if (keyword != null && !keyword.isBlank()) {
-            List<Long> matchedGroupBuyIds = groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword);
-            settlements = matchedGroupBuyIds.isEmpty() ? Page.empty(sorted)
-                    : status == null
-                            ? settlementRepository.findByGroupBuyIdIn(matchedGroupBuyIds, sorted)
-                            : settlementRepository.findByStatusAndGroupBuyIdIn(status, matchedGroupBuyIds, sorted);
+        if (hasKeyword && status == null) {
+            settlements = settlementRepository.findByGroupBuyTitleContainingIgnoreCase(keyword, sorted);
+        } else if (hasKeyword) {
+            settlements = settlementRepository.findByStatusAndGroupBuyTitleContainingIgnoreCase(status, keyword,
+                    sorted);
+        } else if (status == null) {
+            settlements = settlementRepository.findAll(sorted);
         } else {
-            settlements = status == null
-                    ? settlementRepository.findAll(sorted)
-                    : settlementRepository.findByStatus(status, sorted);
+            settlements = settlementRepository.findByStatus(status, sorted);
         }
         return toResponsePage(settlements);
     }
@@ -126,7 +126,7 @@ public class SettlementQueryService {
                 settlementItemRepository.sumAmountByPaidAtRange(previousMonthStart, monthStart);
         long pendingCount = settlementItemRepository.countDistinctGroupBuyIdByStatus(SettlementItemStatus.ACCRUED);
         long pendingAmount = settlementItemRepository.sumAmountByStatus(SettlementItemStatus.ACCRUED);
-        long thisMonthConfirmedCount = settlementRepository.countByConfirmedAtBetween(monthStart, nextMonthStart);
+        long thisMonthConfirmedCount = settlementRepository.countByConfirmedAtRange(monthStart, nextMonthStart);
         long thisMonthConfirmedAmount = settlementRepository.sumPayoutByConfirmedAtRange(monthStart, nextMonthStart);
 
         return new AdminSettlementSummaryResponse(thisMonthTotalSales, previousMonthTotalSales, pendingCount,
@@ -141,20 +141,19 @@ public class SettlementQueryService {
         YearMonth targetMonth = (year != null && month != null) ? YearMonth.of(year, month) : YearMonth.now();
         LocalDateTime from = targetMonth.atDay(1).atStartOfDay();
         LocalDateTime to = targetMonth.plusMonths(1).atDay(1).atStartOfDay();
-        List<Long> matchedGroupBuyIds = (keyword != null && !keyword.isBlank())
-                ? groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword) : null;
+        String normalizedKeyword = (keyword != null && !keyword.isBlank()) ? keyword : null;
 
         if (status == SettlementListStatus.PENDING) {
-            return toPendingPage(fetchPending(from, to, matchedGroupBuyIds, unsortedPage(pageable)));
+            return toPendingPage(fetchPending(from, to, normalizedKeyword, unsortedPage(pageable)));
         }
         if (status == SettlementListStatus.COMPLETED) {
-            return toCompletedPage(fetchCompleted(from, to, matchedGroupBuyIds, completedSortedPage(pageable)));
+            return toCompletedPage(fetchCompleted(from, to, normalizedKeyword, completedSortedPage(pageable)));
         }
 
         List<SettlementListItemResponse> pending = toPendingResponses(
-                fetchPending(from, to, matchedGroupBuyIds, Pageable.unpaged()).getContent());
+                fetchPending(from, to, normalizedKeyword, Pageable.unpaged()).getContent());
         List<SettlementListItemResponse> completed = toCompletedResponses(
-                fetchCompleted(from, to, matchedGroupBuyIds, Pageable.unpaged()).getContent());
+                fetchCompleted(from, to, normalizedKeyword, Pageable.unpaged()).getContent());
         List<SettlementListItemResponse> merged = new ArrayList<>(pending.size() + completed.size());
         merged.addAll(pending);
         merged.addAll(completed);
@@ -163,24 +162,20 @@ public class SettlementQueryService {
         return paginate(merged, pageable);
     }
 
-    private Page<SettlementPendingRow> fetchPending(LocalDateTime from, LocalDateTime to,
-            List<Long> matchedGroupBuyIds, Pageable pageable) {
-        if (matchedGroupBuyIds == null) {
-            return settlementItemRepository.findPendingByFinalizedAtRange(from, to, pageable);
-        }
-        return matchedGroupBuyIds.isEmpty() ? Page.empty(pageable)
-                : settlementItemRepository.findPendingByFinalizedAtRangeAndGroupBuyIdIn(
-                        from, to, matchedGroupBuyIds, pageable);
+    private Page<SettlementPendingRow> fetchPending(LocalDateTime from, LocalDateTime to, String keyword,
+            Pageable pageable) {
+        return keyword == null
+                ? settlementItemRepository.findPendingByFinalizedAtRange(from, to, pageable)
+                : settlementItemRepository.findPendingByFinalizedAtRangeAndTitleContainingIgnoreCase(
+                        from, to, keyword, pageable);
     }
 
-    private Page<Settlement> fetchCompleted(LocalDateTime from, LocalDateTime to, List<Long> matchedGroupBuyIds,
+    private Page<Settlement> fetchCompleted(LocalDateTime from, LocalDateTime to, String keyword,
             Pageable pageable) {
-        if (matchedGroupBuyIds == null) {
-            return settlementRepository.findByGroupBuyFinalizedAtRange(from, to, pageable);
-        }
-        return matchedGroupBuyIds.isEmpty() ? Page.empty(pageable)
-                : settlementRepository.findByGroupBuyFinalizedAtRangeAndGroupBuyIdIn(
-                        from, to, matchedGroupBuyIds, pageable);
+        return keyword == null
+                ? settlementRepository.findByGroupBuyFinalizedAtRange(from, to, pageable)
+                : settlementRepository.findByGroupBuyFinalizedAtRangeAndTitleContainingIgnoreCase(
+                        from, to, keyword, pageable);
     }
 
     // 클라이언트가 넘긴 sort를 그대로 쓰면 리포지토리 정렬과 겹쳐 꼬일 수 있어(OrderQueryService 참고),
