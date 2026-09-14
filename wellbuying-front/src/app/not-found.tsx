@@ -10,7 +10,7 @@ export default function NotFound() {
         주소가 잘못되었거나 삭제된 페이지예요.
       </p>
       <Link
-        href="/home"
+        href="/"
         className="mt-2 inline-flex h-11 items-center justify-center rounded-lg bg-wb-green px-5 text-sm font-semibold text-white transition-colors hover:bg-wb-green/90"
       >
         홈으로 이동

@@ -49,7 +49,7 @@ public class AdminGroupBuyController {
             @RequestParam(required = false) GroupBuyStatus status,
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(groupBuyService.list(status, keyword, pageable));
+        return ResponseEntity.ok(groupBuyService.list(status, keyword, null, pageable));
     }
 
     // 상태별 판매정지 요청 목록 조회 (예: ?status=PENDING으로 처리 대기 목록 조회)

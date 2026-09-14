@@ -53,7 +53,9 @@ export function ProductSearchCard({
         )}
       </div>
       <div className="mt-3 space-y-1">
-        <p className="line-clamp-2 min-h-12 text-base">{item.productName}</p>
+        <p className="line-clamp-2 min-h-12 text-base">
+          {isGroupBuy ? (item.groupBuyTitle ?? item.productName) : item.productName}
+        </p>
         <p className="text-sm font-bold">{won(price)}</p>
       </div>
       {isGroupBuy && (

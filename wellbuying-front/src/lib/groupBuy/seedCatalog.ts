@@ -81,5 +81,3 @@ const DEFAULT_ENTRY: GroupBuyCatalogEntry = {
 export function resolveCatalogEntry(productName: string): GroupBuyCatalogEntry {
   return CATALOG[productName] ?? DEFAULT_ENTRY;
 }
-
-export const CATALOG_CATEGORIES = ["전체", "식품", "생활", "패션", "기타"];

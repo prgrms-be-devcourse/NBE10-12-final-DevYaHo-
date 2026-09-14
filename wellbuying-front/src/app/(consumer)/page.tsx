@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownCircle,
@@ -15,7 +15,6 @@ import {
   Rocket,
   Sparkles,
 } from "lucide-react";
-import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -23,7 +22,7 @@ import { Tag } from "@/components/ui/Tag";
 import { getPopularProducts } from "@/lib/api/product";
 import type { ProductSummaryResponse } from "@/lib/api/types";
 import { won } from "@/lib/format";
-import { CATALOG_CATEGORIES, resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
+import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const CAROUSEL_INTERVAL_MS = 4500;
@@ -48,7 +47,6 @@ export default function HomePage() {
     size: NEW_ARRIVAL_COUNT * 4,
   });
   const { items: upcomingAll } = useGroupBuyList("READY");
-  const [category, setCategory] = useState("전체");
   const [slide, setSlide] = useState(0);
   const [popularProducts, setPopularProducts] = useState<ProductSummaryResponse[]>([]);
   const [popularProductsLoading, setPopularProductsLoading] = useState(true);
@@ -70,37 +68,19 @@ export default function HomePage() {
     };
   }, []);
 
-  const byCategory = useCallback(
-    (items: GroupBuyCardView[]) => (category === "전체" ? items : items.filter((item) => item.category === category)),
-    [category],
-  );
-
-  const filtered = byCategory(ongoing);
+  const filtered = ongoing;
 
   const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
 
-  const popular = useMemo(() => byCategory(popularSource).slice(0, POPULAR_COUNT), [popularSource, byCategory]);
+  const popular = useMemo(() => popularSource.slice(0, POPULAR_COUNT), [popularSource]);
 
   const notable = useMemo(() => filtered.slice(0, NOTABLE_COUNT), [filtered]);
 
-  const closingSoon = useMemo(
-    () => byCategory(closingSource).slice(0, CLOSING_SOON_COUNT),
-    [closingSource, byCategory],
-  );
+  const closingSoon = useMemo(() => closingSource.slice(0, CLOSING_SOON_COUNT), [closingSource]);
 
-  const upcoming = useMemo(() => {
-    const scheduled = category === "전체" ? upcomingAll : upcomingAll.filter((item) => item.category === category);
-    return scheduled.slice(0, UPCOMING_COUNT);
-  }, [upcomingAll, category]);
+  const upcoming = useMemo(() => upcomingAll.slice(0, UPCOMING_COUNT), [upcomingAll]);
 
-  const newArrivals = useMemo(
-    () => byCategory(newArrivalSource).slice(0, NEW_ARRIVAL_COUNT),
-    [newArrivalSource, byCategory],
-  );
-
-  useEffect(() => {
-    setSlide(0);
-  }, [category]);
+  const newArrivals = useMemo(() => newArrivalSource.slice(0, NEW_ARRIVAL_COUNT), [newArrivalSource]);
 
   useEffect(() => {
     if (promoDeals.length <= 1) return;
@@ -114,8 +94,6 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 px-6 py-9">
-      <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
-
       <div>
         <p className="text-sm font-semibold text-wb-green">좋은 아침이에요</p>
         <h1 className="mt-1 text-3xl font-bold">가격을 알면, 구매가 달라져요</h1>
@@ -126,7 +104,7 @@ export default function HomePage() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-wb-line py-16 text-center">
           <PackageSearch className="h-8 w-8 text-wb-secondary" strokeWidth={1.5} />
-          <p className="text-sm font-semibold text-wb-secondary">이 카테고리엔 아직 공동구매가 없어요</p>
+          <p className="text-sm font-semibold text-wb-secondary">아직 진행 중인 공동구매가 없어요</p>
         </div>
       ) : (
         <>

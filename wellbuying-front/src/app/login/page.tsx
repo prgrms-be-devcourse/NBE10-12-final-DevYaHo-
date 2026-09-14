@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { SelectField } from "@/components/ui/SelectField";
@@ -117,7 +118,7 @@ export default function LoginPage() {
   async function handleLogin() {
     await login(email, password);
     await refreshMember();
-    router.push("/home");
+    router.push("/");
   }
 
   async function handleSignup() {
@@ -137,7 +138,7 @@ export default function LoginPage() {
     }
     await login(email, password);
     await refreshMember();
-    router.push("/home");
+    router.push("/");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -174,24 +175,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-wb-green shadow-md">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-8 w-8 text-white"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                d="M9 12.75 11.25 15 15 9.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ShoppingBag className="h-8 w-8 text-white" strokeWidth={2} />
           </div>
           <h1 className="text-2xl font-semibold">WellBuying</h1>
           <p className="text-sm text-wb-secondary">가격을 알면, 구매가 달라져요</p>

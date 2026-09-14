@@ -27,8 +27,12 @@ import com.wellbuying.domain.product.repository.ProductCountRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.search.ProductSearchEventOutbox;
 import com.wellbuying.domain.product.search.ProductSearchEventOutboxRepository;
+import com.wellbuying.domain.groupbuy.entity.GroupBuy;
+import com.wellbuying.domain.groupbuy.entity.GroupBuyPrice;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyStatus;
+import com.wellbuying.domain.groupbuy.repository.GroupBuyPriceRepository;
 import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
+import com.wellbuying.domain.groupbuy.service.GroupBuyPriceCalculator;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
 import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
 import com.wellbuying.global.exception.BusinessException;
@@ -39,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,6 +62,7 @@ public class ProductService {
     private final ProductCountRepository productCountRepository;
     private final ProductSearchEventOutboxRepository outboxRepository;
     private final GroupBuyRepository groupBuyRepository;
+    private final GroupBuyPriceRepository groupBuyPriceRepository;
     private final AdminActionLogRepository adminActionLogRepository;
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
@@ -70,7 +76,8 @@ public class ProductService {
                           AdminActionLogRepository adminActionLogRepository,
                           ProductImageUploadService productImageUploadService,
                           ApplicationEventPublisher eventPublisher,
-                          ProductImageRepository productImageRepository) {
+                          ProductImageRepository productImageRepository,
+                          GroupBuyPriceRepository groupBuyPriceRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
@@ -81,6 +88,7 @@ public class ProductService {
         this.productImageUploadService = productImageUploadService;
         this.eventPublisher = eventPublisher;
         this.productImageRepository = productImageRepository;
+        this.groupBuyPriceRepository = groupBuyPriceRepository;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -108,7 +116,36 @@ public class ProductService {
                         Collectors.mapping(ProductImage::getImageUrl, Collectors.toList())));
         List<String> galleryImageUrls = imageUrlsByType.getOrDefault(ImageType.GALLERY, List.of());
         List<String> descriptionImageUrls = imageUrlsByType.getOrDefault(ImageType.DESCRIPTION, List.of());
-        return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls);
+        List<GroupBuy> activeGroupBuys = findActiveGroupBuys(productId);
+        Map<Long, Integer> currentUnitPriceByGroupBuyId = resolveCurrentUnitPrices(activeGroupBuys);
+        return ProductDetailResponse.of(product, galleryImageUrls, descriptionImageUrls, activeGroupBuys,
+                currentUnitPriceByGroupBuyId);
+    }
+
+    // 상품 상세에 안내할 진행 중인 공동구매 전체 - ONGOING을 READY보다 앞에 두고(GroupBuyService의
+    // getActiveSummariesByProductIds와 동일한 우선순위 규칙), 같은 상태끼리는 최근에(id가 큰 쪽) 개설된 건을
+    // 먼저 보여준다. 한 상품에 동시에 여러 건이 열릴 수 있어(생성 시 막는 검증이 없음) 대표 1건이 아닌
+    // 전체를 반환한다
+    private List<GroupBuy> findActiveGroupBuys(Long productId) {
+        List<GroupBuy> ongoing = groupBuyRepository.findByProductIdAndStatusOrderByIdDesc(productId,
+                GroupBuyStatus.ONGOING);
+        List<GroupBuy> ready = groupBuyRepository.findByProductIdAndStatusOrderByIdDesc(productId,
+                GroupBuyStatus.READY);
+        return Stream.concat(ongoing.stream(), ready.stream()).toList();
+    }
+
+    // 공동구매별 현재 단가 - 각 공동구매의 가격 구간(GroupBuyPrice) 중 현재 누적 참여 수량이 도달한 구간의
+    // 단가를 계산한다(GroupBuyService.getActiveSummariesByProductIds와 동일한 계산 로직)
+    private Map<Long, Integer> resolveCurrentUnitPrices(List<GroupBuy> groupBuys) {
+        List<Long> groupBuyIds = groupBuys.stream().map(GroupBuy::getId).toList();
+        Map<Long, List<GroupBuyPrice>> priceTiersByGroupBuyId = groupBuyPriceRepository
+                .findByGroupBuyIdIn(groupBuyIds).stream()
+                .collect(Collectors.groupingBy(GroupBuyPrice::getGroupBuyId));
+        return groupBuys.stream()
+                .collect(Collectors.toMap(GroupBuy::getId,
+                        groupBuy -> GroupBuyPriceCalculator.resolveUnitPrice(
+                                priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of()),
+                                groupBuy.getCurrentQuantity())));
     }
 
     // 공동구매 생성 시 사용 - 상품이 존재하고 요청한 판매자 소유일 때만 반환, 아니면 존재 여부를 노출하지 않고 동일한 예외로 처리

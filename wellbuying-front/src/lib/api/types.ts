@@ -199,7 +199,14 @@ export type ProductDetailResponse = {
   description: string | null;
   startPrice: number;
   thumbnailUrl: string | null;
-  available: boolean;
+  approved: boolean;
+  activeGroupBuys: {
+    id: number;
+    title: string;
+    status: GroupBuyStatus;
+    endAt: string;
+    currentUnitPrice: number;
+  }[];
 };
 
 export type ProductCreateRequest = {
@@ -488,6 +495,7 @@ export type ProductSearchResponse = {
   viewCount: number;
   hasActiveGroupBuy: boolean;
   groupBuyId: number | null;
+  groupBuyTitle: string | null;
   groupBuyStatus: string | null;
   currentUnitPrice: number | null;
   currentQuantity: number | null;

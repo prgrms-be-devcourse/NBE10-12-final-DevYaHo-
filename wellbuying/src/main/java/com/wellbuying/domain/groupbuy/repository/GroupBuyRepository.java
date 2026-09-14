@@ -12,9 +12,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
+public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long>, GroupBuyQueryRepository {
 
-    // 목록/검색 - 상태별 필터링
+    // 목록/검색 - 상태별 필터링 (카테고리 필터 없는 단순 조회 - repository 자체 테스트에서 사용)
     Page<GroupBuy> findByStatus(GroupBuyStatus status, Pageable pageable);
 
     // 관리자 공동구매 키워드 검색용 (제목 부분 일치)
@@ -25,6 +25,11 @@ public interface GroupBuyRepository extends JpaRepository<GroupBuy, Long> {
 
     // 상품 삭제 전 검증용 - 해당 상품에 지정된 상태의 공동구매가 하나라도 있는지 확인
     boolean existsByProductIdAndStatusIn(Long productId, List<GroupBuyStatus> statuses);
+
+    // 상품 상세 화면에서 "지금 진행 중인 공동구매" 목록 안내용 - 상태 하나당 최근(id가 큰) 순으로 전체 조회.
+    // ProductService.getDetail()이 ONGOING을 먼저 조회하고 이어서 READY를 조회해 두 결과를 이어 붙인다
+    // (한 상품에 활성 공동구매가 여러 건 열릴 수 있어 대표 1건만 고르면 나머지가 화면에서 안 보이게 된다)
+    List<GroupBuy> findByProductIdAndStatusOrderByIdDesc(Long productId, GroupBuyStatus status);
 
     // 검색 색인(OpenSearch) 배치 갱신용 - 여러 상품의 지정된 상태 공동구매를 한 번의 IN 쿼리로 조회 (상품 수만큼 개별 호출하지 않는다)
     List<GroupBuy> findByProductIdInAndStatusIn(List<Long> productIds, List<GroupBuyStatus> statuses);

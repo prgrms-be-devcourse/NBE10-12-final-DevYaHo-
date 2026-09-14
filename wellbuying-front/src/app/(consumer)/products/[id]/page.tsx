@@ -10,6 +10,7 @@ import { getProduct } from "@/lib/api/product";
 import type { ProductDetailResponse } from "@/lib/api/types";
 import { won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
+import { toDaysLeft } from "@/lib/groupBuy/useGroupBuyList";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
@@ -88,15 +89,34 @@ export default function ProductDetailPage() {
         <p className="text-xl font-bold">{won(product.startPrice)}</p>
       </div>
 
-      {!product.available && <Banner tone="error">현재 구매할 수 없는 상품이에요.</Banner>}
+      {!product.approved && <Banner tone="error">현재 구매할 수 없는 상품이에요.</Banner>}
 
       {(product.description || catalog.detail) && (
         <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>
       )}
 
-      <div className="rounded-2xl border border-wb-line bg-wb-canvas p-4 text-sm text-wb-secondary">
-        아직 진행 중인 공동구매가 없어요. 공동구매가 열리면 이 페이지에서 안내해드릴게요.
-      </div>
+      {product.activeGroupBuys.length > 0 ? (
+        <div className="space-y-2">
+          {product.activeGroupBuys.map((groupBuy) => (
+            <Link
+              key={groupBuy.id}
+              href={`/deals/${groupBuy.id}`}
+              className="block rounded-2xl border border-wb-green bg-wb-canvas p-4"
+            >
+              <div className="flex items-center justify-between text-xs font-semibold text-wb-green">
+                <span>{groupBuy.status === "ONGOING" ? "지금 진행 중" : "오픈 예정"}</span>
+                <span>D-{toDaysLeft(groupBuy.endAt)}</span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-sm font-semibold">{groupBuy.title}</p>
+              <p className="mt-1 text-sm font-bold text-wb-green">{won(groupBuy.currentUnitPrice)}</p>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-wb-line bg-wb-canvas p-4 text-sm text-wb-secondary">
+          아직 진행 중인 공동구매가 없어요. 공동구매가 열리면 이 페이지에서 안내해드릴게요.
+        </div>
+      )}
 
       <Link href="/explore" className="text-sm font-semibold text-wb-green">
         ← 둘러보기로 돌아가기

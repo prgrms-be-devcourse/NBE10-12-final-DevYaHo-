@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { notFound, useParams } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { PaymentMethodModal } from "@/components/consumer/PaymentMethodModal";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
@@ -26,6 +26,7 @@ import type {
   GroupBuyStatusResponse,
   ProductDetailResponse,
 } from "@/lib/api/types";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { formatDateTime, formatRemaining, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { resolveCurrentUnitPrice } from "@/lib/groupBuyPricing";
@@ -51,6 +52,8 @@ function demote404(e: unknown): never {
 
 export default function DealDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { status: authStatus } = useAuth();
   const groupBuyId = Number(params.id);
 
   const [detail, setDetail] = useState<GroupBuyDetailResponse | null>(null);
@@ -78,12 +81,18 @@ export default function DealDetailPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   const reload = useCallback(async () => {
+    // 참여 내역/배송지는 로그인해야만 의미가 있는 개인화 정보다. 비로그인 상태에서 이 API들(auth
+    // 필수)을 호출하면 401로 페이지 전체 조회가 실패하므로, 비로그인이면 아예 부르지 않고 빈 값으로 채운다.
     const [detailRes, statusRes, myPartRes, addressesRes] = await Promise.all([
       getGroupBuy(groupBuyId),
       getGroupBuyStatus(groupBuyId).catch(demote404),
-      getMyGroupBuyParticipation(groupBuyId).catch(demote404),
-      // 배송지 조회 실패가 공동구매 화면 전체를 막지 않도록 빈 목록으로 넘어간다
-      listMyAddresses().catch(() => [] as BuyerAddressResponse[]),
+      authStatus === "authenticated"
+        ? getMyGroupBuyParticipation(groupBuyId).catch(demote404)
+        : Promise.resolve<GroupBuyPartMeResponse>({ participated: false, part: null }),
+      authStatus === "authenticated"
+        // 배송지 조회 실패가 공동구매 화면 전체를 막지 않도록 빈 목록으로 넘어간다
+        ? listMyAddresses().catch(() => [] as BuyerAddressResponse[])
+        : Promise.resolve<BuyerAddressResponse[]>([]),
     ]);
     const productRes = await getProduct(detailRes.productId).catch(demote404);
     setDetail(detailRes);
@@ -96,7 +105,7 @@ export default function DealDetailPage() {
       if (current !== NEW_ADDRESS && addressesRes.some((a) => a.id === current)) return current;
       return addressesRes[0]?.id ?? NEW_ADDRESS;
     });
-  }, [groupBuyId]);
+  }, [groupBuyId, authStatus]);
 
   useEffect(() => {
     if (!Number.isFinite(groupBuyId)) return;
@@ -141,6 +150,10 @@ export default function DealDetailPage() {
 
   // "참여하기"를 누르면, 직접 입력한 배송지는 주소록에 먼저 저장해 buyerAddressId를 확정한 뒤 결제 확인 창을 연다
   async function handleOpenPayment() {
+    if (authStatus !== "authenticated") {
+      router.push("/login");
+      return;
+    }
     setActionError(null);
     setActionMessage(null);
     setSubmitting(true);
@@ -225,8 +238,12 @@ export default function DealDetailPage() {
   const catalog = resolveCatalogEntry(detail.productName);
   const newAddressValid = /^\d{5}$/.test(newZipcode.trim()) && newAddress.trim() !== "";
   const deliveryReady = selectedAddressId === NEW_ADDRESS ? newAddressValid : true;
+  // 비로그인 사용자는 배송지/수량을 채우지 않아도 참여 버튼을 누를 수 있어야 한다 - 클릭 시
+  // handleOpenPayment가 바로 /login으로 보낸다
   const canParticipate =
-    status.status === "ONGOING" && !myPart?.participated && quantity >= 1 && deliveryReady;
+    authStatus !== "authenticated"
+      ? status.status === "ONGOING"
+      : status.status === "ONGOING" && !myPart?.participated && quantity >= 1 && deliveryReady;
   const myPartAddress =
     myPart?.part?.buyerAddressId != null
       ? addresses.find((a) => a.id === myPart.part!.buyerAddressId)
