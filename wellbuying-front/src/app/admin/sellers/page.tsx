@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Search, Store, Users } from "lucide-react";
+import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -13,12 +14,15 @@ import {
   approveSeller,
   listMembers,
   listSellerApplications,
+  listSellerConversionActionLogs,
+  listSellerSuspensionActionLogs,
   reactivateSeller,
   rejectSeller,
   suspendSeller,
 } from "@/lib/api/admin";
 import type { MemberStatus, MemberSummaryResponse, PageResponse, SellerInfoResponse, SellerStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" | "suspend" | "reactivate" };
@@ -77,10 +81,12 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
     invalidatePagedQuery("admin-seller-applications");
     setReloadToken((t) => t + 1);
     setPendingAction(null);
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
   }
 
   if (loading && items === null) {
@@ -238,9 +244,11 @@ function MembersPanel() {
 
   async function handleConfirmMemberAction(reason: string) {
     if (!pendingAction) return;
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await MEMBER_ACTION_FN[pendingAction.kind](pendingAction.id, reason);
     invalidatePagedQuery("admin-members");
     setReloadToken((t) => t + 1);
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
     setPendingAction(null);
   }
 
@@ -376,13 +384,56 @@ function MembersPanel() {
   );
 }
 
-const VIEW_TABS: { key: "sellers" | "members"; label: string }[] = [
+const SELLER_HISTORY_TABS: { key: "conversion" | "suspension"; label: string }[] = [
+  { key: "conversion", label: "승인/거절 이력" },
+  { key: "suspension", label: "정지/정지복귀 이력" },
+];
+
+function SellerActionLogSection() {
+  const [tab, setTab] = useState<"conversion" | "suspension">("conversion");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {SELLER_HISTORY_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-full px-4 py-2 text-xs font-bold ${
+              tab === t.key ? "bg-wb-green text-white" : "border border-wb-line bg-wb-surface text-wb-secondary"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "conversion" ? (
+        <ActionLogPanel
+          cacheNamespace="admin-seller-conversion-action-logs"
+          fetcher={listSellerConversionActionLogs}
+          targetLabelHeader="판매자"
+          emptyMessage="아직 승인/거절 처리된 판매자 신청이 없어요."
+        />
+      ) : (
+        <ActionLogPanel
+          cacheNamespace="admin-seller-suspension-action-logs"
+          fetcher={listSellerSuspensionActionLogs}
+          targetLabelHeader="판매자"
+          emptyMessage="아직 정지/정지복귀 처리된 판매자가 없어요."
+        />
+      )}
+    </div>
+  );
+}
+
+const VIEW_TABS: { key: "sellers" | "members" | "history"; label: string }[] = [
   { key: "sellers", label: "판매자 심사" },
   { key: "members", label: "회원 현황" },
+  { key: "history", label: "처리 이력" },
 ];
 
 export default function AdminSellersPage() {
-  const [view, setView] = useState<"sellers" | "members">("sellers");
+  const [view, setView] = useState<"sellers" | "members" | "history">("sellers");
   const [status, setStatus] = useState<SellerStatus>("PENDING");
 
   return (
@@ -425,8 +476,10 @@ export default function AdminSellersPage() {
 
           <SellerApplicationsPanel key={status} status={status} />
         </>
-      ) : (
+      ) : view === "members" ? (
         <MembersPanel />
+      ) : (
+        <SellerActionLogSection />
       )}
     </div>
   );

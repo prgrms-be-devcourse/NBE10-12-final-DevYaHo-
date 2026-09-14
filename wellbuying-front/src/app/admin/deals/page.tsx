@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PauseCircle, ShoppingBag } from "lucide-react";
+import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
@@ -12,11 +13,13 @@ import { StatusPill, Tag } from "@/components/ui/Tag";
 import {
   approveSuspensionRequest,
   listAdminGroupBuys,
+  listGroupBuySuspensionActionLogs,
   listSuspensionRequests,
   rejectSuspensionRequest,
 } from "@/lib/api/admin";
 import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus, PageResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
@@ -68,10 +71,12 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
     invalidatePagedQuery("admin-suspension-requests");
     setReloadToken((t) => t + 1);
     setPendingAction(null);
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
   }
 
   if (loading && items === null) {
@@ -219,13 +224,14 @@ function GroupBuyListSection() {
   );
 }
 
-const VIEW_TABS: { key: "approval" | "all"; label: string }[] = [
+const VIEW_TABS: { key: "approval" | "all" | "history"; label: string }[] = [
   { key: "approval", label: "판매정지 심사" },
   { key: "all", label: "전체 공동구매 목록" },
+  { key: "history", label: "처리 이력" },
 ];
 
 export default function AdminDealsPage() {
-  const [view, setView] = useState<"approval" | "all">("approval");
+  const [view, setView] = useState<"approval" | "all" | "history">("approval");
   const [suspensionStatus, setSuspensionStatus] = useState<GroupBuySuspensionStatus>("PENDING");
 
   return (
@@ -269,8 +275,15 @@ export default function AdminDealsPage() {
           </div>
           <SuspensionRequestsPanel key={suspensionStatus} status={suspensionStatus} />
         </div>
-      ) : (
+      ) : view === "all" ? (
         <GroupBuyListSection />
+      ) : (
+        <ActionLogPanel
+          cacheNamespace="admin-groupbuy-suspension-action-logs"
+          fetcher={listGroupBuySuspensionActionLogs}
+          targetLabelHeader="공동구매"
+          emptyMessage="아직 승인/반려 처리된 판매정지 요청이 없어요."
+        />
       )}
     </div>
   );

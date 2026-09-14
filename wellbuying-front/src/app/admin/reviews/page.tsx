@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PackageSearch } from "lucide-react";
+import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
-import { approveProduct, listAdminProducts, rejectProduct } from "@/lib/api/admin";
+import { approveProduct, listAdminProducts, listProductActionLogs, rejectProduct } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/http";
 import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
@@ -63,10 +65,12 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
     invalidatePagedQuery("admin-product-review");
     setReloadToken((t) => t + 1);
     setPendingAction(null);
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
   }
 
   if (loading && items === null) {
@@ -221,13 +225,14 @@ function AllProductsPanel() {
   );
 }
 
-const VIEW_TABS: { key: "review" | "all"; label: string }[] = [
+const VIEW_TABS: { key: "review" | "all" | "history"; label: string }[] = [
   { key: "review", label: "등록 심사" },
   { key: "all", label: "전체 상품목록" },
+  { key: "history", label: "처리 이력" },
 ];
 
 export default function AdminReviewsPage() {
-  const [view, setView] = useState<"review" | "all">("review");
+  const [view, setView] = useState<"review" | "all" | "history">("review");
   const [status, setStatus] = useState<ProductStatus>("PENDING");
 
   return (
@@ -270,8 +275,15 @@ export default function AdminReviewsPage() {
 
           <ProductReviewPanel key={status} status={status} />
         </>
-      ) : (
+      ) : view === "all" ? (
         <AllProductsPanel />
+      ) : (
+        <ActionLogPanel
+          cacheNamespace="admin-product-action-logs"
+          fetcher={listProductActionLogs}
+          targetLabelHeader="상품명"
+          emptyMessage="아직 승인/반려 처리된 상품이 없어요."
+        />
       )}
     </div>
   );

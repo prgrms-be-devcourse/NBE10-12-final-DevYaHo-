@@ -231,6 +231,20 @@ export type ProductMineResponse = {
   createdAt: string;
 };
 
+export type AdminActionType = "APPROVE" | "REJECT" | "SUSPEND" | "REACTIVATE";
+
+// GET .../action-logs 계열 공통 응답 (상품/판매정지/셀러 전환·정지 이력 조회)
+export type AdminActionLogResponse = {
+  id: number;
+  targetId: number;
+  targetLabel: string;
+  adminId: number;
+  adminName: string;
+  action: AdminActionType;
+  reason: string;
+  occurredAt: string;
+};
+
 // GET /api/admin/products 응답 - 관리자 상품 심사 목록 조회
 export type ProductAdminResponse = {
   id: number;

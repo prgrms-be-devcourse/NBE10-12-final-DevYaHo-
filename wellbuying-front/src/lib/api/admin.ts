@@ -1,5 +1,6 @@
 import { http } from "@/lib/api/http";
 import type {
+  AdminActionLogResponse,
   GroupBuyStatus,
   GroupBuySummaryResponse,
   GroupBuySuspensionRequestResponse,
@@ -130,4 +131,40 @@ export function approveSuspensionRequest(id: number, reason: string): Promise<vo
 
 export function rejectSuspensionRequest(id: number, reason: string): Promise<void> {
   return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/reject`, { reason }, { auth: true });
+}
+
+// 상품 승인/반려 이력
+export function listProductActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/products/action-logs${suffix}`, { auth: true });
+}
+
+// 공동구매 판매정지 요청 승인/반려 이력
+export function listGroupBuySuspensionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/groupBuys/suspension-requests/action-logs${suffix}`, { auth: true });
+}
+
+// 판매자 전환(승인/거절) 이력
+export function listSellerConversionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/conversion${suffix}`, { auth: true });
+}
+
+// 판매자 정지/정지복귀 이력
+export function listSellerSuspensionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/suspension${suffix}`, { auth: true });
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LayoutDashboard, Package, Settings, ShieldCheck, ShoppingCart, Tag, Trash2, UserCheck, Wallet } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
+import { ToastViewport } from "@/components/ui/ToastViewport";
 import { listAdminProducts } from "@/lib/api/admin";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
 
@@ -43,6 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AppShell title="관리자" navItems={navItems} workspaceLinks={WORKSPACE_LINKS} layout="sidebar">
         {children}
       </AppShell>
+      <ToastViewport />
     </RequireRole>
   );
 }
