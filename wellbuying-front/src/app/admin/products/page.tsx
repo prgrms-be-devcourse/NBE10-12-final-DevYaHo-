@@ -6,10 +6,11 @@ import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { forceDeleteProduct, listAdminProducts, listDeletedProducts } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
-import type { ProductAdminResponse, ProductDeletedAdminResponse } from "@/lib/api/types";
+import type { PageResponse, ProductAdminResponse, ProductDeletedAdminResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type Tab = "force-delete" | "deleted-history";
 
@@ -57,9 +58,7 @@ function ForceDeletePanel() {
   const [page, setPage] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
-  const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [targetId, setTargetId] = useState<number | null>(null);
   const [targetName, setTargetName] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,38 +78,18 @@ function ForceDeletePanel() {
     };
   }, []);
 
-  useEffect(() => {
-    let ignore = false;
-    setError(null);
-    setItems(null);
-    listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page })
-      .then((res) => {
-        if (ignore) return;
-        setItems(res.content);
-        setTotalPages(res.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
-        setItems([]);
-      });
-    return () => {
-      ignore = true;
-    };
-  }, [debouncedKeyword, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
+    "admin-force-delete-products",
+    { keyword: debouncedKeyword, page, reloadToken },
+    () => listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page }),
+    "목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   function reload() {
-    setItems(null);
-    setError(null);
-    listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page })
-      .then((res) => {
-        setItems(res.content);
-        setTotalPages(res.page.totalPages);
-      })
-      .catch((e) => {
-        setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
-        setItems([]);
-      });
+    invalidatePagedQuery("admin-force-delete-products");
+    setReloadToken((t) => t + 1);
   }
 
   return (
@@ -124,9 +103,9 @@ function ForceDeletePanel() {
       />
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items === null ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={Trash2} title="강제 삭제할 상품이 없어요" message="승인된 상품이 없어요." />
       ) : (
         <>
@@ -167,19 +146,7 @@ function ForceDeletePanel() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                이전
-              </Button>
-              <span className="flex items-center px-3 text-sm text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button variant="secondary" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-                다음
-              </Button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
 
@@ -202,36 +169,23 @@ function ForceDeletePanel() {
 
 function DeletedHistoryPanel() {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<ProductDeletedAdminResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
-    setError(null);
-    listDeletedProducts({ page })
-      .then((res) => {
-        if (ignore) return;
-        setItems(res.content);
-        setTotalPages(res.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setError(e instanceof ApiError ? e.message : "삭제 이력을 불러오지 못했어요.");
-        setItems([]);
-      });
-    return () => {
-      ignore = true;
-    };
-  }, [page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductDeletedAdminResponse>>(
+    "admin-deleted-products",
+    { page },
+    () => listDeletedProducts({ page }),
+    "삭제 이력을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   return (
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items === null ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={Trash2} title="삭제 이력이 없어요" message="삭제된 상품이 없어요." />
       ) : (
         <>
@@ -266,19 +220,7 @@ function DeletedHistoryPanel() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                이전
-              </Button>
-              <span className="flex items-center px-3 text-sm text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button variant="secondary" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-                다음
-              </Button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
     </div>

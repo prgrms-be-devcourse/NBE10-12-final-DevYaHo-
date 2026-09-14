@@ -6,11 +6,13 @@ import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import { approveProduct, listAdminProducts, rejectProduct } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/http";
-import type { ProductAdminResponse, ProductStatus } from "@/lib/api/types";
+import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
 
@@ -42,30 +44,17 @@ const STATUS_LABEL: Record<ProductStatus, string> = {
 
 function ProductReviewPanel({ status }: { status: ProductStatus }) {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
-
-    listAdminProducts({ status, page })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "상품 목록을 불러오지 못했어요.");
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [status, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
+    "admin-product-review",
+    { status, page, reloadToken },
+    () => listAdminProducts({ status, page }),
+    "상품 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveProduct,
@@ -74,13 +63,13 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    invalidatePagedQuery("admin-product-review");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
   }
 
-  if (items === null) {
+  if (loading && items === null) {
     return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
   }
 
@@ -88,7 +77,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="해당 상태의 상품이 없어요" message="다른 필터를 확인해보세요." />
       ) : (
         <div className="space-y-3">
@@ -132,24 +121,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-            이전
-          </Button>
-          <span className="flex items-center px-2 text-xs text-wb-secondary">
-            {page + 1} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <ActionReasonModal
         open={pendingAction !== null}

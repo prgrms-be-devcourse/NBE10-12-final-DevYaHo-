@@ -7,6 +7,7 @@ import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import {
   approveSeller,
@@ -16,9 +17,9 @@ import {
   rejectSeller,
   suspendSeller,
 } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
-import type { MemberStatus, MemberSummaryResponse, SellerInfoResponse, SellerStatus } from "@/lib/api/types";
+import type { MemberStatus, MemberSummaryResponse, PageResponse, SellerInfoResponse, SellerStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" | "suspend" | "reactivate" };
 
@@ -55,22 +56,17 @@ const STATUS_LABEL: Record<SellerStatus, string> = {
 
 function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<SellerInfoResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
-  useEffect(() => {
-    listSellerApplications({ status, page })
-      .then((response) => {
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "판매자 신청 목록을 불러오지 못했어요.");
-      });
-  }, [status, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<SellerInfoResponse>>(
+    "admin-seller-applications",
+    { status, page, reloadToken },
+    () => listSellerApplications({ status, page }),
+    "판매자 신청 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveSeller,
@@ -81,13 +77,13 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    invalidatePagedQuery("admin-seller-applications");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
   }
 
-  if (items === null) {
+  if (loading && items === null) {
     return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
   }
 
@@ -95,7 +91,7 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {items === null || items.length === 0 ? (
         <EmptyState icon={Store} title="해당 상태의 신청이 없어요" message="다른 탭을 확인해보세요." />
       ) : (
         <div className="space-y-3">
@@ -142,29 +138,7 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page === 0}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            이전
-          </Button>
-          <span className="flex items-center px-2 text-xs text-wb-secondary">
-            {page + 1} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <ActionReasonModal
         open={pendingAction !== null}
@@ -214,35 +188,21 @@ function MemberIdentity({ name, email }: { name: string; email: string }) {
 function MembersPanel() {
   const [status, setStatus] = useState<MemberStatus | null>(null);
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<MemberSummaryResponse[] | null>(null);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
   const [sellerCount, setSellerCount] = useState(0);
   const [query, setQuery] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
-  useEffect(() => {
-    let ignore = false;
-
-    listMembers({ status: status ?? undefined, page })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalElements(response.page.totalElements);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "회원 목록을 불러오지 못했어요.");
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [status, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<MemberSummaryResponse>>(
+    "admin-members",
+    { status, page, reloadToken },
+    () => listMembers({ status: status ?? undefined, page }),
+    "회원 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalElements = data?.page.totalElements ?? 0;
+  const totalPages = data?.page.totalPages ?? 0;
 
   useEffect(() => {
     let ignore = false;
@@ -278,14 +238,9 @@ function MembersPanel() {
 
   async function handleConfirmMemberAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
     await MEMBER_ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    const nextSellerStatus: SellerStatus = pendingAction.kind === "suspend" ? "SUSPENDED" : "APPROVED";
-    setItems((prev) =>
-      (prev ?? []).map((member) =>
-        member.sellerId === pendingAction.id ? { ...member, sellerStatus: nextSellerStatus } : member,
-      ),
-    );
+    invalidatePagedQuery("admin-members");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
   }
 
@@ -361,7 +316,7 @@ function MembersPanel() {
 
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items === null ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : filtered.length === 0 ? (
         <EmptyState icon={Users} title="해당하는 회원이 없어요" message="다른 필터를 확인해보세요." />
@@ -405,24 +360,7 @@ function MembersPanel() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                이전
-              </Button>
-              <span className="flex items-center px-2 text-xs text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                className="px-3 py-1.5 text-xs"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                다음
-              </Button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
 

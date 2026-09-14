@@ -21,24 +21,27 @@ export function usePagedQuery<T>(
   fallbackMessage = "목록을 불러오지 못했어요.",
 ): { data: T | null; error: string | null; loading: boolean } {
   const cacheKey = `${namespace}:${JSON.stringify(params)}`;
-  const cached = cache.get(cacheKey) as T | undefined;
+  const initialHit = cache.get(cacheKey) as T | undefined;
 
-  const [data, setData] = useState<T | null>(cached ?? null);
+  const [resolvedKey, setResolvedKey] = useState(cacheKey);
+  const [data, setData] = useState<T | null>(initialHit ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(cached === undefined);
+  const [loading, setLoading] = useState(initialHit === undefined);
+
+  // cacheKey(params)가 바뀌면 렌더 중에 캐시부터 즉시 반영한다 - effect 안에서 동기적으로
+  // setState하면 불필요한 리렌더가 생기므로, React가 공식적으로 권장하는 "렌더 중 상태 조정" 패턴을 쓴다.
+  if (cacheKey !== resolvedKey) {
+    setResolvedKey(cacheKey);
+    const hit = cache.get(cacheKey) as T | undefined;
+    setData(hit ?? null);
+    setError(null);
+    setLoading(hit === undefined);
+  }
 
   useEffect(() => {
-    const hit = cache.get(cacheKey) as T | undefined;
-    if (hit !== undefined) {
-      setData(hit);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    if (cache.has(cacheKey)) return; // 캐시 hit은 위에서 이미 렌더 중에 반영 완료 - 재요청 불필요
 
     let ignore = false;
-    setLoading(true);
-    setError(null);
 
     fetcher()
       .then((res) => {
