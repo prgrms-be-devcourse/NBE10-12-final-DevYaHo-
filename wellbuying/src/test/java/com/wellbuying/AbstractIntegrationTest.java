@@ -43,7 +43,9 @@ public abstract class AbstractIntegrationTest {
                     .asCompatibleSubstituteFor("opensearchproject/opensearch"));
 
     // AWS 자격증명 없이도 presigned URL 발급/PUT/태깅을 실제로 검증하기 위한 S3 호환 스토리지 (phase18)
-    private static final MinIOContainer MINIO = new MinIOContainer("bitnami/minio:latest");
+    private static final MinIOContainer MINIO = new MinIOContainer(
+            DockerImageName.parse("bitnami/minio:latest")
+                    .asCompatibleSubstituteFor("minio/minio"));
 
     static {
         // 병렬로 기동: 한쪽이 실패해도 다른 컨테이너의 기동을 막지 않는다
