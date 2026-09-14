@@ -66,7 +66,7 @@ function SellerApplicationsPanel({ status }: { status: SellerStatus }) {
   const { data, error, loading } = usePagedQuery<PageResponse<SellerInfoResponse>>(
     "admin-seller-applications",
     { status, page, reloadToken },
-    () => listSellerApplications({ status, page }),
+    () => listSellerApplications({ status, page, size: 10 }),
     "판매자 신청 목록을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;
