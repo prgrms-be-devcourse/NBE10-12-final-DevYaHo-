@@ -281,6 +281,9 @@ public class GroupBuyService {
     // 관리자 강제 판매정지 - 생산자의 요청 없이 관리자가 직접 이상 있는 ONGOING 공동구매를 정지시킨다.
     // 대기 없이 즉시 승인 상태인 판매정지 요청을 생성해서 기존 이력 조회 로직(target_type=GROUP_BUY_SUSPENSION_REQUEST)을
     // 그대로 재사용한다 - PENDING으로 한 번도 저장되지 않으므로 "대기 중 요청 1건" 유니크 제약과도 충돌하지 않는다
+    // TODO(참여자 결제/환불): 이 메서드는 상태 전이(suspended=true, status=CANCELED)만 처리한다.
+    // 이미 결제 완료된 참여자에 대한 환불/취소 처리는 이번 스코프에서 다루지 않았다 - approveSuspensionRequest도
+    // 동일하게 환불을 처리하지 않으므로 기존 판매정지 승인 플로우와 범위가 같다. 별도 후속 작업으로 필요.
     @Transactional
     public void forceSuspend(Long groupBuyId, Long adminId, String reason) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
