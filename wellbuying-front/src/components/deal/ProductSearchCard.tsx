@@ -60,6 +60,7 @@ export function ProductSearchCard({
         <p className="line-clamp-2 min-h-12 text-base">
           {isGroupBuy ? (item.groupBuyTitle ?? item.productName) : item.productName}
         </p>
+        {item.description && <p className="truncate text-xs text-wb-secondary">{item.description}</p>}
         {isGroupBuy ? (
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold">{won(price)}</span>

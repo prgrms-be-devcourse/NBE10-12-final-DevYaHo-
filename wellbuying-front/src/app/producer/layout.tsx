@@ -5,7 +5,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/producer/dashboard", label: "생산자 홈", icon: BarChart3 },
+  { href: "/producer/dashboard", label: "대시보드", icon: BarChart3 },
   { href: "/producer/products", label: "상품 관리", icon: Package },
   { href: "/producer/deals", label: "공동구매", icon: Users },
   { href: "/producer/settlements", label: "정산 내역", icon: Wallet },
@@ -24,7 +24,7 @@ export default function ProducerLayout({ children }: { children: React.ReactNode
   return (
     <RequireRole role="SELLER">
       <AppShell
-        title="생산자"
+        title="판매자"
         navItems={NAV_ITEMS}
         workspaceLinks={WORKSPACE_LINKS}
         accountLinks={ACCOUNT_LINKS}

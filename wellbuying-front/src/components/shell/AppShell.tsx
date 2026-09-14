@@ -7,6 +7,7 @@ import { ChevronDown, LogOut, type LucideIcon } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { NotificationBell } from "@/components/shell/NotificationBell";
+import { ToastViewport } from "@/components/ui/ToastViewport";
 
 export type NavItem = {
   href: string;
@@ -220,6 +221,7 @@ export function AppShell({
       ) : (
         <main className="min-w-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">{children}</main>
       )}
+      <ToastViewport />
     </div>
   );
 }

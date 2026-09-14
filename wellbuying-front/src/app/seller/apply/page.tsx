@@ -60,7 +60,7 @@ function SellerApplyContent() {
       <div className="mx-auto w-full max-w-md px-4 py-16">
         <Card>
           <p className="text-sm text-wb-secondary">
-            이미 생산자이거나 신청할 수 없는 역할이에요.
+            이미 판매자이거나 신청할 수 없는 역할이에요.
           </p>
         </Card>
       </div>
@@ -71,7 +71,7 @@ function SellerApplyContent() {
     <div className="mx-auto w-full max-w-md px-4 py-16">
       <Card className="space-y-5">
         <div>
-          <h1 className="text-xl font-semibold">생산자 신청</h1>
+          <h1 className="text-xl font-semibold">판매자 신청</h1>
           <p className="text-xs text-wb-secondary">
             정산에 사용할 계좌 정보를 입력해주세요.
           </p>
@@ -79,7 +79,7 @@ function SellerApplyContent() {
 
         {done ? (
           <Banner tone="success">
-            신청이 접수됐어요. 관리자 승인 후 생산자 권한이 부여돼요.
+            신청이 접수됐어요. 관리자 승인 후 판매자 권한이 부여돼요.
           </Banner>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

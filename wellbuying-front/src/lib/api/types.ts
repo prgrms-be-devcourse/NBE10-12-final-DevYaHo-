@@ -527,6 +527,7 @@ export type SearchSortType = "RELEVANCE" | "POPULAR";
 export type ProductSearchResponse = {
   id: number;
   productName: string;
+  description: string | null;
   startPrice: number;
   thumbnailUrl: string;
   viewCount: number;

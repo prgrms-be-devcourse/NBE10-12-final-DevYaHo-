@@ -186,7 +186,7 @@ export default function LoginPage() {
             <h2 className="text-lg font-semibold">
               {mode === "login" && "다시 만나 반가워요"}
               {mode === "signup-select" && "WellBuying을 시작해요"}
-              {mode === "signup" && (asProducer ? "생산자로 시작해요" : "WellBuying을 시작해요")}
+              {mode === "signup" && (asProducer ? "판매자로 시작해요" : "WellBuying을 시작해요")}
             </h2>
             <p className="text-xs text-wb-secondary">
               {mode === "login" && "계정으로 로그인해주세요."}
@@ -212,7 +212,7 @@ export default function LoginPage() {
                 onClick={() => startSignup(true)}
                 className="w-full rounded-lg border border-wb-line bg-wb-canvas p-4 text-left transition-colors hover:border-wb-green"
               >
-                <span className="block text-sm font-bold">생산자로 가입</span>
+                <span className="block text-sm font-bold">판매자로 가입</span>
                 <span className="block text-xs text-wb-secondary">
                   공동구매를 직접 개설하고 정산을 확인할 수 있어요.
                 </span>
@@ -376,7 +376,7 @@ export default function LoginPage() {
             {mode === "signup" && (
               <div className="flex items-center justify-between rounded-lg bg-wb-canvas px-3 py-2">
                 <span className="text-xs font-bold text-wb-secondary">
-                  {asProducer ? "생산자 회원가입" : "일반 회원가입"}
+                  {asProducer ? "판매자 회원가입" : "일반 회원가입"}
                 </span>
                 <button
                   type="button"
