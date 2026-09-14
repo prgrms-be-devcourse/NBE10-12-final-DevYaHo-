@@ -115,10 +115,12 @@ export function listAdminGroupBuys(params?: {
 
 export function listSuspensionRequests(params: {
   status: GroupBuySuspensionStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<GroupBuySuspensionRequestResponse>> {
   const query = new URLSearchParams({ status: params.status });
+  if (params.keyword) query.set("keyword", params.keyword);
   if (params.page !== undefined) query.set("page", String(params.page));
   if (params.size !== undefined) query.set("size", String(params.size));
   return http.get<PageResponse<GroupBuySuspensionRequestResponse>>(
@@ -150,8 +152,9 @@ export function listProductActionLogs(params?: { page?: number; size?: number })
 }
 
 // 공동구매 판매정지 요청 승인/반려 이력
-export function listGroupBuySuspensionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+export function listGroupBuySuspensionActionLogs(params?: { page?: number; size?: number; keyword?: string }): Promise<PageResponse<AdminActionLogResponse>> {
   const query = new URLSearchParams();
+  if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";
