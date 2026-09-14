@@ -17,4 +17,8 @@ public interface AdminActionLogRepository extends JpaRepository<AdminActionLog, 
     // 대상 유형 + 액션 범위별 감사 이력 조회 (셀러 전환 이력 vs. 셀러 정지/정지복귀 이력처럼 같은 대상이라도 화면을 분리해야 하는 경우)
     Page<AdminActionLog> findAllByTargetTypeAndActionInOrderByOccurredAtDesc(AdminActionTargetType targetType,
             Collection<AdminActionType> actions, Pageable pageable);
+
+    // 제목 검색용 - target_id가 미리 조회해둔 후보 목록(예: 제목이 일치하는 공동구매의 판매정지 요청 id)에 속하는 이력만 조회
+    Page<AdminActionLog> findAllByTargetTypeAndTargetIdInOrderByOccurredAtDesc(AdminActionTargetType targetType,
+            Collection<Long> targetIds, Pageable pageable);
 }

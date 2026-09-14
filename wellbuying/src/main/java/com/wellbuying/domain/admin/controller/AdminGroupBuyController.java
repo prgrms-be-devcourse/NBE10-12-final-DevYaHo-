@@ -52,13 +52,14 @@ public class AdminGroupBuyController {
         return ResponseEntity.ok(groupBuyService.list(status, keyword, null, pageable));
     }
 
-    // 상태별 판매정지 요청 목록 조회 (예: ?status=PENDING으로 처리 대기 목록 조회)
-    @Operation(summary = "상태별 판매정지 요청 목록 조회")
+    // 상태별 판매정지 요청 목록 조회 (예: ?status=PENDING으로 처리 대기 목록 조회, keyword로 공동구매 제목 검색)
+    @Operation(summary = "상태별 판매정지 요청 목록 조회 (제목 키워드 검색 선택)")
     @GetMapping("/suspension-requests")
     public ResponseEntity<Page<GroupBuySuspensionRequestResponse>> listSuspensionRequests(
             @RequestParam GroupBuySuspensionStatus status,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "requestedAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(groupBuyService.listSuspensionRequests(status, pageable));
+        return ResponseEntity.ok(groupBuyService.listSuspensionRequests(status, keyword, pageable));
     }
 
     // 판매정지 요청 승인 - 대상 공동구매를 suspended=true로 전환
@@ -81,12 +82,13 @@ public class AdminGroupBuyController {
         return ResponseEntity.noContent().build();
     }
 
-    // 판매정지 요청 승인/반려 이력 조회
-    @Operation(summary = "판매정지 요청 승인/반려 이력 조회")
+    // 판매정지 요청 승인/반려 이력 조회 (keyword로 공동구매 제목 검색)
+    @Operation(summary = "판매정지 요청 승인/반려 이력 조회 (제목 키워드 검색 선택)")
     @GetMapping("/suspension-requests/action-logs")
     public ResponseEntity<Page<AdminActionLogResponse>> listSuspensionActionLogs(
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "occurredAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(groupBuyService.listSuspensionActionLogs(pageable));
+        return ResponseEntity.ok(groupBuyService.listSuspensionActionLogs(keyword, pageable));
     }
 
     // 관리자 강제 판매정지 - 생산자 요청 없이 이상 있는 ONGOING 공동구매를 관리자가 직접 정지

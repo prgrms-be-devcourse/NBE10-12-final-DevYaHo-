@@ -190,6 +190,23 @@ class AdminGroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("page.totalPages").description("전체 페이지 수"))));
     }
 
+    // keyword로 공동구매 제목을 검색하면 해당 공동구매의 판매정지 요청만 반환되는지 검증
+    @Test
+    void keyword로_판매정지_요청을_공동구매_제목으로_검색할_수_있다() throws Exception {
+        Member admin = saveMember("admin-suspension-keyword@example.com", Role.ADMIN);
+        Member producer = saveMember("producer-suspension-keyword@example.com", Role.SELLER);
+        GroupBuy matched = saveOngoingGroupBuy(producer.getId());
+        savePendingRequest(matched.getId(), producer.getId());
+
+        mockMvc.perform(get("/api/admin/groupBuys/suspension-requests")
+                        .param("status", "PENDING")
+                        .param("keyword", "유기농")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].groupBuyTitle").value("산지 직송 유기농 토마토"));
+    }
+
     // 관리자가 전체 공동구매 목록을 조회할 수 있는지 검증
     @Test
     void 관리자가_전체_공동구매_목록_조회에_성공한다() throws Exception {
