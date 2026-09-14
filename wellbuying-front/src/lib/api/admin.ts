@@ -2,6 +2,7 @@ import { http } from "@/lib/api/http";
 import type {
   AdminActionLogResponse,
   AdminSettlementSummaryResponse,
+  AdminSettlementTrendPointResponse,
   GroupBuyStatus,
   GroupBuySummaryResponse,
   GroupBuySuspensionRequestResponse,
@@ -15,8 +16,9 @@ import type {
   Role,
   SellerInfoResponse,
   SellerStatus,
-  SettlementResponse,
-  SettlementStatus,
+  SettlementListItemResponse,
+  SettlementListStatus,
+  SettlementTrendGranularity,
 } from "@/lib/api/types";
 
 export function listSellerApplications(params: {
@@ -183,20 +185,37 @@ export function listSellerSuspensionActionLogs(params?: { page?: number; size?: 
   return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/suspension${suffix}`, { auth: true });
 }
 
-// 관리자 전체 정산 내역 - status 필터(미지정 시 전체), keyword로 공동구매 제목 검색
-export function listAdminSettlements(params?: {
-  status?: SettlementStatus;
+// 관리자 전체 정산 내역 월별 리스트 - 생산자 대시보드(listMySettlements)와 같은 모양,
+// 판매자 구분 없이 전체를 대상으로 하고 keyword로 공동구매 제목 검색을 지원한다
+export function listAdminSettlementsMonthly(params?: {
+  year?: number;
+  month?: number;
+  status?: SettlementListStatus;
   keyword?: string;
   page?: number;
   size?: number;
-}): Promise<PageResponse<SettlementResponse>> {
+}): Promise<PageResponse<SettlementListItemResponse>> {
   const query = new URLSearchParams();
+  if (params?.year !== undefined) query.set("year", String(params.year));
+  if (params?.month !== undefined) query.set("month", String(params.month));
   if (params?.status) query.set("status", params.status);
   if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  return http.get<PageResponse<SettlementResponse>>(`/api/admin/settlements${suffix}`, { auth: true });
+  return http.get<PageResponse<SettlementListItemResponse>>(`/api/admin/settlements/monthly${suffix}`, {
+    auth: true,
+  });
+}
+
+// 관리자 매출 추이 그래프 - 판매자 구분 없이 전체 집계, 수수료 추정치 포함
+export function getAdminSettlementTrend(
+  granularity: SettlementTrendGranularity = "MONTHLY",
+): Promise<AdminSettlementTrendPointResponse[]> {
+  return http.get<AdminSettlementTrendPointResponse[]>(
+    `/api/admin/settlements/trend?granularity=${granularity}`,
+    { auth: true },
+  );
 }
 
 // 관리자 정산 대시보드 상단 요약 카드

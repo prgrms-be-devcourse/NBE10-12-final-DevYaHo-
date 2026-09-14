@@ -446,10 +446,21 @@ export type SettlementResponse = {
 
 // GET /api/admin/settlements/summary 응답 - 관리자 정산 대시보드 상단 요약 카드
 export type AdminSettlementSummaryResponse = {
+  thisMonthTotalSales: number;
+  previousMonthTotalSales: number;
   pendingCount: number;
   pendingAmount: number;
   thisMonthConfirmedCount: number;
   thisMonthConfirmedAmount: number;
+};
+
+// 관리자 매출 추이 그래프의 점 하나 - 판매자 구분 없는 플랫폼 전체 집계. platformFee는 그 구간
+// totalSales에 수수료율을 곱해 원 단위로 버린 추정치
+export type AdminSettlementTrendPointResponse = {
+  periodStart: string;
+  totalSales: number;
+  platformFee: number;
+  groupBuyCount: number;
 };
 
 // 판매자 정산 목록의 필터/표시 상태 (GET /api/settlements/me) - 관리자용 SettlementStatus와는 별개
