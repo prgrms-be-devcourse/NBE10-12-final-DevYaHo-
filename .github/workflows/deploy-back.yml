@@ -45,6 +45,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle  # ~/.gradle/caches, ~/.gradle/wrapper를 GHA 캐시에 저장 → 의존성 재다운로드 방지
 
       # AbstractIntegrationTest가 ghcr.io의 프리빌드 OpenSearch 테스트 이미지를 pull하므로 로그인 필요
       - name: ghcr.io 로그인
