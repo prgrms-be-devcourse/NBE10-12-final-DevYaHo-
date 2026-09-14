@@ -6,13 +6,14 @@ import { ChevronDown } from "lucide-react";
 export type SelectOption = { value: string; label: string };
 
 type SelectFieldProps = {
-  label: string;
+  label?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  triggerClassName?: string;
 };
 
 export function SelectField({
@@ -23,6 +24,7 @@ export function SelectField({
   placeholder = "선택해주세요",
   disabled,
   className = "",
+  triggerClassName,
 }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -41,8 +43,8 @@ export function SelectField({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative flex flex-col gap-1.5">
-      <span className="text-xs font-bold text-wb-ink">{label}</span>
+    <div ref={rootRef} className={`relative flex flex-col gap-1.5 ${className}`}>
+      {label && <span className="text-xs font-bold text-wb-ink">{label}</span>}
       <button
         type="button"
         id={triggerId}
@@ -50,9 +52,12 @@ export function SelectField({
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={disabled}
-        className={`flex h-11 w-full items-center justify-between rounded-lg border border-wb-line bg-wb-canvas px-3 text-sm focus:border-wb-green focus:outline-none focus:ring-1 focus:ring-wb-green disabled:opacity-60 ${
-          selected ? "text-wb-ink" : "text-wb-secondary"
-        } ${className}`}
+        className={
+          triggerClassName ??
+          `flex h-11 w-full items-center justify-between rounded-lg border border-wb-line bg-wb-canvas px-3 text-sm focus:border-wb-green focus:outline-none focus:ring-1 focus:ring-wb-green disabled:opacity-60 ${
+            selected ? "text-wb-ink" : "text-wb-secondary"
+          }`
+        }
       >
         <span className="truncate">{selected ? selected.label : placeholder}</span>
         <ChevronDown

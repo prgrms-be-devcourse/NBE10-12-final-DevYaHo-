@@ -67,7 +67,8 @@ class ProductSearchReconcileSchedulerTest {
         when(productRepository.findByStatusAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(
                 ProductStatus.APPROVED, 3L, LIMIT)).thenReturn(List.of());
         GroupBuyProductSummaryResponse summary = new GroupBuyProductSummaryResponse(100L, "감귤 공동구매",
-                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
+                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 20, 0, 0),
+                LocalDateTime.of(2026, 9, 30, 23, 59));
         when(groupBuyService.getActiveSummariesByProductIds(List.of(1L, 2L))).thenReturn(Map.of());
         when(groupBuyService.getActiveSummariesByProductIds(List.of(3L))).thenReturn(Map.of(3L, summary));
         when(productCountRepository.findAllById(any())).thenReturn(List.of());

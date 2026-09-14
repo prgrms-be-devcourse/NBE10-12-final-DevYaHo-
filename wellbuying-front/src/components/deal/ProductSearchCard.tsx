@@ -27,7 +27,8 @@ export function ProductSearchCard({
 }) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const isGroupBuy = variant === "groupBuy";
-  const daysLeft = isGroupBuy ? toDaysLeft(item.endAt) : null;
+  const isReady = item.groupBuyStatus === "READY";
+  const daysLeft = isGroupBuy ? toDaysLeft(isReady ? item.startAt : item.endAt) : null;
   const price = isGroupBuy ? (item.currentUnitPrice ?? item.startPrice) : item.startPrice;
   const href = isGroupBuy && item.groupBuyId ? `/deals/${item.groupBuyId}` : `/products/${item.id}`;
   const catalog = resolveCatalogEntry(item.productName);
@@ -48,7 +49,7 @@ export function ProductSearchCard({
         )}
         {daysLeft !== null && (
           <div className="absolute left-2.5 top-2.5">
-            <Tag highlighted>D-{daysLeft}</Tag>
+            <Tag highlighted>{isReady ? `${daysLeft}일 후 오픈` : `마감 D-${daysLeft}`}</Tag>
           </div>
         )}
       </div>

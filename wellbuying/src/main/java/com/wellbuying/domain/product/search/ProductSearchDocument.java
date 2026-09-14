@@ -31,6 +31,7 @@ public record ProductSearchDocument(
         @Field(type = FieldType.Integer) Integer currentQuantity,
         @Field(type = FieldType.Integer) Integer targetQuantity,
         @Field(type = FieldType.Integer) Integer maxQuantity,
+        @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis) LocalDateTime startAt,
         @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis) LocalDateTime endAt
 ) {
     public static ProductSearchDocument of(Product product) {
@@ -59,6 +60,7 @@ public record ProductSearchDocument(
                 hasActive ? summary.currentQuantity() : null,
                 hasActive ? summary.targetQuantity() : null,
                 hasActive ? summary.maxQuantity() : null,
+                hasActive ? summary.startAt() : null,
                 hasActive ? summary.endAt() : null
         );
     }

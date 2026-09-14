@@ -16,6 +16,7 @@ public record ProductSearchResponse(
         Integer currentQuantity,
         Integer targetQuantity,
         Integer maxQuantity,
+        LocalDateTime startAt,
         LocalDateTime endAt
 ) {
     public static ProductSearchResponse from(ProductSearchDocument doc) {
@@ -33,6 +34,7 @@ public record ProductSearchResponse(
                 doc.currentQuantity(),
                 doc.targetQuantity(),
                 doc.maxQuantity(),
+                doc.startAt(),
                 doc.endAt()
         );
     }

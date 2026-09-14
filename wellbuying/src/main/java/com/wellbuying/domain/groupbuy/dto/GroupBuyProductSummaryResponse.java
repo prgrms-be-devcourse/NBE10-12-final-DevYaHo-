@@ -13,6 +13,7 @@ public record GroupBuyProductSummaryResponse(
         int currentQuantity,
         int targetQuantity,
         int maxQuantity,
+        LocalDateTime startAt,
         LocalDateTime endAt
 ) {
     public static GroupBuyProductSummaryResponse of(GroupBuy groupBuy, int currentUnitPrice) {
@@ -24,6 +25,7 @@ public record GroupBuyProductSummaryResponse(
                 groupBuy.getCurrentQuantity(),
                 groupBuy.getMinQuantity(),
                 groupBuy.getMaxQuantity(),
+                groupBuy.getStartAt(),
                 groupBuy.getEndAt()
         );
     }

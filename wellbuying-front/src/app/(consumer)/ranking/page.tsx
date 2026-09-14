@@ -1,17 +1,35 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { PackageSearch } from "lucide-react";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
-import { Button } from "@/components/ui/Button";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
 
 export default function RankingPage() {
-  const { items: ranked, loading, page, totalPages, setPage } = useGroupBuyList("ONGOING", {
+  const { items: ranked, loading, loadingMore, hasNext, totalElements, loadMore } = useGroupBuyList("ONGOING", {
     sort: "viewCount,desc",
     size: PAGE_SIZE,
   });
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNext && !loadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNext, loadingMore, loadMore]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-6 py-9">
@@ -29,35 +47,14 @@ export default function RankingPage() {
         </div>
       ) : (
         <>
-          <p className="text-base font-bold">{ranked.length}개의 공동구매가 있어요</p>
+          <p className="text-base font-bold">{totalElements}개의 공동구매가 있어요</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {ranked.map((item, index) => (
-              <RankedGroupBuyCard key={item.id} item={item} rank={page * PAGE_SIZE + index + 1} />
+              <RankedGroupBuyCard key={item.id} item={item} rank={index + 1} />
             ))}
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button
-                variant="secondary"
-                className="px-3 py-1.5 text-xs"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                이전
-              </Button>
-              <span className="flex items-center px-2 text-xs text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                className="px-3 py-1.5 text-xs"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                다음
-              </Button>
-            </div>
-          )}
+          <div ref={sentinelRef} className="h-1" />
+          {loadingMore && <p className="py-4 text-center text-sm text-wb-secondary">불러오는 중...</p>}
         </>
       )}
     </div>

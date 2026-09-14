@@ -105,7 +105,11 @@ export default function ProductDetailPage() {
             >
               <div className="flex items-center justify-between text-xs font-semibold text-wb-green">
                 <span>{groupBuy.status === "ONGOING" ? "지금 진행 중" : "오픈 예정"}</span>
-                <span>D-{toDaysLeft(groupBuy.endAt)}</span>
+                <span>
+                  {groupBuy.status === "ONGOING"
+                    ? `D-${toDaysLeft(groupBuy.endAt)}`
+                    : `${toDaysLeft(groupBuy.startAt)}일 후 오픈`}
+                </span>
               </div>
               <p className="mt-1 line-clamp-2 text-sm font-semibold">{groupBuy.title}</p>
               <p className="mt-1 text-sm font-bold text-wb-green">{won(groupBuy.currentUnitPrice)}</p>

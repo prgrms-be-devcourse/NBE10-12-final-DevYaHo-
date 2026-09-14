@@ -168,6 +168,8 @@ export type GroupBuySummaryResponse = {
   suspended: boolean;
   viewCount: number;
   createdAt: string;
+  currentUnitPrice: number;
+  description: string | null;
 };
 
 export type GroupBuyPartCreateRequest = {
@@ -204,6 +206,7 @@ export type ProductDetailResponse = {
     id: number;
     title: string;
     status: GroupBuyStatus;
+    startAt: string;
     endAt: string;
     currentUnitPrice: number;
   }[];
@@ -501,6 +504,7 @@ export type ProductSearchResponse = {
   currentQuantity: number | null;
   targetQuantity: number | null;
   maxQuantity: number | null;
+  startAt: string | null;
   endAt: string | null;
 };
 

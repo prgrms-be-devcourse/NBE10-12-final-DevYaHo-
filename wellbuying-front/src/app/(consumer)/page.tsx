@@ -13,23 +13,17 @@ import {
   PackageSearch,
   Quote,
   Rocket,
-  Sparkles,
 } from "lucide-react";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
-import { getPopularProducts } from "@/lib/api/product";
-import type { ProductSummaryResponse } from "@/lib/api/types";
 import { won } from "@/lib/format";
-import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const CAROUSEL_INTERVAL_MS = 4500;
 const PROMO_COUNT = 3;
-const POPULAR_COUNT = 4;
-const POPULAR_PRODUCTS_SIDEBAR_COUNT = 5;
-const NOTABLE_COUNT = 8;
+const POPULAR_SIDEBAR_COUNT = 5;
 const CLOSING_SOON_COUNT = 8;
 const UPCOMING_COUNT = 4;
 const NEW_ARRIVAL_COUNT = 4;
@@ -40,7 +34,10 @@ export default function HomePage() {
   // 그대로 재활용하지 않고 정렬 기준별로 따로 받아온다 - 전체 진행중 건수가 한 번에 받는 개수(50)보다
   // 많아지면 클라이언트에서 재정렬해서는 진짜 상위 항목을 놓칠 수 있기 때문(서버가 정렬한 뒤 잘라줘야
   // 정확하다). 목록 카드에 필요한 필드는 동일해 사이즈만 작게 준다
-  const { items: popularSource } = useGroupBuyList("ONGOING", { sort: "viewCount,desc", size: POPULAR_COUNT * 4 });
+  const { items: popularSource } = useGroupBuyList("ONGOING", {
+    sort: "viewCount,desc",
+    size: POPULAR_SIDEBAR_COUNT * 4,
+  });
   const { items: closingSource } = useGroupBuyList("ONGOING", { sort: "endAt,asc", size: CLOSING_SOON_COUNT * 4 });
   const { items: newArrivalSource } = useGroupBuyList("ONGOING", {
     sort: "createdAt,desc",
@@ -48,33 +45,10 @@ export default function HomePage() {
   });
   const { items: upcomingAll } = useGroupBuyList("READY");
   const [slide, setSlide] = useState(0);
-  const [popularProducts, setPopularProducts] = useState<ProductSummaryResponse[]>([]);
-  const [popularProductsLoading, setPopularProductsLoading] = useState(true);
-
-  useEffect(() => {
-    let ignore = false;
-    getPopularProducts()
-      .then((res) => {
-        if (!ignore) setPopularProducts(res);
-      })
-      .catch(() => {
-        if (!ignore) setPopularProducts([]);
-      })
-      .finally(() => {
-        if (!ignore) setPopularProductsLoading(false);
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   const filtered = ongoing;
 
   const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
-
-  const popular = useMemo(() => popularSource.slice(0, POPULAR_COUNT), [popularSource]);
-
-  const notable = useMemo(() => filtered.slice(0, NOTABLE_COUNT), [filtered]);
 
   const closingSoon = useMemo(() => closingSource.slice(0, CLOSING_SOON_COUNT), [closingSource]);
 
@@ -94,11 +68,6 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 px-6 py-9">
-      <div>
-        <p className="text-sm font-semibold text-wb-green">좋은 아침이에요</p>
-        <h1 className="mt-1 text-3xl font-bold">가격을 알면, 구매가 달라져요</h1>
-      </div>
-
       {ongoingLoading ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : filtered.length === 0 ? (
@@ -111,9 +80,14 @@ export default function HomePage() {
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
             {activePromo && (
               <div className="space-y-3 lg:col-span-2">
-                <div className="flex items-center gap-2 text-wb-green">
-                  <ArrowDownCircle className="h-5 w-5" />
-                  <h2 className="text-lg font-bold">지금 주목할 공동구매</h2>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-wb-green">
+                    <ArrowDownCircle className="h-5 w-5" />
+                    <h2 className="text-lg font-bold">지금 주목할 공동구매</h2>
+                  </div>
+                  <Link href="/explore" className="shrink-0 text-xs font-bold text-wb-secondary hover:text-wb-green">
+                    전체보기
+                  </Link>
                 </div>
                 <PromoCarousel items={promoDeals} slide={slide} onSelectSlide={setSlide} />
               </div>
@@ -123,46 +97,17 @@ export default function HomePage() {
               <SectionHeading
                 icon={<Flame className="h-5 w-5" />}
                 tone="text-wb-orange"
-                title="지금 인기 상품 TOP 10"
-                subtitle="가장 많이 조회된 상품이에요"
-                href="/explore?view=products&sort=POPULAR"
+                title="지금 인기 중인 공동구매 TOP 10"
+                subtitle="가장 많이 조회된 공동구매예요"
+                href="/ranking"
               />
               <div className="flex flex-1 flex-col gap-2">
-                {popularProducts.slice(0, POPULAR_PRODUCTS_SIDEBAR_COUNT).map((item, index) => (
+                {popularSource.slice(0, POPULAR_SIDEBAR_COUNT).map((item, index) => (
                   <div key={item.id} className="flex-1">
-                    <PopularProductRow item={item} rank={index + 1} />
+                    <PopularDealRow item={item} rank={index + 1} />
                   </div>
                 ))}
               </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeading
-              icon={<Flame className="h-5 w-5" />}
-              tone="text-wb-orange"
-              title="지금 인기 중인 공동구매"
-              href="/ranking"
-            />
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {popular.map((item) => (
-                <GroupBuyCard key={item.id} item={item} />
-              ))}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeading
-              icon={<Sparkles className="h-5 w-5" />}
-              tone="text-wb-green"
-              title="주목할 만한 공동구매"
-              subtitle="생산 과정과 가격을 투명하게 공개했어요"
-              href="/explore"
-            />
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {notable.map((item) => (
-                <GroupBuyCard key={item.id} item={item} />
-              ))}
             </div>
           </section>
 
@@ -285,8 +230,8 @@ function PromoCarousel({
               <Tag highlighted>마감 D-{item.daysLeft}</Tag>
             </div>
             <h3 className="mt-4 line-clamp-2 h-16 text-2xl leading-8">{item.title}</h3>
-            <p className="mt-1.5 truncate text-sm font-medium text-wb-secondary">{item.producerName}</p>
             <p className="mt-2 line-clamp-2 h-10 text-sm text-wb-secondary">{item.summary}</p>
+            <p className="mt-1.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
             <div className="mt-auto space-y-3 pt-4">
               <ProgressBar value={item.maxQuantity === 0 ? 0 : item.currentQuantity / item.maxQuantity} />
               <div className="flex justify-between text-xs">
@@ -340,6 +285,7 @@ function PromoCarousel({
 }
 
 function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }) {
+  const progress = item.maxQuantity > 0 ? item.currentQuantity / item.maxQuantity : 0;
   return (
     <Link
       href={`/deals/${item.id}`}
@@ -358,50 +304,13 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">{item.title}</p>
         <p className="mt-0.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
+        <div className="mt-1.5">
+          <ProgressBar value={progress} />
+        </div>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
-        <p className="mt-0.5 text-xs text-wb-secondary">{item.currentQuantity.toLocaleString("ko-KR")}개 참여</p>
-      </div>
-    </Link>
-  );
-}
-
-function PopularProductRow({ item, rank }: { item: ProductSummaryResponse; rank: number }) {
-  const [thumbnailFailed, setThumbnailFailed] = useState(false);
-  const catalog = resolveCatalogEntry(item.productName);
-
-  return (
-    <Link
-      href={`/products/${item.id}`}
-      className="flex h-full items-center gap-3 rounded-xl border border-wb-line bg-wb-surface p-2.5 transition-shadow hover:shadow-md"
-    >
-      <div className="relative shrink-0">
-        {item.thumbnailUrl && !thumbnailFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
-          <img
-            src={item.thumbnailUrl}
-            alt={item.productName}
-            className="h-14 w-14 rounded-lg object-cover"
-            onError={() => setThumbnailFailed(true)}
-          />
-        ) : (
-          <GroupBuyArtwork entry={catalog} className="h-14 w-14" />
-        )}
-        <span
-          className={`absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-extrabold text-white ${
-            rank <= 3 ? "bg-wb-orange" : "bg-wb-ink/70"
-          }`}
-        >
-          {rank}
-        </span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{item.productName}</p>
-        <p className="mt-0.5 truncate text-xs text-wb-secondary">{won(item.startPrice)}</p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
+        <p className="text-sm font-bold">{won(item.currentUnitPrice)}</p>
+        <p className="mt-0.5 text-xs font-bold text-wb-green">{Math.round(progress * 100)}%</p>
       </div>
     </Link>
   );
