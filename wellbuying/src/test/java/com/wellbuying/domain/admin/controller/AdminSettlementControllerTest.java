@@ -9,9 +9,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.wellbuying.domain.settlement.dto.AdminSettlementTrendPointResponse;
+import com.wellbuying.domain.settlement.dto.SettlementListItemResponse;
+import com.wellbuying.domain.settlement.dto.SettlementListStatus;
 import com.wellbuying.domain.settlement.dto.SettlementResponse;
+import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.entity.SettlementStatus;
 import com.wellbuying.domain.settlement.service.SettlementQueryService;
+import com.wellbuying.domain.settlement.service.SettlementStatsService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -33,6 +38,9 @@ class AdminSettlementControllerTest {
 
     @MockitoBean
     private SettlementQueryService settlementQueryService;
+
+    @MockitoBean
+    private SettlementStatsService settlementStatsService;
 
     private SettlementResponse row() {
         return new SettlementResponse(1L, 42L, "제주 감귤 공동구매", 5L, "푸른살림",
@@ -60,5 +68,31 @@ class AdminSettlementControllerTest {
                 .andExpect(status().isOk());
 
         verify(settlementQueryService).getAllSettlements(isNull(), isNull(), any());
+    }
+
+    @Test
+    void monthly는_year_month_status_keyword를_그대로_서비스로_전달한다() throws Exception {
+        SettlementListItemResponse item = new SettlementListItemResponse(1L, 42L, "제주 감귤 공동구매", 5L, "푸른살림",
+                3, 100_000L, 5_000L, 95_000L, SettlementListStatus.COMPLETED, LocalDateTime.now(), LocalDateTime.now());
+        when(settlementQueryService.getAllSettlementsForMonth(eq(2026), eq(9), eq(SettlementListStatus.COMPLETED),
+                eq("감귤"), any())).thenReturn(new PageImpl<>(List.of(item)));
+
+        mockMvc.perform(get("/api/admin/settlements/monthly")
+                        .param("year", "2026").param("month", "9")
+                        .param("status", "COMPLETED").param("keyword", "감귤"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].producerName").value("푸른살림"));
+    }
+
+    @Test
+    void trend는_granularity를_그대로_서비스로_전달한다() throws Exception {
+        AdminSettlementTrendPointResponse point =
+                new AdminSettlementTrendPointResponse(LocalDateTime.now(), 100_000L, 5_000L, 3);
+        when(settlementStatsService.getAdminTrend(SettlementTrendGranularity.MONTHLY))
+                .thenReturn(List.of(point));
+
+        mockMvc.perform(get("/api/admin/settlements/trend").param("granularity", "MONTHLY"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].platformFee").value(5_000));
     }
 }

@@ -113,20 +113,74 @@ public class SettlementQueryService {
         return toResponsePage(settlements);
     }
 
-    // 관리자 정산 대시보드 상단 요약 카드 - 판매자 구분 없는 전체 집계
+    // 관리자 정산 대시보드 상단 요약 카드 3개 - 판매자 구분 없는 전체 집계 (생산자 대시보드와 같은 구성)
     @Transactional(readOnly = true)
     public AdminSettlementSummaryResponse getAdminSummary() {
         YearMonth thisMonth = YearMonth.now();
-        LocalDateTime from = thisMonth.atDay(1).atStartOfDay();
-        LocalDateTime to = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
+        LocalDateTime monthStart = thisMonth.atDay(1).atStartOfDay();
+        LocalDateTime nextMonthStart = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
+        LocalDateTime previousMonthStart = thisMonth.minusMonths(1).atDay(1).atStartOfDay();
 
+        long thisMonthTotalSales = settlementItemRepository.sumAmountByPaidAtRange(monthStart, nextMonthStart);
+        long previousMonthTotalSales =
+                settlementItemRepository.sumAmountByPaidAtRange(previousMonthStart, monthStart);
         long pendingCount = settlementItemRepository.countDistinctGroupBuyIdByStatus(SettlementItemStatus.ACCRUED);
         long pendingAmount = settlementItemRepository.sumAmountByStatus(SettlementItemStatus.ACCRUED);
-        long thisMonthConfirmedCount = settlementRepository.countByConfirmedAtBetween(from, to);
-        long thisMonthConfirmedAmount = settlementRepository.sumPayoutByConfirmedAtRange(from, to);
+        long thisMonthConfirmedCount = settlementRepository.countByConfirmedAtBetween(monthStart, nextMonthStart);
+        long thisMonthConfirmedAmount = settlementRepository.sumPayoutByConfirmedAtRange(monthStart, nextMonthStart);
 
-        return new AdminSettlementSummaryResponse(pendingCount, pendingAmount, thisMonthConfirmedCount,
-                thisMonthConfirmedAmount);
+        return new AdminSettlementSummaryResponse(thisMonthTotalSales, previousMonthTotalSales, pendingCount,
+                pendingAmount, thisMonthConfirmedCount, thisMonthConfirmedAmount);
+    }
+
+    // 관리자 정산 내역 월별 리스트 - getMySettlements와 같은 구조(대기중/완료 병합, finalizedAt이 속한 달로
+    // 귀속)이나 판매자 구분 없이 전체를 대상으로 하고, keyword로 공동구매 제목 검색을 지원한다
+    @Transactional(readOnly = true)
+    public Page<SettlementListItemResponse> getAllSettlementsForMonth(Integer year, Integer month,
+            SettlementListStatus status, String keyword, Pageable pageable) {
+        YearMonth targetMonth = (year != null && month != null) ? YearMonth.of(year, month) : YearMonth.now();
+        LocalDateTime from = targetMonth.atDay(1).atStartOfDay();
+        LocalDateTime to = targetMonth.plusMonths(1).atDay(1).atStartOfDay();
+        List<Long> matchedGroupBuyIds = (keyword != null && !keyword.isBlank())
+                ? groupBuyRepository.findIdByTitleContainingIgnoreCase(keyword) : null;
+
+        if (status == SettlementListStatus.PENDING) {
+            return toPendingPage(fetchPending(from, to, matchedGroupBuyIds, unsortedPage(pageable)));
+        }
+        if (status == SettlementListStatus.COMPLETED) {
+            return toCompletedPage(fetchCompleted(from, to, matchedGroupBuyIds, completedSortedPage(pageable)));
+        }
+
+        List<SettlementListItemResponse> pending = toPendingResponses(
+                fetchPending(from, to, matchedGroupBuyIds, Pageable.unpaged()).getContent());
+        List<SettlementListItemResponse> completed = toCompletedResponses(
+                fetchCompleted(from, to, matchedGroupBuyIds, Pageable.unpaged()).getContent());
+        List<SettlementListItemResponse> merged = new ArrayList<>(pending.size() + completed.size());
+        merged.addAll(pending);
+        merged.addAll(completed);
+        merged.sort(Comparator.comparing(SettlementListItemResponse::finalizedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return paginate(merged, pageable);
+    }
+
+    private Page<SettlementPendingRow> fetchPending(LocalDateTime from, LocalDateTime to,
+            List<Long> matchedGroupBuyIds, Pageable pageable) {
+        if (matchedGroupBuyIds == null) {
+            return settlementItemRepository.findPendingByFinalizedAtRange(from, to, pageable);
+        }
+        return matchedGroupBuyIds.isEmpty() ? Page.empty(pageable)
+                : settlementItemRepository.findPendingByFinalizedAtRangeAndGroupBuyIdIn(
+                        from, to, matchedGroupBuyIds, pageable);
+    }
+
+    private Page<Settlement> fetchCompleted(LocalDateTime from, LocalDateTime to, List<Long> matchedGroupBuyIds,
+            Pageable pageable) {
+        if (matchedGroupBuyIds == null) {
+            return settlementRepository.findByGroupBuyFinalizedAtRange(from, to, pageable);
+        }
+        return matchedGroupBuyIds.isEmpty() ? Page.empty(pageable)
+                : settlementRepository.findByGroupBuyFinalizedAtRangeAndGroupBuyIdIn(
+                        from, to, matchedGroupBuyIds, pageable);
     }
 
     // 클라이언트가 넘긴 sort를 그대로 쓰면 리포지토리 정렬과 겹쳐 꼬일 수 있어(OrderQueryService 참고),

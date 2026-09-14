@@ -46,4 +46,35 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             """)
     Page<Settlement> findByProducerIdAndGroupBuyFinalizedAtRange(@Param("producerId") Long producerId,
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, Pageable pageable);
+
+    // 관리자 "정산 완료" 월별 리스트 - findByProducerIdAndGroupBuyFinalizedAtRange와 같으나
+    // 판매자 구분 없이 전체를 대상으로 한다 (SettlementQueryService.getAllSettlementsForMonth)
+    @Query(value = """
+            SELECT s FROM Settlement s, GroupBuy gb
+            WHERE s.groupBuyId = gb.id
+              AND gb.finalizedAt >= :from AND gb.finalizedAt < :to
+            """,
+            countQuery = """
+            SELECT COUNT(s) FROM Settlement s, GroupBuy gb
+            WHERE s.groupBuyId = gb.id
+              AND gb.finalizedAt >= :from AND gb.finalizedAt < :to
+            """)
+    Page<Settlement> findByGroupBuyFinalizedAtRange(@Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to, Pageable pageable);
+
+    // 관리자 "정산 완료" 월별 리스트 + 공동구매 제목 검색(keyword)
+    @Query(value = """
+            SELECT s FROM Settlement s, GroupBuy gb
+            WHERE s.groupBuyId = gb.id
+              AND gb.finalizedAt >= :from AND gb.finalizedAt < :to
+              AND s.groupBuyId IN (:groupBuyIds)
+            """,
+            countQuery = """
+            SELECT COUNT(s) FROM Settlement s, GroupBuy gb
+            WHERE s.groupBuyId = gb.id
+              AND gb.finalizedAt >= :from AND gb.finalizedAt < :to
+              AND s.groupBuyId IN (:groupBuyIds)
+            """)
+    Page<Settlement> findByGroupBuyFinalizedAtRangeAndGroupBuyIdIn(@Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to, @Param("groupBuyIds") Collection<Long> groupBuyIds, Pageable pageable);
 }
