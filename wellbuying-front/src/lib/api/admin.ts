@@ -1,6 +1,7 @@
 import { http } from "@/lib/api/http";
 import type {
   AdminActionLogResponse,
+  AdminSettlementSummaryResponse,
   GroupBuyStatus,
   GroupBuySummaryResponse,
   GroupBuySuspensionRequestResponse,
@@ -14,6 +15,8 @@ import type {
   Role,
   SellerInfoResponse,
   SellerStatus,
+  SettlementResponse,
+  SettlementStatus,
 } from "@/lib/api/types";
 
 export function listSellerApplications(params: {
@@ -177,4 +180,25 @@ export function listSellerSuspensionActionLogs(params?: { page?: number; size?: 
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/suspension${suffix}`, { auth: true });
+}
+
+// 관리자 전체 정산 내역 - status 필터(미지정 시 전체), keyword로 공동구매 제목 검색
+export function listAdminSettlements(params?: {
+  status?: SettlementStatus;
+  keyword?: string;
+  page?: number;
+  size?: number;
+}): Promise<PageResponse<SettlementResponse>> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<SettlementResponse>>(`/api/admin/settlements${suffix}`, { auth: true });
+}
+
+// 관리자 정산 대시보드 상단 요약 카드
+export function getAdminSettlementSummary(): Promise<AdminSettlementSummaryResponse> {
+  return http.get<AdminSettlementSummaryResponse>("/api/admin/settlements/summary", { auth: true });
 }

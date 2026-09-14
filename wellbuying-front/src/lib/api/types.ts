@@ -444,6 +444,14 @@ export type SettlementResponse = {
   confirmedAt: string;
 };
 
+// GET /api/admin/settlements/summary 응답 - 관리자 정산 대시보드 상단 요약 카드
+export type AdminSettlementSummaryResponse = {
+  pendingCount: number;
+  pendingAmount: number;
+  thisMonthConfirmedCount: number;
+  thisMonthConfirmedAmount: number;
+};
+
 // 판매자 정산 목록의 필터/표시 상태 (GET /api/settlements/me) - 관리자용 SettlementStatus와는 별개
 export type SettlementListStatus = "PENDING" | "COMPLETED";
 
