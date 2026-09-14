@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, LogOut, type LucideIcon } from "lucide-react";
@@ -42,6 +42,20 @@ export function AppShell({
   const router = useRouter();
   const { member, setMember } = useAuth();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  // header에 backdrop-blur(=backdrop-filter)가 걸려 있어 position:fixed 자식의 containing block이
+  // header로 한정된다 - fixed 오버레이로는 header 밖(본문) 클릭을 감지할 수 없어 document 리스너로 대체
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (!accountMenuRef.current?.contains(e.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [accountMenuOpen]);
 
   async function handleLogout() {
     setAccountMenuOpen(false);
@@ -141,7 +155,7 @@ export function AppShell({
             {member && <NotificationBell />}
 
             {member && (
-              <div className="relative hidden items-center sm:flex">
+              <div ref={accountMenuRef} className="relative hidden items-center sm:flex">
                 <button
                   onClick={() => setAccountMenuOpen((v) => !v)}
                   aria-label="계정 메뉴 열기"
@@ -155,42 +169,35 @@ export function AppShell({
                 </button>
 
                 {accountMenuOpen && (
-                  <>
+                  <div className="absolute right-0 top-full z-20 mt-1 w-44 space-y-0.5 rounded-xl border border-wb-line bg-wb-surface p-1.5 shadow-md">
+                    {accountLinks?.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setAccountMenuOpen(false)}
+                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-wb-ink hover:bg-wb-canvas"
+                        >
+                          <Icon className="h-4 w-4" strokeWidth={2} />
+                          {item.label}
+                          {!!item.badge && (
+                            <span className="ml-auto rounded-full bg-wb-orange/15 px-1.5 py-0.5 text-[10px] font-bold text-wb-orange">
+                              {item.badge}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                    {accountLinks && accountLinks.length > 0 && <div className="my-1 border-t border-wb-line" />}
                     <button
-                      aria-label="닫기"
-                      onClick={() => setAccountMenuOpen(false)}
-                      className="fixed inset-0 z-10 cursor-default"
-                    />
-                    <div className="absolute right-0 top-full z-20 mt-1 w-44 space-y-0.5 rounded-xl border border-wb-line bg-wb-surface p-1.5 shadow-md">
-                      {accountLinks?.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setAccountMenuOpen(false)}
-                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-wb-ink hover:bg-wb-canvas"
-                          >
-                            <Icon className="h-4 w-4" strokeWidth={2} />
-                            {item.label}
-                            {!!item.badge && (
-                              <span className="ml-auto rounded-full bg-wb-orange/15 px-1.5 py-0.5 text-[10px] font-bold text-wb-orange">
-                                {item.badge}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
-                      {accountLinks && accountLinks.length > 0 && <div className="my-1 border-t border-wb-line" />}
-                      <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-wb-ink hover:bg-wb-canvas"
-                      >
-                        <LogOut className="h-4 w-4" strokeWidth={2} />
-                        로그아웃
-                      </button>
-                    </div>
-                  </>
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-wb-ink hover:bg-wb-canvas"
+                    >
+                      <LogOut className="h-4 w-4" strokeWidth={2} />
+                      로그아웃
+                    </button>
+                  </div>
                 )}
               </div>
             )}
