@@ -52,6 +52,7 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     createdAt: summary.createdAt,
     category: summary.productCategory,
     ...catalog,
+    summary: summary.description || catalog.summary,
   };
 }
 

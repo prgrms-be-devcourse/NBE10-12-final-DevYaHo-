@@ -230,8 +230,8 @@ function PromoCarousel({
               <Tag highlighted>마감 D-{item.daysLeft}</Tag>
             </div>
             <h3 className="mt-4 line-clamp-2 h-16 text-2xl leading-8">{item.title}</h3>
-            <p className="mt-1.5 truncate text-sm font-medium text-wb-secondary">{item.producerName}</p>
             <p className="mt-2 line-clamp-2 h-10 text-sm text-wb-secondary">{item.summary}</p>
+            <p className="mt-1.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
             <div className="mt-auto space-y-3 pt-4">
               <ProgressBar value={item.maxQuantity === 0 ? 0 : item.currentQuantity / item.maxQuantity} />
               <div className="flex justify-between text-xs">

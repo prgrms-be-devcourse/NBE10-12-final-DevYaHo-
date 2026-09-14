@@ -284,6 +284,7 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
                                 fieldWithPath("content[].viewCount").description("조회수"),
                                 fieldWithPath("content[].createdAt").description("생성 일시"),
                                 fieldWithPath("content[].currentUnitPrice").description("현재 누적 참여 수량 기준 단가"),
+                                fieldWithPath("content[].description").description("상품 설명").optional(),
                                 fieldWithPath("page.size").description("페이지 크기"),
                                 fieldWithPath("page.number").description("페이지 번호(0부터 시작)"),
                                 fieldWithPath("page.totalElements").description("전체 요소 수"),

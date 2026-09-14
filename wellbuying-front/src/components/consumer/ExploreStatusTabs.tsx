@@ -11,9 +11,15 @@ type Tab = {
 
 const TABS: Tab[] = [
   {
+    label: "전체",
+    href: "/explore?status=all",
+    isActive: (pathname, sp) =>
+      pathname === "/explore" && sp.get("status") !== "scheduled" && sp.get("status") !== "ongoing" && !sp.get("sort"),
+  },
+  {
     label: "진행중",
-    href: "/explore",
-    isActive: (pathname, sp) => pathname === "/explore" && sp.get("status") !== "scheduled" && !sp.get("sort"),
+    href: "/explore?status=ongoing",
+    isActive: (pathname, sp) => pathname === "/explore" && sp.get("status") === "ongoing" && !sp.get("sort"),
   },
   {
     label: "진행예정",

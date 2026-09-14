@@ -17,7 +17,8 @@ export function GroupBuyCard({ item }: { item: GroupBuyCardView }) {
       </div>
       <div className="mt-3 space-y-1">
         <p className="line-clamp-2 min-h-12 text-base">{item.title}</p>
-        <p className="text-xs text-wb-secondary">{item.producerName}</p>
+        <p className="truncate text-xs text-wb-secondary">{item.summary}</p>
+        <p className="truncate text-[11px] text-wb-secondary/70">{item.producerName}</p>
       </div>
       <div className="mt-2 flex items-center justify-between">
         <span className="text-sm font-bold">{won(item.currentUnitPrice)}</span>

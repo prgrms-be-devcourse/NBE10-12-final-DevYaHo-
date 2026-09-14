@@ -169,6 +169,7 @@ export type GroupBuySummaryResponse = {
   viewCount: number;
   createdAt: string;
   currentUnitPrice: number;
+  description: string | null;
 };
 
 export type GroupBuyPartCreateRequest = {
