@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SearchBar } from "@/components/consumer/SearchBar";
 import { autocompleteProducts } from "@/lib/api/product";
 import type { ProductAutocompleteResponse } from "@/lib/api/types";
 
 // 헤더(로고 옆)에 상시 노출되는 검색바 - 어느 화면에서 입력해도 항상 /explore로 이동해 결과를 보여준다
-export function HeaderSearchBar() {
+function HeaderSearchBarInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(() => searchParams.get("q") ?? "");
@@ -89,5 +89,13 @@ export function HeaderSearchBar() {
         </ul>
       )}
     </div>
+  );
+}
+
+export function HeaderSearchBar() {
+  return (
+    <Suspense fallback={null}>
+      <HeaderSearchBarInner />
+    </Suspense>
   );
 }
