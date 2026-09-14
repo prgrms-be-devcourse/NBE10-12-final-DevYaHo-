@@ -35,7 +35,7 @@ DELETE FROM members;
 
 -- ── 회원 ─────────────────────────────────────────────
 INSERT INTO members (email, name, password, role, status, phone_number) VALUES
-    ('admin@wellbuying.local',  '관리자',   '$2a$10$IyaOotRZ3fqux4aSbWIrnedUK34HmWBhXbNsBR3SlebjgecccX07m', 'ADMIN',  'ACTIVE', '010-0000-0001'),
+    ('admin@wellbuying.xyz',    '관리자',   '$2a$10$IyaOotRZ3fqux4aSbWIrnedUK34HmWBhXbNsBR3SlebjgecccX07m', 'ADMIN',  'ACTIVE', '010-0000-0001'),
     ('seller@wellbuying.local', '김생산',   '$2a$10$psUZEQON2qijqWGM2hOvwOQb6fChl8HG0bUIPpjmGUuhKt3nqyFPe', 'SELLER', 'ACTIVE', '010-0000-0002'),
     ('buyer@wellbuying.local',  '이구매',   '$2a$10$OUFf10W6pb9Mgw7dvR7PReBPojfyMinqwoMQHECiGOkHCF6db9uu.', 'BUYER',  'ACTIVE', '010-0000-0003');
 
