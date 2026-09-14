@@ -220,13 +220,13 @@ function AllProductsPanel() {
 }
 
 const VIEW_TABS: { key: "review" | "all" | "history"; label: string }[] = [
-  { key: "review", label: "등록 심사" },
   { key: "all", label: "전체 상품목록" },
+  { key: "review", label: "등록 심사" },
   { key: "history", label: "처리 이력" },
 ];
 
 export default function AdminReviewsPage() {
-  const [view, setView] = useState<"review" | "all" | "history">("review");
+  const [view, setView] = useState<"review" | "all" | "history">("all");
   const [status, setStatus] = useState<ProductStatus>("PENDING");
 
   return (
