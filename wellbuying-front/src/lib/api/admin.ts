@@ -80,8 +80,9 @@ export function listDeletedProducts(params?: {
   });
 }
 
-export function forceDeleteProduct(productId: number, reason: string): Promise<void> {
-  return http.post<void>(`/api/admin/products/${productId}/force-delete`, { reason }, { auth: true });
+// 관리자 등록 해지 - 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환
+export function deregisterProduct(productId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/products/${productId}/deregister`, { reason }, { auth: true });
 }
 
 export function listMembers(params?: {

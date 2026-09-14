@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { PackageSearch, Trash2 } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
-import { AdminSelfVerifyModal } from "@/components/admin/AdminSelfVerifyModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,7 +11,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import {
   approveProduct,
-  forceDeleteProduct,
+  deregisterProduct,
   listAdminProducts,
   listDeletedProducts,
   listProductActionLogs,
@@ -150,15 +149,14 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 // 페이지네이션 대신 상품명 검색만 제공한다. 검토 대기(PENDING)는 "등록 심사" 탭에서 다루므로 여기서는 제외한다.
 // 승인된 상품만 보여준다 - 검토대기/반려 상품은 "등록 심사" 탭에서 다룬다
 // 승인된 상품 목록 - 상품 삭제 관리(구 별도 탭)의 강제 삭제 기능을 여기로 흡수했다.
-// 강제 삭제는 파괴적인 작업이라 관리자 본인 확인(memberId 재입력) -> 삭제 사유 입력 순으로 진행한다.
+// 등록 해지는 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환하며, 사유 입력만 받는다.
 function AllProductsPanel() {
   const [page, setPage] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
-  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
-  const [deleteTargetName, setDeleteTargetName] = useState("");
-  const [verifyStep, setVerifyStep] = useState<"verify" | "reason" | null>(null);
+  const [deregisterTargetId, setDeregisterTargetId] = useState<number | null>(null);
+  const [deregisterTargetName, setDeregisterTargetName] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -185,22 +183,19 @@ function AllProductsPanel() {
   const items = data?.content ?? null;
   const totalPages = data?.page.totalPages ?? 0;
 
-  function startForceDelete(id: number, name: string) {
-    setDeleteTargetId(id);
-    setDeleteTargetName(name);
-    setVerifyStep("verify");
+  function startDeregister(id: number, name: string) {
+    setDeregisterTargetId(id);
+    setDeregisterTargetName(name);
   }
 
-  async function handleConfirmForceDelete(reason: string) {
-    if (deleteTargetId === null) return;
-    await forceDeleteProduct(deleteTargetId, reason);
+  async function handleConfirmDeregister(reason: string) {
+    if (deregisterTargetId === null) return;
+    await deregisterProduct(deregisterTargetId, reason);
     invalidatePagedQuery("admin-all-products");
-    invalidatePagedQuery("admin-deleted-products");
     invalidatePagedQuery("admin-product-action-logs");
     setReloadToken((t) => t + 1);
-    setDeleteTargetId(null);
-    setVerifyStep(null);
-    showToast("정상적으로 삭제되었습니다.");
+    setDeregisterTargetId(null);
+    showToast("정상적으로 등록 해지되었습니다.");
   }
 
   return (
@@ -243,9 +238,9 @@ function AllProductsPanel() {
               </div>
               <Button
                 className="bg-red-600 px-3 py-1.5 text-xs hover:bg-red-600/90"
-                onClick={() => startForceDelete(item.id, item.productName)}
+                onClick={() => startDeregister(item.id, item.productName)}
               >
-                강제 삭제
+                등록 해지
               </Button>
             </div>
           ))}
@@ -254,25 +249,13 @@ function AllProductsPanel() {
 
       <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
-      <AdminSelfVerifyModal
-        open={verifyStep === "verify"}
-        title="상품 강제 삭제 - 본인 확인"
-        onClose={() => {
-          setVerifyStep(null);
-          setDeleteTargetId(null);
-        }}
-        onVerified={() => setVerifyStep("reason")}
-      />
       <ActionReasonModal
-        open={verifyStep === "reason"}
-        title={`강제 삭제 - ${deleteTargetName}`}
-        actionLabel="강제 삭제"
+        open={deregisterTargetId !== null}
+        title={`등록 해지 - ${deregisterTargetName}`}
+        actionLabel="등록 해지"
         confirmVariant="secondary"
-        onClose={() => {
-          setVerifyStep(null);
-          setDeleteTargetId(null);
-        }}
-        onConfirm={handleConfirmForceDelete}
+        onClose={() => setDeregisterTargetId(null)}
+        onConfirm={handleConfirmDeregister}
       />
     </div>
   );

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { PauseCircle, ShoppingBag } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
-import { AdminSelfVerifyModal } from "@/components/admin/AdminSelfVerifyModal";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -194,7 +193,6 @@ function AllGroupBuysPanel() {
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [suspendTargetId, setSuspendTargetId] = useState<number | null>(null);
-  const [verifyStep, setVerifyStep] = useState<"verify" | "reason" | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -223,7 +221,6 @@ function AllGroupBuysPanel() {
 
   function startForceSuspend(id: number) {
     setSuspendTargetId(id);
-    setVerifyStep("verify");
   }
 
   async function handleConfirmForceSuspend(reason: string) {
@@ -234,7 +231,6 @@ function AllGroupBuysPanel() {
     invalidatePagedQuery("admin-groupbuy-suspension-action-logs");
     setReloadToken((t) => t + 1);
     setSuspendTargetId(null);
-    setVerifyStep(null);
     showToast("정상적으로 처리되었습니다.");
   }
 
@@ -309,24 +305,12 @@ function AllGroupBuysPanel() {
         </>
       )}
 
-      <AdminSelfVerifyModal
-        open={verifyStep === "verify"}
-        title="공동구매 강제 판매정지 - 본인 확인"
-        onClose={() => {
-          setVerifyStep(null);
-          setSuspendTargetId(null);
-        }}
-        onVerified={() => setVerifyStep("reason")}
-      />
       <ActionReasonModal
-        open={verifyStep === "reason"}
+        open={suspendTargetId !== null}
         title="공동구매 강제 판매정지"
         actionLabel="정지"
         confirmVariant="secondary"
-        onClose={() => {
-          setVerifyStep(null);
-          setSuspendTargetId(null);
-        }}
+        onClose={() => setSuspendTargetId(null)}
         onConfirm={handleConfirmForceSuspend}
       />
     </div>
