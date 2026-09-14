@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState } from "react";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
@@ -6,12 +7,23 @@ import { won } from "@/lib/format";
 import type { GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 export function GroupBuyCard({ item }: { item: GroupBuyCardView }) {
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const progress = item.maxQuantity > 0 ? item.currentQuantity / item.maxQuantity : 0;
   const isReady = item.status === "READY";
   return (
     <Link href={`/deals/${item.id}`} className="group block">
       <div className="relative">
-        <GroupBuyArtwork entry={item} className="h-64 w-full transition-transform group-hover:scale-[1.03]" />
+        {item.thumbnailUrl && !thumbnailFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
+          <img
+            src={item.thumbnailUrl}
+            alt={item.title}
+            className="h-64 w-full rounded-2xl object-cover transition-transform group-hover:scale-[1.03]"
+            onError={() => setThumbnailFailed(true)}
+          />
+        ) : (
+          <GroupBuyArtwork entry={item} className="h-64 w-full transition-transform group-hover:scale-[1.03]" />
+        )}
         <div className="absolute left-2.5 top-2.5">
           <Tag highlighted>{isReady ? `${item.daysUntilStart}일 후 오픈` : `마감 D-${item.daysLeft}`}</Tag>
         </div>

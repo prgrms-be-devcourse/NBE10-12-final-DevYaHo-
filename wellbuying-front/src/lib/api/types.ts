@@ -170,6 +170,7 @@ export type GroupBuySummaryResponse = {
   createdAt: string;
   currentUnitPrice: number;
   description: string | null;
+  thumbnailUrl: string | null;
 };
 
 export type GroupBuyPartCreateRequest = {

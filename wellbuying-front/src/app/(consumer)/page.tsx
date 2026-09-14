@@ -212,6 +212,11 @@ function PromoCarousel({
   onSelectSlide: (index: number) => void;
 }) {
   const item = items[slide];
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+
+  useEffect(() => {
+    setThumbnailFailed(false);
+  }, [item.id]);
 
   function goTo(index: number) {
     onSelectSlide((index + items.length) % items.length);
@@ -224,7 +229,17 @@ function PromoCarousel({
           href={`/deals/${item.id}`}
           className="grid gap-6 rounded-2xl border border-wb-line bg-wb-surface p-6 transition-shadow hover:shadow-md md:h-96 md:grid-cols-2"
         >
-          <GroupBuyArtwork entry={item} className="h-52 w-full md:h-full" />
+          {item.thumbnailUrl && !thumbnailFailed ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
+            <img
+              src={item.thumbnailUrl}
+              alt={item.title}
+              className="h-52 w-full rounded-2xl object-cover md:h-full"
+              onError={() => setThumbnailFailed(true)}
+            />
+          ) : (
+            <GroupBuyArtwork entry={item} className="h-52 w-full md:h-full" />
+          )}
           <div className="flex min-w-0 flex-col overflow-hidden">
             <div className="flex h-6 flex-wrap gap-2 overflow-hidden">
               <Tag highlighted>마감 D-{item.daysLeft}</Tag>
@@ -285,6 +300,7 @@ function PromoCarousel({
 }
 
 function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }) {
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const progress = item.maxQuantity > 0 ? item.currentQuantity / item.maxQuantity : 0;
   return (
     <Link
@@ -292,7 +308,17 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
       className="flex items-center gap-3 rounded-xl border border-wb-line bg-wb-surface p-2.5 transition-shadow hover:shadow-md"
     >
       <div className="relative shrink-0">
-        <GroupBuyArtwork entry={item} className="h-14 w-14" />
+        {item.thumbnailUrl && !thumbnailFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님
+          <img
+            src={item.thumbnailUrl}
+            alt={item.title}
+            className="h-14 w-14 rounded-2xl object-cover"
+            onError={() => setThumbnailFailed(true)}
+          />
+        ) : (
+          <GroupBuyArtwork entry={item} className="h-14 w-14" />
+        )}
         <span
           className={`absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-extrabold text-white ${
             rank <= 3 ? "bg-wb-orange" : "bg-wb-ink/70"

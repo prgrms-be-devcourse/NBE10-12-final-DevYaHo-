@@ -26,6 +26,7 @@ export type GroupBuyCardView = {
   tint: ColorToken;
   summary: string;
   detail: string;
+  thumbnailUrl: string | null;
 };
 
 export function toDaysLeft(endAt: string): number {
@@ -55,6 +56,7 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     category: summary.productCategory,
     ...catalog,
     summary: summary.description || catalog.summary,
+    thumbnailUrl: summary.thumbnailUrl,
   };
 }
 
