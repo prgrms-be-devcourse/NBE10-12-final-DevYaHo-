@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
@@ -30,7 +30,7 @@ function iconFor(categoryName: string): LucideIcon {
 // 밀어내지 않으면서도, 그림자·카드 테두리 없이 헤더와 같은 배경으로 이어붙여 모달처럼 보이지 않게 한다.
 // 카테고리 목록은 /api/categories에서 동적으로 받아온다.
 // 타일을 고르면 페이지 내부 필터링 대신 /explore?category=이름 으로 이동한다.
-export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode }) {
+function CategoryHoverTabInner({ rightSlot }: { rightSlot?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [categoryNames, setCategoryNames] = useState<string[]>([]);
   const router = useRouter();
@@ -105,6 +105,14 @@ export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode })
         </div>
       )}
     </div>
+  );
+}
+
+export function CategoryHoverTab({ rightSlot }: { rightSlot?: React.ReactNode }) {
+  return (
+    <Suspense fallback={null}>
+      <CategoryHoverTabInner rightSlot={rightSlot} />
+    </Suspense>
   );
 }
 
