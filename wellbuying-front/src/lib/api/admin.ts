@@ -84,12 +84,14 @@ export function forceDeleteProduct(productId: number, reason: string): Promise<v
 export function listMembers(params?: {
   role?: Role;
   status?: MemberStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<MemberSummaryResponse>> {
   const query = new URLSearchParams();
   if (params?.role) query.set("role", params.role);
   if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";

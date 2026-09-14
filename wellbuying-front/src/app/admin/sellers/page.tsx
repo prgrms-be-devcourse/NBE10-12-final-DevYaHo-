@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, Store, Users } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
@@ -196,14 +196,31 @@ function MembersPanel() {
   const [page, setPage] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
   const [sellerCount, setSellerCount] = useState(0);
-  const [query, setQuery] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
+  function handleKeywordChange(value: string) {
+    setKeyword(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedKeyword(value);
+      setPage(0);
+    }, 300);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const { data, error, loading } = usePagedQuery<PageResponse<MemberSummaryResponse>>(
     "admin-members",
-    { status, page, reloadToken },
-    () => listMembers({ status: status ?? undefined, page }),
+    { status, keyword: debouncedKeyword, page, reloadToken },
+    () => listMembers({ status: status ?? undefined, keyword: debouncedKeyword || undefined, page, size: 10 }),
     "회원 목록을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;
@@ -227,13 +244,6 @@ function MembersPanel() {
       ignore = true;
     };
   }, []);
-
-  const filtered = (items ?? []).filter(
-    (member) =>
-      query.trim().length === 0 ||
-      member.name.toLowerCase().includes(query.toLowerCase()) ||
-      member.email.toLowerCase().includes(query.toLowerCase()),
-  );
 
   const MEMBER_ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveSeller,
@@ -315,9 +325,9 @@ function MembersPanel() {
       <div className="flex h-11 items-center gap-2.5 rounded-xl border border-wb-line bg-wb-surface px-3.5">
         <Search className="h-4 w-4 text-wb-secondary" />
         <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="이름 또는 이메일 검색"
+          value={keyword}
+          onChange={(e) => handleKeywordChange(e.target.value)}
+          placeholder="이메일로 검색"
           className="w-full bg-transparent text-sm outline-none"
         />
       </div>
@@ -326,7 +336,7 @@ function MembersPanel() {
 
       {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : filtered.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={Users} title="해당하는 회원이 없어요" message="다른 필터를 확인해보세요." />
       ) : (
         <>
@@ -338,7 +348,7 @@ function MembersPanel() {
               <span className="text-center">상태</span>
               <span className="text-center">관리</span>
             </div>
-            {filtered.map((member) => (
+            {items.map((member) => (
               <div key={member.id} className="grid grid-cols-[1fr_150px_100px_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0">
                 <MemberIdentity name={member.name} email={member.email} />
                 <span className="text-center text-xs">{formatDateTime(member.createdAt)}</span>
@@ -354,7 +364,7 @@ function MembersPanel() {
           </div>
 
           <div className="space-y-3 md:hidden">
-            {filtered.map((member) => (
+            {items.map((member) => (
               <div key={member.id} className="flex items-center justify-between rounded-xl border border-wb-line bg-wb-surface p-4">
                 <MemberIdentity name={member.name} email={member.email} />
                 <div className="flex flex-col items-end gap-1.5">
