@@ -7,12 +7,13 @@ import type { GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 export function GroupBuyCard({ item }: { item: GroupBuyCardView }) {
   const progress = item.maxQuantity > 0 ? item.currentQuantity / item.maxQuantity : 0;
+  const isReady = item.status === "READY";
   return (
     <Link href={`/deals/${item.id}`} className="group block">
       <div className="relative">
         <GroupBuyArtwork entry={item} className="h-64 w-full transition-transform group-hover:scale-[1.03]" />
         <div className="absolute left-2.5 top-2.5">
-          <Tag highlighted>D-{item.daysLeft}</Tag>
+          <Tag highlighted>{isReady ? `${item.daysUntilStart}일 후 오픈` : `마감 D-${item.daysLeft}`}</Tag>
         </div>
       </div>
       <div className="mt-3 space-y-1">

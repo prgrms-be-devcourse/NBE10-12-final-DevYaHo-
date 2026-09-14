@@ -17,6 +17,7 @@ export type GroupBuyCardView = {
   maxQuantity: number;
   currentUnitPrice: number;
   daysLeft: number;
+  daysUntilStart: number;
   viewCount: number;
   createdAt: string;
   producerName: string;
@@ -48,6 +49,7 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     maxQuantity: summary.maxQuantity,
     currentUnitPrice: summary.currentUnitPrice,
     daysLeft: toDaysLeft(summary.endAt),
+    daysUntilStart: toDaysLeft(summary.startAt),
     viewCount: summary.viewCount,
     createdAt: summary.createdAt,
     category: summary.productCategory,

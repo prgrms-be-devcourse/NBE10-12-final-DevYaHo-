@@ -41,11 +41,11 @@ public record ProductDetailResponse(
     // currentUnitPrice - 해당 공동구매의 가격 구간 중 현재 누적 참여 수량이 도달한 구간의 단가
     // (GroupBuyPriceCalculator.resolveUnitPrice). Product.startPrice(판매자가 등록한 고정 기준가)와 달리
     // 참여자 수에 따라 바뀐다
-    public record ActiveGroupBuySummary(Long id, String title, String status, LocalDateTime endAt,
-            Integer currentUnitPrice) {
+    public record ActiveGroupBuySummary(Long id, String title, String status, LocalDateTime startAt,
+            LocalDateTime endAt, Integer currentUnitPrice) {
         public static ActiveGroupBuySummary of(GroupBuy groupBuy, Integer currentUnitPrice) {
             return new ActiveGroupBuySummary(groupBuy.getId(), groupBuy.getTitle(), groupBuy.getStatus().name(),
-                    groupBuy.getEndAt(), currentUnitPrice);
+                    groupBuy.getStartAt(), groupBuy.getEndAt(), currentUnitPrice);
         }
     }
 }

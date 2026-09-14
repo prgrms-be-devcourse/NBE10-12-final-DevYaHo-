@@ -12,7 +12,7 @@ import { listCategories } from "@/lib/api/category";
 import { useGroupBuyList } from "@/lib/groupBuy/useGroupBuyList";
 import { useProductList } from "@/lib/product/useProductList";
 import { useProductSearch } from "@/lib/product/useProductSearch";
-import type { CategoryTreeResponse, ProductSortType, SearchSortType } from "@/lib/api/types";
+import type { CategoryTreeResponse, ProductSortType } from "@/lib/api/types";
 
 type Sort = "popular" | "new" | "closing";
 type StatusFilter = "all" | "ongoing" | "scheduled";
@@ -36,11 +36,6 @@ const SORT_PARAM: Record<Sort, string> = {
   closing: "endAt,asc",
 };
 
-const SEARCH_SORT_LABEL: Record<SearchSortType, string> = {
-  RELEVANCE: "관련도순",
-  POPULAR: "인기순",
-};
-
 const PRODUCT_SORT_LABEL: Record<ProductSortType, string> = {
   LATEST: "최신순",
   POPULAR: "인기순",
@@ -49,14 +44,9 @@ const PRODUCT_SORT_LABEL: Record<ProductSortType, string> = {
 };
 
 const PAGE_SIZE = 20;
-const PRODUCT_ROW_SIZE = 4;
 
 function isSort(value: string | null): value is Sort {
   return !!value && value in SORT_PARAM;
-}
-
-function isSearchSort(value: string | null): value is SearchSortType {
-  return !!value && value in SEARCH_SORT_LABEL;
 }
 
 export default function ExplorePage() {
@@ -69,10 +59,6 @@ export default function ExplorePage() {
   const [sort, setSort] = useState<Sort>(() => {
     const param = searchParams.get("sort");
     return isSort(param) ? param : "popular";
-  });
-  const [searchSort, setSearchSort] = useState<SearchSortType>(() => {
-    const param = searchParams.get("sort");
-    return isSearchSort(param) ? param : "RELEVANCE";
   });
   const [productSort, setProductSort] = useState<ProductSortType>("LATEST");
   const [productParentCategoryId, setProductParentCategoryId] = useState<number | null>(null);
@@ -184,17 +170,6 @@ export default function ExplorePage() {
     enabled: categoryReady,
   });
 
-  // 검색 모드에서는 같은 검색 API를 필터만 다르게 두 번 호출한다 - 위는 전체 상품, 아래는 그중
-  // 지금 공동구매 진행 중인 것만. GroupBuy.title 같은 문구는 검색 인덱스에 없어서 이 방법이 최선이다.
-  const {
-    items: productResults,
-    loading: productsLoading,
-    loadingMore: productsLoadingMore,
-    hasNext: productsHasNext,
-    error: productsError,
-    loadMore: loadMoreProducts,
-  } = useProductSearch(query, { sort: searchSort, size: PRODUCT_ROW_SIZE, activeGroupBuyOnly: false });
-
   const {
     items: groupBuyResults,
     loading: groupBuyLoading,
@@ -202,7 +177,7 @@ export default function ExplorePage() {
     hasNext: groupBuyHasNext,
     error: groupBuyError,
     loadMore: loadMoreGroupBuyResults,
-  } = useProductSearch(query, { sort: searchSort, size: PAGE_SIZE, activeGroupBuyOnly: true });
+  } = useProductSearch(query, { size: PAGE_SIZE, activeGroupBuyOnly: true });
 
   // 마감임박(sort=closing)은 이미 시작한 공동구매 중 곧 끝나는 것만 의미가 있으므로,
   // status 파라미터와 무관하게 항상 진행중 목록만 대상으로 한다
@@ -242,7 +217,6 @@ export default function ExplorePage() {
     setStatusFilter(toStatusFilter(searchParams.get("status")));
     const param = searchParams.get("sort");
     setSort(isSort(param) ? param : "popular");
-    setSearchSort(isSearchSort(param) ? param : "RELEVANCE");
   }, [searchParams]);
 
   // 아래쪽 "진행 중인 공동구매" 섹션 전용 무한 스크롤 - sentinel이 뷰포트에 들어오면 다음
@@ -306,34 +280,17 @@ export default function ExplorePage() {
     setQuery("");
     setCategory("전체");
     setSort("popular");
-    setSearchSort("RELEVANCE");
     setBrowseSubCategoryId(null);
     setStatusFilter("all");
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-9">
-      {isSearchMode && (
-        <div className="flex items-center justify-end">
-          <select
-            value={searchSort}
-            onChange={(e) => setSearchSort(e.target.value as SearchSortType)}
-            className="h-10 shrink-0 rounded-xl border border-wb-line bg-wb-surface px-3 text-sm font-semibold"
-          >
-            {Object.entries(SEARCH_SORT_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div>
         <h1 className="text-3xl font-bold">{isSearchMode ? `'${query}' 검색 결과` : (categoryLabel ?? statusLabel ?? "공동구매 둘러보기")}</h1>
         <p className="mt-1 text-sm text-wb-secondary">
           {isSearchMode
-            ? "검색어와 관련된 상품과 진행 중인 공동구매를 보여드려요."
+            ? "검색어와 관련된 진행 중인 공동구매를 보여드려요."
             : sort === "closing"
               ? "마감이 얼마 남지 않은 공동구매를 확인해보세요."
               : statusFilter === "scheduled"
@@ -396,60 +353,26 @@ export default function ExplorePage() {
       )}
 
       {isSearchMode ? (
-        <div className="space-y-10">
-          <section className="space-y-4">
-            <h2 className="text-xl font-bold">상품</h2>
-            {productsLoading ? (
-              <p className="py-10 text-center text-sm text-wb-secondary">검색하는 중...</p>
-            ) : productsError ? (
-              <p className="py-10 text-center text-sm text-wb-secondary">{productsError}</p>
-            ) : productResults.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-center">
-                <Search className="h-8 w-8 text-wb-green" strokeWidth={1.5} />
-                <p className="text-sm text-wb-secondary">검색된 상품이 없어요.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                  {productResults.map((item) => (
-                    <ProductSearchCard key={item.id} item={item} variant="product" />
-                  ))}
-                </div>
-                {productsHasNext && (
-                  <div className="flex justify-center">
-                    <Button variant="secondary" loading={productsLoadingMore} onClick={() => void loadMoreProducts()}>
-                      더 보기
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <section className="space-y-4">
-            <h2 className="text-xl font-bold text-wb-green">진행 중인 공동구매</h2>
-            {groupBuyLoading ? (
-              <p className="py-10 text-center text-sm text-wb-secondary">검색하는 중...</p>
-            ) : groupBuyError ? (
-              <p className="py-10 text-center text-sm text-wb-secondary">{groupBuyError}</p>
-            ) : groupBuyResults.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-center">
-                <Search className="h-8 w-8 text-wb-green" strokeWidth={1.5} />
-                <p className="text-sm text-wb-secondary">지금 진행 중인 공동구매 중엔 없어요.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                  {groupBuyResults.map((item) => (
-                    <ProductSearchCard key={item.id} item={item} variant="groupBuy" />
-                  ))}
-                </div>
-                <div ref={groupBuySentinelRef} className="h-1" />
-                {groupBuyLoadingMore && <p className="py-4 text-center text-sm text-wb-secondary">불러오는 중...</p>}
-              </>
-            )}
-          </section>
-        </div>
+        groupBuyLoading ? (
+          <p className="py-20 text-center text-sm text-wb-secondary">검색하는 중...</p>
+        ) : groupBuyError ? (
+          <p className="py-20 text-center text-sm text-wb-secondary">{groupBuyError}</p>
+        ) : groupBuyResults.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-wb-line py-16 text-center">
+            <Search className="h-8 w-8 text-wb-secondary" strokeWidth={1.5} />
+            <p className="text-sm font-semibold text-wb-secondary">지금 진행 중인 공동구매 중엔 없어요.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {groupBuyResults.map((item) => (
+                <ProductSearchCard key={item.id} item={item} variant="groupBuy" />
+              ))}
+            </div>
+            <div ref={groupBuySentinelRef} className="h-1" />
+            {groupBuyLoadingMore && <p className="py-4 text-center text-sm text-wb-secondary">불러오는 중...</p>}
+          </>
+        )
       ) : isProductsView ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">

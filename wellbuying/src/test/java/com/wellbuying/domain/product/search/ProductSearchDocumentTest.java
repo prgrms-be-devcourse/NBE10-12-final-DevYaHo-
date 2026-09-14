@@ -40,7 +40,8 @@ class ProductSearchDocumentTest {
     @Test
     void of_summary가_있으면_hasActiveGroupBuy가_true이고_요약_값이_매핑된다() {
         GroupBuyProductSummaryResponse summary = new GroupBuyProductSummaryResponse(100L, "감귤 공동구매",
-                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 30, 23, 59));
+                GroupBuyStatus.ONGOING, 8000, 5, 10, 100, LocalDateTime.of(2026, 9, 20, 0, 0),
+                LocalDateTime.of(2026, 9, 30, 23, 59));
 
         ProductSearchDocument doc = ProductSearchDocument.of(mockProduct(), summary, 0L);
 

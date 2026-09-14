@@ -206,6 +206,7 @@ export type ProductDetailResponse = {
     id: number;
     title: string;
     status: GroupBuyStatus;
+    startAt: string;
     endAt: string;
     currentUnitPrice: number;
   }[];
@@ -503,6 +504,7 @@ export type ProductSearchResponse = {
   currentQuantity: number | null;
   targetQuantity: number | null;
   maxQuantity: number | null;
+  startAt: string | null;
   endAt: string | null;
 };
 
