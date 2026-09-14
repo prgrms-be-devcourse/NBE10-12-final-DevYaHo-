@@ -194,6 +194,7 @@ function MemberIdentity({ name, email }: { name: string; email: string }) {
 function MembersPanel() {
   const [status, setStatus] = useState<MemberStatus | null>(null);
   const [page, setPage] = useState(0);
+  const [totalMemberCount, setTotalMemberCount] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
   const [sellerCount, setSellerCount] = useState(0);
   const [keyword, setKeyword] = useState("");
@@ -224,15 +225,21 @@ function MembersPanel() {
     "회원 목록을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;
-  const totalElements = data?.page.totalElements ?? 0;
   const totalPages = data?.page.totalPages ?? 0;
 
+  // "전체 회원" 카드는 검색/상태 필터와 무관하게 항상 전체 회원 수를 보여줘야 하므로,
+  // 목록 조회(status/keyword로 필터링됨)의 totalElements를 쓰지 않고 별도로 조회한다
   useEffect(() => {
     let ignore = false;
 
-    Promise.all([listMembers({ status: "ACTIVE", size: 1 }), listMembers({ role: "SELLER", size: 1 })])
-      .then(([active, sellers]) => {
+    Promise.all([
+      listMembers({ size: 1 }),
+      listMembers({ status: "ACTIVE", size: 1 }),
+      listMembers({ role: "SELLER", size: 1 }),
+    ])
+      .then(([all, active, sellers]) => {
         if (ignore) return;
+        setTotalMemberCount(all.page.totalElements);
         setActiveCount(active.page.totalElements);
         setSellerCount(sellers.page.totalElements);
       })
@@ -293,7 +300,7 @@ function MembersPanel() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold text-wb-secondary">전체 회원</p>
-          <p className="mt-1.5 text-xl font-bold">{totalElements.toLocaleString("ko-KR")}명</p>
+          <p className="mt-1.5 text-xl font-bold">{totalMemberCount.toLocaleString("ko-KR")}명</p>
         </Card>
         <Card>
           <p className="text-xs font-semibold text-wb-secondary">활성 회원</p>
