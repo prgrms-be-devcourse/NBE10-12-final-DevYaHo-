@@ -55,14 +55,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ubuntu-latest 러너는 Docker 크리덴셜을 credential helper(keychain)에 저장하는데,
-      # Testcontainers(docker-java)는 ~/.docker/config.json 평문만 읽으므로 pull에 실패한다.
-      # DOCKER_AUTH_CONFIG 환경변수로 직접 주입하면 docker-java가 이를 우선 참조한다.
-      # auth 값은 "username:token"을 base64 인코딩한 값이어야 한다.
-      - name: Testcontainers용 ghcr.io 인증 설정
+      # 러너 업데이트 후 Docker가 credential helper(pass 등)를 기본으로 사용하면서
+      # docker-java(Testcontainers 내부)가 ~/.docker/config.json 평문 auth를 찾지 못해 pull에 실패한다.
+      # DOCKER_AUTH_CONFIG 환경변수는 docker-java가 읽지 않으므로 config.json에 직접 주입한다.
+      - name: Testcontainers용 ghcr.io 인증 config.json 직접 주입
         run: |
           GHCR_AUTH=$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w 0)
-          echo "DOCKER_AUTH_CONFIG={\"auths\":{\"ghcr.io\":{\"auth\":\"${GHCR_AUTH}\"}}}" >> $GITHUB_ENV
+          # 기존 config.json에 ghcr.io auth를 평문으로 추가 (credsStore 등 나머지 설정 유지)
+          jq --arg auth "$GHCR_AUTH" '.auths["ghcr.io"] = {auth: $auth}' \
+            ~/.docker/config.json > /tmp/docker_config.json
+          mv /tmp/docker_config.json ~/.docker/config.json
 
       - name: Gradle 테스트 실행
         run: ./gradlew test --no-daemon
