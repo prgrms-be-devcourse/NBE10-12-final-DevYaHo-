@@ -37,6 +37,7 @@ import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -64,6 +65,7 @@ public class GroupBuyService {
     private final ProductCategoryRepository productCategoryRepository;
     private final GroupBuySuspensionRequestRepository groupBuySuspensionRequestRepository;
     private final AdminActionLogRepository adminActionLogRepository;
+    private final SellerInfoService sellerInfoService;
 
     public GroupBuyService(GroupBuyRepository groupBuyRepository, GroupBuyPriceRepository groupBuyPriceRepository,
             GroupBuyPartRepository groupBuyPartRepository, GroupBuyCounterRepository groupBuyCounterRepository,
@@ -71,7 +73,7 @@ public class GroupBuyService {
             ProductService productService, ProductRepository productRepository,
             ProductCategoryRepository productCategoryRepository,
             GroupBuySuspensionRequestRepository groupBuySuspensionRequestRepository,
-            AdminActionLogRepository adminActionLogRepository) {
+            AdminActionLogRepository adminActionLogRepository, SellerInfoService sellerInfoService) {
         this.groupBuyRepository = groupBuyRepository;
         this.groupBuyPriceRepository = groupBuyPriceRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
@@ -83,6 +85,7 @@ public class GroupBuyService {
         this.productCategoryRepository = productCategoryRepository;
         this.groupBuySuspensionRequestRepository = groupBuySuspensionRequestRepository;
         this.adminActionLogRepository = adminActionLogRepository;
+        this.sellerInfoService = sellerInfoService;
     }
 
     // product의 categoryId로 카테고리명을 조회, 카테고리가 없으면(레거시/삭제된 카테고리 대비) "기타"로 대체
@@ -103,6 +106,7 @@ public class GroupBuyService {
         if (producer.getRole() != Role.SELLER) {
             throw new BusinessException(ErrorCode.GROUP_BUY_FORBIDDEN);
         }
+        sellerInfoService.validateApprovedSeller(producerId);
         Product product = productService.getOwnedOrThrow(producerId, request.productId());
         if (product.getStatus() != ProductStatus.APPROVED) {
             throw new BusinessException(ErrorCode.GROUP_BUY_PRODUCT_NOT_APPROVED);
@@ -244,6 +248,7 @@ public class GroupBuyService {
     public void requestSuspension(Long producerId, Long groupBuyId, GroupBuySuspensionRequestCreateRequest request) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
         validateOwner(groupBuy, producerId);
+        sellerInfoService.validateApprovedSeller(producerId);
         // isSuspended() 체크를 status 체크보다 먼저 한다 - suspend()가 status도 CANCELED로 바꾸므로,
         // 순서가 바뀌면 이미 판매정지된 건이 더 일반적인 GROUP_BUY_NOT_ONGOING으로 잘못 응답된다.
         if (groupBuy.isSuspended()) {
@@ -374,6 +379,7 @@ public class GroupBuyService {
     public GroupBuyDetailResponse update(Long producerId, Long groupBuyId, GroupBuyUpdateRequest request) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
         validateOwner(groupBuy, producerId);
+        sellerInfoService.validateApprovedSeller(producerId);
         if (groupBuy.getStatus() != GroupBuyStatus.READY) {
             throw new BusinessException(ErrorCode.GROUP_BUY_UPDATE_NOT_ALLOWED);
         }
@@ -392,6 +398,7 @@ public class GroupBuyService {
     public void cancel(Long producerId, Long groupBuyId) {
         GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
         validateOwner(groupBuy, producerId);
+        sellerInfoService.validateApprovedSeller(producerId);
         if (groupBuy.getStatus() != GroupBuyStatus.READY) {
             throw new BusinessException(ErrorCode.GROUP_BUY_CANCEL_NOT_ALLOWED);
         }

@@ -95,6 +95,17 @@ public class SellerInfoService {
         return SellerInfoResponse.from(sellerInfo);
     }
 
+    // 상품/공동구매 등록·수정 등 판매자 쓰기 액션 진입 시 공통으로 쓰는 자격 검증.
+    // 정지(SUSPENDED)된 판매자는 MEMBERS.role이 SELLER로 남아있어도 이 검증에서 막힌다
+    @Transactional(readOnly = true)
+    public void validateApprovedSeller(Long memberId) {
+        SellerInfo sellerInfo = sellerInfoRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SELLER_NOT_APPROVED));
+        if (sellerInfo.getStatus() != SellerStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.SELLER_NOT_APPROVED);
+        }
+    }
+
     // 셀러 승인 - PENDING 상태가 아니면 SELLER_ALREADY_PROCESSED(SellerInfo.approve()가 검증), 통과하면 SELLER_INFO를 APPROVED로 전환하고 MEMBERS.role을 SELLER로 변경
     @Transactional
     public void approve(Long sellerId, Long adminId, String reason) {

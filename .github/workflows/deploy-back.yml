@@ -55,20 +55,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 러너 업데이트 후 Docker가 credential helper(pass 등)를 기본으로 사용하면서
-      # docker-java(Testcontainers 내부)가 ~/.docker/config.json 평문 auth를 찾지 못해 pull에 실패한다.
-      # DOCKER_AUTH_CONFIG 환경변수는 docker-java가 읽지 않으므로 config.json에 직접 주입한다.
+      # 러너가 credsStore(예: pass)를 기본 credential helper로 쓰는데, Testcontainers(docker-java)의
+      # RegistryAuthLocator는 config.json에 credsStore 키가 있으면 평문 auths보다 그 헬퍼를 우선 호출한다.
+      # 헤드리스 CI에서는 pass의 GPG 키링이 잠겨 있어 헬퍼 호출이 조용히 실패 → 익명 pull로 폴백된다.
+      # (docker CLI 자체는 credsStore가 있어도 정상 동작하므로 이 문제는 docker-java에서만 재현된다)
+      # → credsStore/credHelpers를 아예 제거해 docker-java가 무조건 평문 auths를 쓰도록 강제한다.
       - name: Testcontainers용 ghcr.io 인증 config.json 직접 주입
         run: |
           GHCR_AUTH=$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w 0)
-          # 기존 config.json에 ghcr.io auth를 평문으로 추가 (credsStore 등 나머지 설정 유지)
-          jq --arg auth "$GHCR_AUTH" '.auths["ghcr.io"] = {auth: $auth}' \
+          jq --arg auth "$GHCR_AUTH" \
+            'del(.credsStore) | del(.credHelpers) | .auths["ghcr.io"] = {auth: $auth}' \
             ~/.docker/config.json > /tmp/docker_config.json
           mv /tmp/docker_config.json ~/.docker/config.json
-
-      # 임시 진단용: docker CLI 레벨 인증은 정상인지, Testcontainers/docker-java 레벨 문제인지 구분하기 위함
-      - name: (디버그) 순수 docker pull로 인증 경로 검증
-        run: docker pull ghcr.io/prgrms-be-devcourse/wellbuying-opensearch-test:2.19.1-nori
 
       - name: Gradle 테스트 실행
         run: ./gradlew test --no-daemon
