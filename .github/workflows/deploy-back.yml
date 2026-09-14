@@ -45,6 +45,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle  # ~/.gradle/caches, ~/.gradle/wrapper를 GHA 캐시에 저장 → 의존성 재다운로드 방지
 
       # AbstractIntegrationTest가 ghcr.io의 프리빌드 OpenSearch 테스트 이미지를 pull하므로 로그인 필요
       - name: ghcr.io 로그인
@@ -53,6 +54,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ubuntu-latest 러너는 Docker 크리덴셜을 credential helper(keychain)에 저장하는데,
+      # Testcontainers(docker-java)는 ~/.docker/config.json 평문만 읽으므로 pull에 실패한다.
+      # DOCKER_AUTH_CONFIG 환경변수로 직접 주입하면 docker-java가 이를 우선 참조한다.
+      # auth 값은 "username:token"을 base64 인코딩한 값이어야 한다.
+      - name: Testcontainers용 ghcr.io 인증 설정
+        run: |
+          GHCR_AUTH=$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w 0)
+          echo "DOCKER_AUTH_CONFIG={\"auths\":{\"ghcr.io\":{\"auth\":\"${GHCR_AUTH}\"}}}" >> $GITHUB_ENV
 
       - name: Gradle 테스트 실행
         run: ./gradlew test --no-daemon
