@@ -10,7 +10,7 @@ export function GroupBuyCard({ item }: { item: GroupBuyCardView }) {
   return (
     <Link href={`/deals/${item.id}`} className="group block">
       <div className="relative">
-        <GroupBuyArtwork entry={item} className="h-36 w-full transition-transform group-hover:scale-[1.03]" />
+        <GroupBuyArtwork entry={item} className="h-64 w-full transition-transform group-hover:scale-[1.03]" />
         <div className="absolute left-2.5 top-2.5">
           <Tag highlighted>D-{item.daysLeft}</Tag>
         </div>

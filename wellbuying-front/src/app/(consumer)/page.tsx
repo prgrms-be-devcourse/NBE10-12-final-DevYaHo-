@@ -68,11 +68,6 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 px-6 py-9">
-      <div>
-        <p className="text-sm font-semibold text-wb-green">좋은 아침이에요</p>
-        <h1 className="mt-1 text-3xl font-bold">가격을 알면, 구매가 달라져요</h1>
-      </div>
-
       {ongoingLoading ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : filtered.length === 0 ? (
