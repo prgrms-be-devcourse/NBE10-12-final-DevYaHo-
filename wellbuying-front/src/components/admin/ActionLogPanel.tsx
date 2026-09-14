@@ -42,7 +42,7 @@ export function ActionLogPanel({
   const { data, error, loading } = usePagedQuery<PageResponse<AdminActionLogResponse>>(
     cacheNamespace,
     { page },
-    () => fetcher({ page }),
+    () => fetcher({ page, size: 10 }),
     "처리 이력을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PackageSearch } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import { approveProduct, listAdminProducts, listProductActionLogs, rejectProduct } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
 import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 import { showToast } from "@/lib/toast/toastStore";
@@ -52,7 +51,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
   const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
     "admin-product-review",
     { status, page, reloadToken },
-    () => listAdminProducts({ status, page }),
+    () => listAdminProducts({ status, page, size: 10 }),
     "상품 목록을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;
@@ -141,62 +140,55 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 
 // ProductStatus엔 ALL이 없어 상태별 API를 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
 // 페이지네이션 대신 상품명 검색만 제공한다. 검토 대기(PENDING)는 "등록 심사" 탭에서 다루므로 여기서는 제외한다.
+// 승인된 상품만 보여준다 - 검토대기/반려 상품은 "등록 심사" 탭에서 다룬다
 function AllProductsPanel() {
-  const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleKeywordChange(value: string) {
+    setKeyword(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedKeyword(value);
+      setPage(0);
+    }, 300);
+  }
 
   useEffect(() => {
-    let ignore = false;
-
-    Promise.all([
-      listAdminProducts({ status: "APPROVED", size: 100 }),
-      listAdminProducts({ status: "REJECTED", size: 100 }),
-    ])
-      .then(([approved, rejected]) => {
-        if (ignore) return;
-        const merged = [...approved.content, ...rejected.content].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-        setItems(merged);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "상품 목록을 불러오지 못했어요.");
-      });
-
     return () => {
-      ignore = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!items) return null;
-    const q = query.trim();
-    return q ? items.filter((item) => item.productName.includes(q)) : items;
-  }, [items, query]);
-
-  if (items === null) {
-    return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
-  }
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
+    "admin-all-products",
+    { keyword: debouncedKeyword, page },
+    () => listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page, size: 10 }),
+    "상품 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   return (
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
       <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        value={keyword}
+        onChange={(e) => handleKeywordChange(e.target.value)}
         placeholder="상품명 검색"
         className="w-full rounded-lg border border-wb-line bg-wb-surface px-3 py-2 text-sm outline-none sm:w-64"
       />
 
-      {filtered && filtered.length === 0 ? (
+      {loading && items === null ? (
+        <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="등록된 상품이 없어요" message="검색어를 확인해보세요." />
       ) : (
         <div className="space-y-3">
-          {filtered?.map((item) => (
+          {items.map((item) => (
             <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-wb-line bg-wb-surface p-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-wb-light-green/50">
@@ -221,6 +213,8 @@ function AllProductsPanel() {
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
     </div>
   );
 }
