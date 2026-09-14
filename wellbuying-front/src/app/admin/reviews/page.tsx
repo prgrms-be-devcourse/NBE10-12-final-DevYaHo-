@@ -1,16 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PackageSearch } from "lucide-react";
+import { PackageSearch, Trash2 } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
+import { AdminSelfVerifyModal } from "@/components/admin/AdminSelfVerifyModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
-import { approveProduct, listAdminProducts, listProductActionLogs, rejectProduct } from "@/lib/api/admin";
-import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
+import {
+  approveProduct,
+  forceDeleteProduct,
+  listAdminProducts,
+  listDeletedProducts,
+  listProductActionLogs,
+  rejectProduct,
+} from "@/lib/api/admin";
+import type { PageResponse, ProductAdminResponse, ProductDeletedAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
@@ -141,10 +149,16 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 // ProductStatus엔 ALL이 없어 상태별 API를 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
 // 페이지네이션 대신 상품명 검색만 제공한다. 검토 대기(PENDING)는 "등록 심사" 탭에서 다루므로 여기서는 제외한다.
 // 승인된 상품만 보여준다 - 검토대기/반려 상품은 "등록 심사" 탭에서 다룬다
+// 승인된 상품 목록 - 상품 삭제 관리(구 별도 탭)의 강제 삭제 기능을 여기로 흡수했다.
+// 강제 삭제는 파괴적인 작업이라 관리자 본인 확인(memberId 재입력) -> 삭제 사유 입력 순으로 진행한다.
 function AllProductsPanel() {
   const [page, setPage] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [deleteTargetName, setDeleteTargetName] = useState("");
+  const [verifyStep, setVerifyStep] = useState<"verify" | "reason" | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -164,12 +178,30 @@ function AllProductsPanel() {
 
   const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
     "admin-all-products",
-    { keyword: debouncedKeyword, page },
+    { keyword: debouncedKeyword, page, reloadToken },
     () => listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page, size: 10 }),
     "상품 목록을 불러오지 못했어요.",
   );
   const items = data?.content ?? null;
   const totalPages = data?.page.totalPages ?? 0;
+
+  function startForceDelete(id: number, name: string) {
+    setDeleteTargetId(id);
+    setDeleteTargetName(name);
+    setVerifyStep("verify");
+  }
+
+  async function handleConfirmForceDelete(reason: string) {
+    if (deleteTargetId === null) return;
+    await forceDeleteProduct(deleteTargetId, reason);
+    invalidatePagedQuery("admin-all-products");
+    invalidatePagedQuery("admin-deleted-products");
+    invalidatePagedQuery("admin-product-action-logs");
+    setReloadToken((t) => t + 1);
+    setDeleteTargetId(null);
+    setVerifyStep(null);
+    showToast("정상적으로 삭제되었습니다.");
+  }
 
   return (
     <div className="space-y-4">
@@ -209,24 +241,113 @@ function AllProductsPanel() {
                 </div>
                 <StatusPill tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</StatusPill>
               </div>
+              <Button
+                className="bg-red-600 px-3 py-1.5 text-xs hover:bg-red-600/90"
+                onClick={() => startForceDelete(item.id, item.productName)}
+              >
+                강제 삭제
+              </Button>
             </div>
           ))}
         </div>
       )}
 
       <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+
+      <AdminSelfVerifyModal
+        open={verifyStep === "verify"}
+        title="상품 강제 삭제 - 본인 확인"
+        onClose={() => {
+          setVerifyStep(null);
+          setDeleteTargetId(null);
+        }}
+        onVerified={() => setVerifyStep("reason")}
+      />
+      <ActionReasonModal
+        open={verifyStep === "reason"}
+        title={`강제 삭제 - ${deleteTargetName}`}
+        actionLabel="강제 삭제"
+        confirmVariant="secondary"
+        onClose={() => {
+          setVerifyStep(null);
+          setDeleteTargetId(null);
+        }}
+        onConfirm={handleConfirmForceDelete}
+      />
     </div>
   );
 }
 
-const VIEW_TABS: { key: "review" | "all" | "history"; label: string }[] = [
+// 삭제 이력 - 구 "상품 삭제 관리" 탭의 두 번째 화면을 그대로 옮겼다
+function DeletedHistoryPanel() {
+  const [page, setPage] = useState(0);
+
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductDeletedAdminResponse>>(
+    "admin-deleted-products",
+    { page },
+    () => listDeletedProducts({ page, size: 10 }),
+    "삭제 이력을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {error && <Banner tone="error">{error}</Banner>}
+
+      {loading && items === null ? (
+        <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items === null || items.length === 0 ? (
+        <EmptyState icon={Trash2} title="삭제 이력이 없어요" message="삭제된 상품이 없어요." />
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-xl border border-wb-line">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-wb-line bg-wb-canvas text-left text-xs font-bold text-wb-secondary">
+                  <th className="px-4 py-3">ID</th>
+                  <th className="px-4 py-3">상품명</th>
+                  <th className="px-4 py-3">판매자 ID</th>
+                  <th className="px-4 py-3">삭제자 ID</th>
+                  <th className="px-4 py-3">삭제 사유</th>
+                  <th className="px-4 py-3">삭제 시각</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b border-wb-line last:border-0 hover:bg-wb-canvas/50">
+                    <td className="px-4 py-3 text-wb-secondary">{item.id}</td>
+                    <td className="px-4 py-3 font-medium">{item.productName}</td>
+                    <td className="px-4 py-3 text-wb-secondary">{item.sellerId}</td>
+                    <td className="px-4 py-3 text-wb-secondary">{item.deletedBy}</td>
+                    <td className="max-w-xs px-4 py-3">
+                      <p className="truncate text-wb-secondary" title={item.deleteReason}>
+                        {item.deleteReason}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-wb-secondary">{formatDateTime(item.deletedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
+const VIEW_TABS: { key: "review" | "all" | "history" | "deleted"; label: string }[] = [
   { key: "all", label: "전체 상품목록" },
   { key: "review", label: "등록 심사" },
   { key: "history", label: "처리 이력" },
+  { key: "deleted", label: "삭제 이력" },
 ];
 
 export default function AdminReviewsPage() {
-  const [view, setView] = useState<"review" | "all" | "history">("all");
+  const [view, setView] = useState<"review" | "all" | "history" | "deleted">("all");
   const [status, setStatus] = useState<ProductStatus>("PENDING");
 
   return (
@@ -271,13 +392,15 @@ export default function AdminReviewsPage() {
         </>
       ) : view === "all" ? (
         <AllProductsPanel />
-      ) : (
+      ) : view === "history" ? (
         <ActionLogPanel
           cacheNamespace="admin-product-action-logs"
           fetcher={listProductActionLogs}
           targetLabelHeader="상품명"
           emptyMessage="아직 승인/반려 처리된 상품이 없어요."
         />
+      ) : (
+        <DeletedHistoryPanel />
       )}
     </div>
   );
