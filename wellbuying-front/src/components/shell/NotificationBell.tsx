@@ -8,12 +8,11 @@ import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  subscribeNotificationStream,
 } from "@/lib/api/notification";
 import { getMyOrderIdByGroupBuy } from "@/lib/api/orders";
 import type { NotificationResponse } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
-
-const POLL_INTERVAL_MS = 30_000;
 
 function formatCreatedAt(createdAt: string): string {
   return new Date(createdAt).toLocaleString("ko-KR", {
@@ -36,21 +35,28 @@ export function NotificationBell() {
     if (!member) return;
 
     let ignore = false;
-    function refreshUnreadCount() {
-      getUnreadNotificationCount()
-        .then((response) => {
-          if (!ignore) setUnreadCount(response.count);
-        })
-        .catch(() => {
-          // 폴링 실패는 다음 주기에 재시도하면 되므로 조용히 무시
-        });
-    }
+    getUnreadNotificationCount()
+      .then((response) => {
+        if (!ignore) setUnreadCount(response.count);
+      })
+      .catch(() => {
+        // 초기 조회가 실패해도 SSE로 새 알림이 오면 그때부터는 정확한 값으로 맞춰진다
+      });
 
-    refreshUnreadCount();
-    const timer = setInterval(refreshUnreadCount, POLL_INTERVAL_MS);
+    // 30초 폴링 대신 SSE로 새 알림을 즉시 받는다 - 연결이 끊기면 subscribeNotificationStream이
+    // 내부적으로 재연결을 시도한다
+    const unsubscribe = subscribeNotificationStream((notification) => {
+      if (ignore) return;
+      setUnreadCount((count) => count + 1);
+      setNotifications((items) => {
+        if (items.some((item) => item.id === notification.id)) return items;
+        return [notification, ...items];
+      });
+    });
+
     return () => {
       ignore = true;
-      clearInterval(timer);
+      unsubscribe();
     };
   }, [member]);
 

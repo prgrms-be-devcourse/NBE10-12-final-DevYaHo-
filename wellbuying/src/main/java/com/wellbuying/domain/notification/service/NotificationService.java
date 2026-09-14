@@ -6,6 +6,7 @@ import com.wellbuying.domain.notification.entity.Notification;
 import com.wellbuying.domain.notification.entity.NotificationType;
 import com.wellbuying.domain.notification.event.GroupBuyCompletedPayload;
 import com.wellbuying.domain.notification.event.GroupBuyFailedPayload;
+import com.wellbuying.domain.notification.event.NotificationCreatedEvent;
 import com.wellbuying.domain.notification.event.PaymentCompletedPayload;
 import com.wellbuying.domain.notification.event.PaymentFailedPayload;
 import com.wellbuying.domain.notification.repository.NotificationRepository;
@@ -14,6 +15,7 @@ import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -28,9 +30,11 @@ public class NotificationService {
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private final NotificationRepository notificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public NotificationService(NotificationRepository notificationRepository) {
+    public NotificationService(NotificationRepository notificationRepository, ApplicationEventPublisher eventPublisher) {
         this.notificationRepository = notificationRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // 성사 이벤트는 참여자 1명당 1건 발행되므로 memberId가 이미 페이로드에 들어있다
@@ -74,7 +78,9 @@ public class NotificationService {
                         payload.productId(), NotificationType.GROUP_BUY_FAILED.defaultMessage()))
                 .toList();
 
-        notificationRepository.saveAll(newNotifications);
+        List<Notification> saved = notificationRepository.saveAll(newNotifications);
+        saved.forEach(notification -> eventPublisher.publishEvent(
+                new NotificationCreatedEvent(notification.getMemberId(), NotificationResponse.of(notification))));
     }
 
     // Kafka는 at-least-once라 같은 이벤트가 재처리될 수 있어, 저장 전 존재 여부를 먼저 확인한다.
@@ -87,8 +93,9 @@ public class NotificationService {
             return;
         }
         try {
-            notificationRepository.save(
+            Notification saved = notificationRepository.save(
                     Notification.of(memberId, type, groupBuyId, productId, type.defaultMessage()));
+            eventPublisher.publishEvent(new NotificationCreatedEvent(memberId, NotificationResponse.of(saved)));
         } catch (DataIntegrityViolationException e) {
             log.debug("동시 처리로 이미 생성된 알림이라 무시함 - memberId: {}, groupBuyId: {}, type: {}", memberId, groupBuyId,
                     type);
