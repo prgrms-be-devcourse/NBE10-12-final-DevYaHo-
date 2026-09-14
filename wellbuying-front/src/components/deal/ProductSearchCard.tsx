@@ -32,6 +32,9 @@ export function ProductSearchCard({
   const price = isGroupBuy ? (item.currentUnitPrice ?? item.startPrice) : item.startPrice;
   const href = isGroupBuy && item.groupBuyId ? `/deals/${item.groupBuyId}` : `/products/${item.id}`;
   const catalog = resolveCatalogEntry(item.productName);
+  // variant="groupBuy"는 explore 페이지의 GroupBuyCard(h-64)와 같은 그리드에 나란히 노출되므로
+  // 썸네일 높이를 맞춘다. variant="product"는 ProductCard(h-36)와 짝을 맞춘다.
+  const thumbnailHeight = isGroupBuy ? "h-64" : "h-36";
 
   return (
     <Link href={href} className="group block">
@@ -41,11 +44,11 @@ export function ProductSearchCard({
           <img
             src={item.thumbnailUrl}
             alt={item.productName}
-            className="h-36 w-full rounded-xl object-cover transition-transform group-hover:scale-[1.03]"
+            className={`${thumbnailHeight} w-full rounded-xl object-cover transition-transform group-hover:scale-[1.03]`}
             onError={() => setThumbnailFailed(true)}
           />
         ) : (
-          <GroupBuyArtwork entry={catalog} className="h-36 w-full transition-transform group-hover:scale-[1.03]" />
+          <GroupBuyArtwork entry={catalog} className={`${thumbnailHeight} w-full transition-transform group-hover:scale-[1.03]`} />
         )}
         {daysLeft !== null && (
           <div className="absolute left-2.5 top-2.5">
@@ -57,15 +60,17 @@ export function ProductSearchCard({
         <p className="line-clamp-2 min-h-12 text-base">
           {isGroupBuy ? (item.groupBuyTitle ?? item.productName) : item.productName}
         </p>
-        <p className="text-sm font-bold">{won(price)}</p>
+        {isGroupBuy ? (
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold">{won(price)}</span>
+            <span className="text-xs font-bold text-wb-green">
+              {(item.currentQuantity ?? 0).toLocaleString("ko-KR")}개 참여
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm font-bold">{won(price)}</p>
+        )}
       </div>
-      {isGroupBuy && (
-        <div className="mt-2 flex items-center justify-end">
-          <span className="text-xs font-bold text-wb-green">
-            {(item.currentQuantity ?? 0).toLocaleString("ko-KR")}개 참여
-          </span>
-        </div>
-      )}
     </Link>
   );
 }
