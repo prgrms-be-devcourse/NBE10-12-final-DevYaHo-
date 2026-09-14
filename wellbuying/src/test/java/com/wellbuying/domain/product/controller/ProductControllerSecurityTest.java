@@ -16,6 +16,8 @@ import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
+import com.wellbuying.domain.seller.entity.SellerInfo;
+import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,9 +49,17 @@ class ProductControllerSecurityTest extends AbstractIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private SellerInfoRepository sellerInfoRepository;
+
     private Member saveMember(String email, Role role) {
         Member member = memberRepository.save(Member.signUp(email, passwordEncoder.encode("Pass1234!"), "홍길동"));
         ReflectionTestUtils.setField(member, "role", role);
+        if (role == Role.SELLER) {
+            SellerInfo sellerInfo = SellerInfo.apply(member.getId(), "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+            sellerInfo.approve();
+            sellerInfoRepository.save(sellerInfo);
+        }
         return memberRepository.save(member);
     }
 

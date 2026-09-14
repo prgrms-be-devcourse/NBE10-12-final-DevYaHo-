@@ -35,6 +35,7 @@ import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.groupbuy.service.GroupBuyPriceCalculator;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
 import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import com.wellbuying.global.dto.CursorPageResponse;
@@ -66,6 +67,7 @@ public class ProductService {
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
     private final ProductImageRepository productImageRepository;
+    private final SellerInfoService sellerInfoService;
 
     public ProductService(ProductRepository productRepository, MemberRepository memberRepository,
                           ProductCategoryRepository productCategoryRepository,
@@ -76,7 +78,8 @@ public class ProductService {
                           ProductImageUploadService productImageUploadService,
                           ApplicationEventPublisher eventPublisher,
                           ProductImageRepository productImageRepository,
-                          GroupBuyPriceRepository groupBuyPriceRepository) {
+                          GroupBuyPriceRepository groupBuyPriceRepository,
+                          SellerInfoService sellerInfoService) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.productCategoryRepository = productCategoryRepository;
@@ -88,6 +91,7 @@ public class ProductService {
         this.eventPublisher = eventPublisher;
         this.productImageRepository = productImageRepository;
         this.groupBuyPriceRepository = groupBuyPriceRepository;
+        this.sellerInfoService = sellerInfoService;
     }
 
     // 카테고리/가격 필터와 정렬 조건에 맞는 상품 목록을 커서 기반으로 조회
@@ -171,6 +175,7 @@ public class ProductService {
         if (member.getRole() != Role.SELLER) {
             throw new BusinessException(ErrorCode.PRODUCT_FORBIDDEN);
         }
+        sellerInfoService.validateApprovedSeller(sellerId);
         if (!productCategoryRepository.existsById(request.categoryId())) {
             throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
@@ -241,6 +246,7 @@ public class ProductService {
     @Transactional
     public void updateProduct(Long sellerId, Long productId, ProductUpdateRequest request) {
         Product product = getOwnedOrThrow(sellerId, productId);
+        sellerInfoService.validateApprovedSeller(sellerId);
         if (!productCategoryRepository.existsById(request.categoryId())) {
             throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
@@ -263,6 +269,7 @@ public class ProductService {
     @Transactional
     public void deleteProduct(Long sellerId, Long productId, String reason) {
         Product product = getOwnedOrThrow(sellerId, productId);
+        sellerInfoService.validateApprovedSeller(sellerId);
         validateNoActiveGroupBuy(productId);
         boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
         String thumbnailUrl = product.getThumbnailUrl();

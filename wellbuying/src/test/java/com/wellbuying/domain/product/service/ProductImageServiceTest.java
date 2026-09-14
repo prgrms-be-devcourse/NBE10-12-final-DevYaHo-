@@ -15,6 +15,7 @@ import com.wellbuying.domain.product.entity.ProductImage;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
 import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
 import com.wellbuying.domain.product.repository.ProductImageRepository;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.List;
@@ -42,10 +43,13 @@ class ProductImageServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private SellerInfoService sellerInfoService;
+
     private ProductImageService productImageService;
 
     private ProductImageService service() {
-        return new ProductImageService(productImageRepository, productService, productImageUploadService, eventPublisher);
+        return new ProductImageService(productImageRepository, productService, productImageUploadService, eventPublisher, sellerInfoService);
     }
 
     // 요청 개수가 ImageType의 최대치를 초과하면 INVALID_INPUT 예외를 던지고 다른 로직은 실행하지 않는다

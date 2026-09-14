@@ -287,4 +287,39 @@ class SellerInfoServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SELLER_NOT_FOUND);
     }
+
+    // APPROVED 상태인 셀러는 자격 검증을 통과하는지 검증
+    @Test
+    void APPROVED_상태이면_셀러_자격_검증에_성공한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        when(sellerInfoRepository.findByMemberId(10L)).thenReturn(Optional.of(sellerInfo));
+
+        sellerInfoService.validateApprovedSeller(10L);
+    }
+
+    // 정지(SUSPENDED)된 셀러는 자격 검증에서 SELLER_NOT_APPROVED 예외가 발생하는지 검증
+    @Test
+    void SUSPENDED_상태이면_셀러_자격_검증에_실패한다() {
+        SellerInfo sellerInfo = pendingSellerInfo(1L, 10L);
+        sellerInfo.approve();
+        sellerInfo.suspend();
+        when(sellerInfoRepository.findByMemberId(10L)).thenReturn(Optional.of(sellerInfo));
+
+        assertThatThrownBy(() -> sellerInfoService.validateApprovedSeller(10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_APPROVED);
+    }
+
+    // 셀러 신청 이력이 없는 회원은 자격 검증에서 SELLER_NOT_APPROVED 예외가 발생하는지 검증
+    @Test
+    void 신청_이력이_없으면_셀러_자격_검증에_실패한다() {
+        when(sellerInfoRepository.findByMemberId(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sellerInfoService.validateApprovedSeller(10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELLER_NOT_APPROVED);
+    }
 }

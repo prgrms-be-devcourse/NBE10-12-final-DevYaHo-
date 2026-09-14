@@ -33,6 +33,8 @@ import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
+import com.wellbuying.domain.seller.entity.SellerInfo;
+import com.wellbuying.domain.seller.repository.SellerInfoRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -91,11 +93,18 @@ class GroupBuyControllerTest extends AbstractIntegrationTest {
     @Autowired
     private BuyerAddressRepository buyerAddressRepository;
 
+    @Autowired
+    private SellerInfoRepository sellerInfoRepository;
+
     // 승인/역할 상승 API가 아직 없어, 테스트에서만 회원의 role을 SELLER로 직접 세팅한다
     private Member saveSeller(String email) {
         Member member = memberRepository.save(Member.signUp(email, passwordEncoder.encode("Pass1234!"), "생산자"));
         ReflectionTestUtils.setField(member, "role", Role.SELLER);
-        return memberRepository.save(member);
+        member = memberRepository.save(member);
+        SellerInfo sellerInfo = SellerInfo.apply(member.getId(), "088", "신한은행", "110-123-456789", "홍길동", "웰바잉스토어");
+        sellerInfo.approve();
+        sellerInfoRepository.save(sellerInfo);
+        return member;
     }
 
     private Member saveBuyer(String email) {

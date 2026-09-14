@@ -7,6 +7,7 @@ import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlRespons
 import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.time.Duration;
@@ -33,17 +34,19 @@ public class ProductImageUploadService {
     private final String publicUrlPrefix;
     private final long presignedUrlExpirationSeconds;
     private final MemberRepository memberRepository;
+    private final SellerInfoService sellerInfoService;
 
     public ProductImageUploadService(S3Presigner s3Presigner,
             @Value("${aws.s3.bucket}") String bucket,
             @Value("${aws.s3.region}") String region,
             @Value("${aws.s3.endpoint:}") String endpoint,
             @Value("${aws.s3.presigned-url-expiration-seconds}") long presignedUrlExpirationSeconds,
-            MemberRepository memberRepository) {
+            MemberRepository memberRepository, SellerInfoService sellerInfoService) {
         this.s3Presigner = s3Presigner;
         this.bucket = bucket;
         this.presignedUrlExpirationSeconds = presignedUrlExpirationSeconds;
         this.memberRepository = memberRepository;
+        this.sellerInfoService = sellerInfoService;
         // 설정값에 트레일링 슬래시가 섞여 들어와도 중복 슬래시(//)가 생기지 않도록 정규화
         String normalizedEndpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
         // 운영은 virtual-hosted-style S3 URL, 로컬/CI(MinIO)는 endpoint override + path-style URL
@@ -98,6 +101,7 @@ public class ProductImageUploadService {
         if (member.getRole() != Role.SELLER) {
             throw new BusinessException(ErrorCode.PRODUCT_FORBIDDEN);
         }
+        sellerInfoService.validateApprovedSeller(sellerId);
     }
 
     private String validateContentType(String contentType) {
