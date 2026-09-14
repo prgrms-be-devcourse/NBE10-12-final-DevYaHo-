@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
@@ -48,7 +48,7 @@ const PRODUCT_SORT_LABEL: Record<ProductSortType, string> = {
   PRICE_DESC: "가격 높은순",
 };
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
 const PRODUCT_ROW_SIZE = 4;
 
 function isSort(value: string | null): value is Sort {
@@ -160,9 +160,10 @@ export default function ExplorePage() {
   const {
     items: ongoing,
     loading: ongoingLoading,
-    page: ongoingPage,
-    totalPages: ongoingTotalPages,
-    setPage: setOngoingPage,
+    loadingMore: ongoingLoadingMore,
+    hasNext: ongoingHasNext,
+    totalElements: ongoingTotalElements,
+    loadMore: loadMoreOngoing,
   } = useGroupBuyList("ONGOING", {
     sort: sortParam,
     size: PAGE_SIZE,
@@ -172,9 +173,10 @@ export default function ExplorePage() {
   const {
     items: scheduled,
     loading: scheduledLoading,
-    page: scheduledPage,
-    totalPages: scheduledTotalPages,
-    setPage: setScheduledPage,
+    loadingMore: scheduledLoadingMore,
+    hasNext: scheduledHasNext,
+    totalElements: scheduledTotalElements,
+    loadMore: loadMoreScheduled,
   } = useGroupBuyList("READY", {
     sort: sortParam,
     size: PAGE_SIZE,
@@ -208,23 +210,31 @@ export default function ExplorePage() {
 
   const loading =
     effectiveStatus === "all" ? ongoingLoading || scheduledLoading : effectiveStatus === "scheduled" ? scheduledLoading : ongoingLoading;
-  const page = effectiveStatus === "scheduled" ? scheduledPage : ongoingPage;
-  const totalPages =
+  const loadingMore =
     effectiveStatus === "all"
-      ? Math.max(ongoingTotalPages, scheduledTotalPages)
+      ? ongoingLoadingMore || scheduledLoadingMore
       : effectiveStatus === "scheduled"
-        ? scheduledTotalPages
-        : ongoingTotalPages;
-  // "전체"는 진행중/진행예정 두 목록을 합쳐 보여주므로, 페이지 이동 시 두 페이지 상태를 함께 맞춰준다
-  const setPage =
+        ? scheduledLoadingMore
+        : ongoingLoadingMore;
+  const hasNext =
+    effectiveStatus === "all" ? ongoingHasNext || scheduledHasNext : effectiveStatus === "scheduled" ? scheduledHasNext : ongoingHasNext;
+  const totalCount =
     effectiveStatus === "all"
-      ? (value: number | ((prev: number) => number)) => {
-          setOngoingPage(value);
-          setScheduledPage(value);
-        }
+      ? ongoingTotalElements + scheduledTotalElements
       : effectiveStatus === "scheduled"
-        ? setScheduledPage
-        : setOngoingPage;
+        ? scheduledTotalElements
+        : ongoingTotalElements;
+  // "전체"는 진행중/진행예정 두 목록을 합쳐 보여주므로, 각자 더 가져올 페이지가 남아있는 목록만 이어서 불러온다
+  const loadMore = useCallback(() => {
+    if (effectiveStatus === "all") {
+      if (ongoingHasNext) loadMoreOngoing();
+      if (scheduledHasNext) loadMoreScheduled();
+    } else if (effectiveStatus === "scheduled") {
+      loadMoreScheduled();
+    } else {
+      loadMoreOngoing();
+    }
+  }, [effectiveStatus, ongoingHasNext, scheduledHasNext, loadMoreOngoing, loadMoreScheduled]);
 
   useEffect(() => {
     setQuery(searchParams.get("q") ?? "");
@@ -255,6 +265,26 @@ export default function ExplorePage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [isSearchMode, groupBuyHasNext, groupBuyLoadingMore, loadMoreGroupBuyResults]);
+
+  // 검색 모드가 아닌 일반 둘러보기 목록(진행중/진행예정/전체) 전용 무한 스크롤
+  const dealsSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (isSearchMode || isProductsView) return;
+    const el = dealsSentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNext && !loadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isSearchMode, isProductsView, hasNext, loadingMore, loadMore]);
 
   const baseDeals = useMemo(() => {
     if (effectiveStatus === "all") return [...ongoing, ...scheduled];
@@ -345,14 +375,14 @@ export default function ExplorePage() {
       )}
 
       {!isSearchMode && !isProductsView && category === "전체" && (
-        <p className="text-base font-bold">{filtered.length}개의 공동구매가 있어요</p>
+        <p className="text-base font-bold">{totalCount}개의 공동구매가 있어요</p>
       )}
 
       {/* 헤더 탭은 카테고리 구분 없이 상태만 훑어보는 용도이고, 이 셀렉트박스는 카테고리를
           선택한 뒤 그 안에서 상태를 좁혀보기 위한 용도라 카테고리 선택 시에만 노출한다 */}
       {!isSearchMode && !isProductsView && category !== "전체" && (
         <div className="flex items-center justify-between">
-          <p className="text-base font-bold">{filtered.length}개의 공동구매가 있어요</p>
+          <p className="text-base font-bold">{totalCount}개의 공동구매가 있어요</p>
           <SelectField
             value={statusFilter === "all" ? "all" : statusFilter === "scheduled" ? "scheduled" : sort === "closing" ? "closing" : "ongoing"}
             onChange={(value) => {
@@ -508,29 +538,8 @@ export default function ExplorePage() {
               <GroupBuyCard key={item.id} item={item} />
             ))}
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button
-                variant="secondary"
-                className="px-3 py-1.5 text-xs"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                이전
-              </Button>
-              <span className="flex items-center px-2 text-xs text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                className="px-3 py-1.5 text-xs"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                다음
-              </Button>
-            </div>
-          )}
+          <div ref={dealsSentinelRef} className="h-1" />
+          {loadingMore && <p className="py-4 text-center text-sm text-wb-secondary">불러오는 중...</p>}
         </>
       )}
     </div>

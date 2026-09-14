@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listGroupBuys } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
 import type { GroupBuyStatus, GroupBuySummaryResponse } from "@/lib/api/types";
@@ -64,19 +64,25 @@ export function useGroupBuyList(
 ) {
   const [items, setItems] = useState<GroupBuyCardView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const sort = options?.sort;
   const size = options?.size ?? 50;
   const categoryId = options?.categoryId;
   // 카테고리 이름 -> id 변환이 비동기로 끝나는 동안(예: page.tsx의 productCategories 로딩 중)
   // categoryId가 아직 확정되지 않은 상태 - 기본값 true라 categoryId를 안 쓰는 화면은 그대로 동작한다
   const enabled = options?.enabled ?? true;
+  // 스크롤 중 IntersectionObserver가 loadingMore state가 반영되기 전에 짧은 간격으로 여러 번 발화할 수
+  // 있어, state보다 즉시 반영되는 ref로 같은 페이지가 중복 요청되는 것(중복 key로 이어짐)을 막는다
+  const fetchingRef = useRef(false);
 
-  // sort/size/status/categoryId가 바뀌면 이전 조건으로 보던 페이지 번호는 더 이상 의미가 없으므로 1페이지로 되돌린다
+  // sort/size/status/categoryId가 바뀌면 이전 조건으로 쌓아온 목록은 더 이상 의미가 없으므로 1페이지부터 다시 쌓는다
   useEffect(() => {
     setPage(0);
+    setItems([]);
   }, [status, sort, size, categoryId]);
 
   useEffect(() => {
@@ -84,18 +90,30 @@ export function useGroupBuyList(
     let ignore = false;
 
     async function load() {
-      setLoading(true);
+      fetchingRef.current = true;
+      if (page === 0) setLoading(true);
+      else setLoadingMore(true);
       setError(null);
       try {
         const result = await listGroupBuys({ status, size, sort, page, categoryId });
         if (!ignore) {
-          setItems(result.content.map(toCardView));
+          const mapped = result.content.map(toCardView);
+          setItems((prev) => {
+            if (page === 0) return mapped;
+            const seenIds = new Set(prev.map((item) => item.id));
+            return [...prev, ...mapped.filter((item) => !seenIds.has(item.id))];
+          });
           setTotalPages(result.page.totalPages);
+          setTotalElements(result.page.totalElements);
         }
       } catch (e) {
         if (!ignore) setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
       } finally {
-        if (!ignore) setLoading(false);
+        fetchingRef.current = false;
+        if (!ignore) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     }
 
@@ -105,5 +123,12 @@ export function useGroupBuyList(
     };
   }, [status, sort, size, page, categoryId, enabled]);
 
-  return { items, loading, error, page, totalPages, setPage };
+  const hasNext = page + 1 < totalPages;
+
+  function loadMore() {
+    if (!hasNext || fetchingRef.current) return;
+    setPage((p) => p + 1);
+  }
+
+  return { items, loading, loadingMore, error, hasNext, totalElements, loadMore };
 }
