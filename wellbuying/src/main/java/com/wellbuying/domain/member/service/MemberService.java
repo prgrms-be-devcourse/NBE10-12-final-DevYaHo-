@@ -126,10 +126,10 @@ public class MemberService {
         member.recordLogin();
     }
 
-    // 관리자 회원 목록 조회 - role/status로 선택적으로 필터링
+    // 관리자 회원 목록 조회 - role/status로 선택적으로 필터링, keyword가 있으면 email LIKE 검색
     @Transactional(readOnly = true)
-    public Page<MemberSummaryResponse> findMembers(Role role, MemberStatus status, Pageable pageable) {
-        return memberRepository.search(role, status, pageable);
+    public Page<MemberSummaryResponse> findMembers(Role role, MemberStatus status, String keyword, Pageable pageable) {
+        return memberRepository.search(role, status, keyword, pageable);
     }
 
     // 휴면 전환 배치 1건 처리 - MemberDormancyScheduler와 별도 빈이어야 @Transactional 프록시가 동작한다(자기 자신 호출 시 AOP 미적용)

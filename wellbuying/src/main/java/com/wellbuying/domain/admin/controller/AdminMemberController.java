@@ -33,13 +33,14 @@ public class AdminMemberController {
         this.memberService = memberService;
     }
 
-    // role/status로 선택적으로 필터링한 회원 목록 조회
-    @Operation(summary = "role/status로 선택적으로 필터링한 회원 목록 조회")
+    // role/status로 선택적으로 필터링하고, keyword가 있으면 email로 검색한 회원 목록 조회
+    @Operation(summary = "role/status 필터 + email 키워드 검색으로 회원 목록 조회")
     @GetMapping
     public ResponseEntity<Page<MemberSummaryResponse>> list(
             @RequestParam(required = false) Role role,
             @RequestParam(required = false) MemberStatus status,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(memberService.findMembers(role, status, pageable));
+        return ResponseEntity.ok(memberService.findMembers(role, status, keyword, pageable));
     }
 }

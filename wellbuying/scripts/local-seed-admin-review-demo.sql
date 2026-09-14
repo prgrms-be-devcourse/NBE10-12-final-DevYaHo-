@@ -7,6 +7,16 @@
 --   docker exec -i wellbuying-postgres psql -U postgres -d wellbuying < scripts/local-seed-admin-review-demo.sql
 --
 -- 비밀번호는 전부 testpass1234 (local-seed.sql과 동일한 BCrypt 해시)
+--
+-- !! 중요 !! seller_info.account_number/account_holder는 SellerInfoFieldConverter(AES-256-GCM)로
+-- 앱이 암복호화한다. 이 스크립트는 SQL로 평문을 그대로 넣기 때문에, 실행 직후 반드시
+-- scripts/encrypt-seller-info.js로 암호화해줘야 한다 - 안 하면 seller_info를 읽는 API
+-- (판매자 심사 목록, 전환/정지 이력 조회 등)가 전부 500(Illegal base64 character)으로 깨진다.
+--   docker exec wellbuying-postgres psql -U postgres -d wellbuying -t -A -F'|' \
+--     -c "SELECT id, account_number, account_holder FROM seller_info WHERE length(account_number) < 20 ORDER BY id;" \
+--     > /tmp/seller_info_plain.csv
+--   node scripts/encrypt-seller-info.js /tmp/seller_info_plain.csv /tmp/seller_info_encrypt.sql
+--   docker exec -i wellbuying-postgres psql -U postgres -d wellbuying < /tmp/seller_info_encrypt.sql
 
 BEGIN;
 

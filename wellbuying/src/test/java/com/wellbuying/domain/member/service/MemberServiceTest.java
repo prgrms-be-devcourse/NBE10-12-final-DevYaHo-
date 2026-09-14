@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -307,11 +308,11 @@ class MemberServiceTest {
                 Role.BUYER, MemberStatus.ACTIVE, null, member.getCreatedAt(), null, null);
         PageRequest pageable = PageRequest.of(0, 20);
         PageImpl<MemberSummaryResponse> page = new PageImpl<>(java.util.List.of(summary), pageable, 1);
-        when(memberRepository.search(Role.BUYER, MemberStatus.ACTIVE, pageable)).thenReturn(page);
+        when(memberRepository.search(Role.BUYER, MemberStatus.ACTIVE, null, pageable)).thenReturn(page);
 
-        var result = memberService.findMembers(Role.BUYER, MemberStatus.ACTIVE, pageable);
+        var result = memberService.findMembers(Role.BUYER, MemberStatus.ACTIVE, null, pageable);
 
         assertThat(result).containsExactly(summary);
-        verify(memberRepository).search(eq(Role.BUYER), eq(MemberStatus.ACTIVE), eq(pageable));
+        verify(memberRepository).search(eq(Role.BUYER), eq(MemberStatus.ACTIVE), isNull(), eq(pageable));
     }
 }
