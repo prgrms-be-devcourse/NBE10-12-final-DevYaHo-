@@ -47,7 +47,6 @@ import java.util.stream.Stream;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -185,10 +184,10 @@ public class ProductService {
         return productId;
     }
 
-    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관, 삭제된 상품은 제외) 조회
+    // 로그인한 판매자 본인이 등록한 상품 전체(상태 무관, 삭제된 상품은 제외) 조회, keyword가 있으면 상품명 LIKE 검색
     @Transactional(readOnly = true)
-    public Slice<ProductMineResponse> getMyProducts(Long sellerId, Pageable pageable) {
-        return productRepository.findBySeller(sellerId, pageable);
+    public Page<ProductMineResponse> getMyProducts(Long sellerId, String keyword, Pageable pageable) {
+        return productRepository.findBySeller(sellerId, keyword, pageable);
     }
 
     // 관리자 상품 심사 목록 - 상태별(PENDING/APPROVED/REJECTED) 조회, keyword가 있으면 상품명 LIKE 검색

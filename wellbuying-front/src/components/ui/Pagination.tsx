@@ -2,13 +2,9 @@
 
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
-// 현재 페이지를 중심으로 최대 10개 숫자만 보여준다 (0-based page를 1-based로 표시)
-const WINDOW_SIZE = 10;
+const BLOCK_SIZE = 10;
 
-function windowStartOf(page: number): number {
-  return Math.floor(page / WINDOW_SIZE) * WINDOW_SIZE;
-}
-
+// page/onChange는 0-베이스(백엔드 Pageable 규약). 화면에는 1-베이스 번호로 표시한다.
 export function Pagination({
   page,
   totalPages,
@@ -20,70 +16,60 @@ export function Pagination({
 }) {
   if (totalPages <= 1) return null;
 
-  const windowStart = windowStartOf(page);
-  const windowEnd = Math.min(windowStart + WINDOW_SIZE, totalPages);
-  const pages = Array.from({ length: windowEnd - windowStart }, (_, i) => windowStart + i);
-  const hasPrevWindow = windowStart > 0;
-  const hasNextWindow = windowEnd < totalPages;
+  const blockStart = Math.floor(page / BLOCK_SIZE) * BLOCK_SIZE;
+  const blockEnd = Math.min(blockStart + BLOCK_SIZE, totalPages);
+  const pageNumbers = Array.from({ length: blockEnd - blockStart }, (_, i) => blockStart + i);
+  const hasPrevBlock = blockStart > 0;
+  const hasNextBlock = blockEnd < totalPages;
 
   return (
-    <nav className="flex items-center justify-center gap-1" aria-label="페이지네이션">
-      <button
-        type="button"
-        disabled={!hasPrevWindow}
-        onClick={() => onChange(windowStart - WINDOW_SIZE)}
-        aria-label="이전 10페이지"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-wb-secondary hover:bg-wb-canvas disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+    <div className="flex items-center justify-center gap-1">
+      <PageButton disabled={!hasPrevBlock} onClick={() => onChange(blockStart - BLOCK_SIZE)} aria-label="이전 10페이지">
         <ChevronsLeft className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        disabled={page === 0}
-        onClick={() => onChange(page - 1)}
-        aria-label="이전 페이지"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-wb-secondary hover:bg-wb-canvas disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+      </PageButton>
+      <PageButton disabled={page === 0} onClick={() => onChange(page - 1)} aria-label="이전 페이지">
         <ChevronLeft className="h-4 w-4" />
-      </button>
-
-      {pages.map((p) => (
-        <PageButton key={p} page={p} active={p === page} onClick={onChange} />
+      </PageButton>
+      {pageNumbers.map((p) => (
+        <PageButton key={p} active={p === page} onClick={() => onChange(p)}>
+          {p + 1}
+        </PageButton>
       ))}
-
-      <button
-        type="button"
-        disabled={page + 1 >= totalPages}
-        onClick={() => onChange(page + 1)}
-        aria-label="다음 페이지"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-wb-secondary hover:bg-wb-canvas disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+      <PageButton disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)} aria-label="다음 페이지">
         <ChevronRight className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        disabled={!hasNextWindow}
-        onClick={() => onChange(windowStart + WINDOW_SIZE)}
-        aria-label="다음 10페이지"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-wb-secondary hover:bg-wb-canvas disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+      </PageButton>
+      <PageButton disabled={!hasNextBlock} onClick={() => onChange(blockEnd)} aria-label="다음 10페이지">
         <ChevronsRight className="h-4 w-4" />
-      </button>
-    </nav>
+      </PageButton>
+    </div>
   );
 }
 
-function PageButton({ page, active, onClick }: { page: number; active: boolean; onClick: (page: number) => void }) {
+function PageButton({
+  children,
+  active,
+  disabled,
+  onClick,
+  "aria-label": ariaLabel,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  "aria-label"?: string;
+}) {
   return (
     <button
       type="button"
-      onClick={() => onClick(page)}
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={ariaLabel}
       aria-current={active ? "page" : undefined}
-      className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-xs font-bold transition-colors ${
-        active ? "bg-wb-green text-white" : "text-wb-secondary hover:bg-wb-canvas"
+      className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        active ? "bg-wb-green text-white" : "text-wb-ink hover:bg-wb-canvas"
       }`}
     >
-      {page + 1}
+      {children}
     </button>
   );
 }

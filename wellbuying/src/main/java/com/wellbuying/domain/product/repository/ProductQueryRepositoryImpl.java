@@ -16,9 +16,9 @@ import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.support.PageableExecutionUtils;
 
 public class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
@@ -91,9 +91,9 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .fetch();
     }
 
-    // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
+    // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회, keyword가 있으면 상품명 LIKE 검색
     @Override
-    public Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable) {
+    public Page<ProductMineResponse> findBySeller(Long sellerId, String keyword, Pageable pageable) {
         List<ProductMineResponse> content = queryFactory
                 .select(Projections.constructor(ProductMineResponse.class,
                         product.id,
@@ -105,21 +105,24 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                         product.status,
                         product.createdAt))
                 .from(product)
-                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull())
+                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull(), productNameContains(keyword))
                 .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)
+                .limit(pageable.getPageSize())
                 .fetch();
 
-        return toSlice(pageable, content);
+        return PageableExecutionUtils.getPage(content, pageable, () -> {
+            Long total = queryFactory
+                    .select(product.count())
+                    .from(product)
+                    .where(product.sellerId.eq(sellerId), product.deletedAt.isNull(), productNameContains(keyword))
+                    .fetchOne();
+            return total != null ? total : 0L;
+        });
     }
 
-    private <T> Slice<T> toSlice(Pageable pageable, List<T> results) {
-        boolean hasNext = results.size() > pageable.getPageSize();
-        if (hasNext) {
-            results.remove(results.size() - 1);
-        }
-        return new SliceImpl<>(results, pageable, hasNext);
+    private BooleanExpression productNameContains(String keyword) {
+        return keyword != null && !keyword.isBlank() ? product.productName.containsIgnoreCase(keyword) : null;
     }
 
     private String buildCursor(ProductSummaryResponse last, ProductSortType sort) {

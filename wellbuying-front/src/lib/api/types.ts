@@ -220,6 +220,11 @@ export type ProductCreateRequest = {
   thumbnailUrl?: string;
 };
 
+export type ProductImageUploadUrlResponse = {
+  uploadUrl: string;
+  thumbnailUrl: string;
+};
+
 export type ProductStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 // GET /api/products/mine 응답 - 판매자 본인이 등록한 상품(상태 무관) 조회
@@ -288,16 +293,6 @@ export type CategoryUpdateRequest = {
   sortOrder: number;
 };
 
-
-// 백엔드가 Slice<T>를 직렬화한 형태 - Page와 달리 총 개수를 세지 않아 page 메타데이터가 없다
-export type SliceResponse<T> = {
-  content: T[];
-  size: number;
-  number: number;
-  first: boolean;
-  last: boolean;
-  empty: boolean;
-};
 
 // appliedPrice는 공동구매가 성사되기 전까지 null - 백엔드는 참여 시점에 가격을 계산/저장하지 않고
 // 성사되는 순간에만 참여자 전원에게 동일한 최종가를 채운다

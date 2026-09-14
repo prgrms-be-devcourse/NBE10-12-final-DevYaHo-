@@ -27,6 +27,7 @@ import com.wellbuying.domain.member.entity.Member;
 import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.entity.Product;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
@@ -79,6 +80,7 @@ class GroupBuyServiceTest {
         Product product = mock(Product.class);
         org.mockito.Mockito.lenient().when(product.getProductName()).thenReturn("정직한 사과");
         org.mockito.Mockito.lenient().when(product.getCategoryId()).thenReturn(1L);
+        org.mockito.Mockito.lenient().when(product.getStatus()).thenReturn(ProductStatus.APPROVED);
         return product;
     }
 
@@ -136,6 +138,22 @@ class GroupBuyServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+        verify(groupBuyRepository, never()).save(any());
+    }
+
+    // 본인 소유 상품이어도 관리자 승인(APPROVED) 전이면 GROUP_BUY_PRODUCT_NOT_APPROVED로 거부되는지 검증
+    @Test
+    void 승인되지_않은_상품이면_생성에_실패한다() {
+        Member seller = sellerMember();
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(seller));
+        Product product = ownedProduct();
+        when(product.getStatus()).thenReturn(ProductStatus.PENDING);
+        when(productService.getOwnedOrThrow(1L, 10L)).thenReturn(product);
+
+        assertThatThrownBy(() -> groupBuyService.create(1L, createRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_BUY_PRODUCT_NOT_APPROVED);
         verify(groupBuyRepository, never()).save(any());
     }
 
