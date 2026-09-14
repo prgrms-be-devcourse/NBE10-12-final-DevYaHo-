@@ -108,6 +108,20 @@ class AdminMemberControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[0].status").value(MemberStatus.WITHDRAWN.name()));
     }
 
+    // keyword 파라미터로 email을 대소문자 무시 부분 검색할 수 있는지 검증
+    @Test
+    void keyword로_email_검색을_할_수_있다() throws Exception {
+        Member admin = saveMember("admin-keyword@example.com", Role.ADMIN);
+        saveMember("target-user@wellbuying.local", Role.BUYER);
+        saveMember("other-user@example.com", Role.BUYER);
+
+        mockMvc.perform(get("/api/admin/members").param("keyword", "TARGET")
+                        .with(authentication(authOf(admin))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].email").value("target-user@wellbuying.local"));
+    }
+
     // ?sort= 파라미터로 정렬 기준을 지정하면 QueryDSL 조회에도 실제로 반영되는지 검증 (기본값인 createdAt desc 하드코딩이 아닌지 확인)
     @Test
     void sort_파라미터로_지정한_기준으로_정렬된다() throws Exception {

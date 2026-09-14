@@ -1,14 +1,18 @@
 package com.wellbuying.domain.settlement.service;
 
+import com.wellbuying.domain.settlement.dto.AdminSettlementTrendPointResponse;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
 import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
 import com.wellbuying.domain.settlement.repository.SettlementItemRepository;
 import com.wellbuying.domain.settlement.repository.SettlementTrendRow;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +27,12 @@ public class SettlementStatsService {
     private static final long TREND_WINDOW_MONTHS = 12;
 
     private final SettlementItemRepository settlementItemRepository;
+    private final BigDecimal platformFeeRate;
 
-    public SettlementStatsService(SettlementItemRepository settlementItemRepository) {
+    public SettlementStatsService(SettlementItemRepository settlementItemRepository,
+            @Value("${settlement.platform-fee-rate:0.05}") BigDecimal platformFeeRate) {
         this.settlementItemRepository = settlementItemRepository;
+        this.platformFeeRate = platformFeeRate;
     }
 
     @Transactional(readOnly = true)
@@ -35,6 +42,24 @@ public class SettlementStatsService {
         return rows.stream()
                 .map(row -> new SettlementTrendPointResponse(row.getPeriodStart(), row.getTotalSales(),
                         row.getGroupBuyCount().intValue()))
+                .toList();
+    }
+
+    // 관리자 매출 추이 그래프 - 판매자 구분 없는 플랫폼 전체 집계. platformFee는 그 구간 totalSales에
+    // 수수료율을 곱해 원 단위로 버린 추정치(SettlementConfirmationService와 같은 계산식)
+    @Transactional(readOnly = true)
+    public List<AdminSettlementTrendPointResponse> getAdminTrend(SettlementTrendGranularity granularity) {
+        LocalDateTime from = YearMonth.now().minusMonths(TREND_WINDOW_MONTHS - 1).atDay(1).atStartOfDay();
+        List<SettlementTrendRow> rows = settlementItemRepository.findTrendGlobal(granularity.truncUnit(), from);
+        return rows.stream()
+                .map(row -> {
+                    long platformFee = BigDecimal.valueOf(row.getTotalSales())
+                            .multiply(platformFeeRate)
+                            .setScale(0, RoundingMode.FLOOR)
+                            .longValueExact();
+                    return new AdminSettlementTrendPointResponse(row.getPeriodStart(), row.getTotalSales(),
+                            platformFee, row.getGroupBuyCount().intValue());
+                })
                 .toList();
     }
 

@@ -197,7 +197,10 @@ public class ProductService {
         Page<Product> page = (keyword != null && !keyword.isBlank())
                 ? productRepository.findByStatusAndDeletedAtIsNullAndProductNameContainingIgnoreCase(status, keyword, pageable)
                 : productRepository.findByStatusAndDeletedAtIsNull(status, pageable);
-        return page.map(ProductAdminResponse::of);
+        List<Long> sellerIds = page.getContent().stream().map(Product::getSellerId).distinct().toList();
+        Map<Long, String> sellerEmailsById = memberRepository.findAllById(sellerIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getEmail));
+        return page.map(product -> ProductAdminResponse.of(product, sellerEmailsById.getOrDefault(product.getSellerId(), "")));
     }
 
     // 상품 승인 - PENDING 여부 검증은 Product.approve()가 이미 담당(PRODUCT_ALREADY_PROCESSED)
@@ -285,26 +288,15 @@ public class ProductService {
         return productRepository.findByDeletedAtIsNotNull(pageable).map(ProductDeletedAdminResponse::of);
     }
 
-    // 관리자 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 동일하게 차단
+    // 관리자 등록 해지 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 차단. 물리적 삭제 없이 거절과
+    // 동일하게 REJECTED로 상태만 전환하고 admin_action_log에 남긴다(반려 플로우와 동일한 처리)
     @Transactional
-    public void adminDeleteProduct(Long adminId, Long productId, String reason) {
+    public void deregisterProduct(Long adminId, Long productId, String reason) {
         Product product = findProduct(productId);
         validateNoActiveGroupBuy(productId);
-        boolean wasIndexed = product.getStatus() == ProductStatus.APPROVED;
-        String thumbnailUrl = product.getThumbnailUrl();
-        product.delete(adminId, reason);
-        if (wasIndexed) {
-            outboxRepository.save(ProductSearchEventOutbox.delete(productId));
-        }
-        if (productImageUploadService.isOurBucketUrl(thumbnailUrl)) {
-            eventPublisher.publishEvent(new ProductImageOrphanedEvent(thumbnailUrl));
-        }
-        List<ProductImage> extraImages = productImageRepository.findByProductId(productId);
-        extraImages.stream()
-                .map(ProductImage::getImageUrl)
-                .filter(productImageUploadService::isOurBucketUrl)
-                .forEach(url -> eventPublisher.publishEvent(new ProductImageOrphanedEvent(url)));
-        productImageRepository.deleteByProductId(productId);
+        product.deregister();
+        outboxRepository.save(ProductSearchEventOutbox.delete(productId));
+        recordAction(productId, adminId, AdminActionType.REJECT, reason);
     }
 
     // 진행 중인(READY/ONGOING) 공동구매가 있으면 상품 삭제를 막는다

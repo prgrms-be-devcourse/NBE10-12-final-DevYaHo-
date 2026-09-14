@@ -24,10 +24,11 @@ class ProductAdminResponseTest {
         when(product.getStatus()).thenReturn(ProductStatus.PENDING);
         when(product.getCreatedAt()).thenReturn(createdAt);
 
-        ProductAdminResponse response = ProductAdminResponse.of(product);
+        ProductAdminResponse response = ProductAdminResponse.of(product, "seller@example.com");
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.sellerId()).isEqualTo(10L);
+        assertThat(response.sellerEmail()).isEqualTo("seller@example.com");
         assertThat(response.categoryId()).isEqualTo(100L);
         assertThat(response.productName()).isEqualTo("상품명");
         assertThat(response.startPrice()).isEqualTo(5000);

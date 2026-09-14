@@ -374,31 +374,31 @@ class ProductServiceTest {
     }
 
     @Test
-    void adminDeleteProduct_소유권_무관하게_삭제하고_사유를_기록한다() {
+    void deregisterProduct_소유권_무관하게_REJECTED로_전환하고_이력을_남긴다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, adminActionLogRepository, productImageUploadService, eventPublisher, productImageRepository, groupBuyPriceRepository);
         Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
         product.approve();
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         when(groupBuyRepository.existsByProductIdAndStatusIn(anyLong(), anyList())).thenReturn(false);
 
-        productService.adminDeleteProduct(999L, 1L, "이용약관 위반");
+        productService.deregisterProduct(999L, 1L, "이용약관 위반");
 
-        assertThat(product.isDeleted()).isTrue();
-        assertThat(product.getDeletedBy()).isEqualTo(999L);
-        assertThat(product.getDeleteReason()).isEqualTo("이용약관 위반");
+        assertThat(product.isDeleted()).isFalse();
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.REJECTED);
         ArgumentCaptor<ProductSearchEventOutbox> captor = ArgumentCaptor.forClass(ProductSearchEventOutbox.class);
         verify(outboxRepository).save(captor.capture());
         assertThat(captor.getValue().getEventType()).isEqualTo("DELETE");
+        verify(adminActionLogRepository).save(any());
     }
 
     @Test
-    void adminDeleteProduct_진행중인_공동구매가_있으면_관리자도_예외를_던진다() {
+    void deregisterProduct_진행중인_공동구매가_있으면_관리자도_예외를_던진다() {
         ProductService productService = new ProductService(productRepository, memberRepository, productCategoryRepository, productCountRepository, outboxRepository, groupBuyRepository, adminActionLogRepository, productImageUploadService, eventPublisher, productImageRepository, groupBuyPriceRepository);
         Product product = Product.register(1L, 10L, "상품", "설명", 10000, "url");
         when(productRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(product));
         when(groupBuyRepository.existsByProductIdAndStatusIn(eq(1L), anyList())).thenReturn(true);
 
-        assertThatThrownBy(() -> productService.adminDeleteProduct(999L, 1L, "사유"))
+        assertThatThrownBy(() -> productService.deregisterProduct(999L, 1L, "사유"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.CANNOT_DELETE_ACTIVE_PRODUCT);
     }

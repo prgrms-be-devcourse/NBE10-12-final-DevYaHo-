@@ -7,12 +7,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wellbuying.domain.settlement.dto.AdminSettlementTrendPointResponse;
 import com.wellbuying.domain.settlement.dto.SettlementMonthlySummaryResponse;
 import com.wellbuying.domain.settlement.dto.SettlementTrendGranularity;
 import com.wellbuying.domain.settlement.dto.SettlementTrendPointResponse;
 import com.wellbuying.domain.settlement.entity.SettlementItemStatus;
 import com.wellbuying.domain.settlement.repository.SettlementItemRepository;
 import com.wellbuying.domain.settlement.repository.SettlementTrendRow;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -30,7 +32,7 @@ class SettlementStatsServiceTest {
     private SettlementItemRepository settlementItemRepository;
 
     private SettlementStatsService service() {
-        return new SettlementStatsService(settlementItemRepository);
+        return new SettlementStatsService(settlementItemRepository, BigDecimal.valueOf(0.05));
     }
 
     @Test
@@ -93,5 +95,25 @@ class SettlementStatsServiceTest {
         assertThat(response.pendingItemCount()).isEqualTo(3);
         assertThat(response.thisMonthSettledAmount()).isEqualTo(700_000L);
         assertThat(response.thisMonthSettledItemCount()).isEqualTo(6);
+    }
+
+    @Test
+    void getAdminTrend은_판매자_구분_없이_집계하고_수수료를_원단위로_버려서_계산한다() {
+        LocalDateTime expectedFrom = YearMonth.now().minusMonths(11).atDay(1).atStartOfDay();
+        SettlementTrendRow row = mock(SettlementTrendRow.class);
+        when(row.getPeriodStart()).thenReturn(LocalDateTime.of(2026, 9, 1, 0, 0));
+        when(row.getTotalSales()).thenReturn(100_001L);
+        when(row.getGroupBuyCount()).thenReturn(7L);
+        when(settlementItemRepository.findTrendGlobal(eq("month"), eq(expectedFrom))).thenReturn(List.of(row));
+
+        List<AdminSettlementTrendPointResponse> points =
+                service().getAdminTrend(SettlementTrendGranularity.MONTHLY);
+
+        assertThat(points).hasSize(1);
+        AdminSettlementTrendPointResponse point = points.get(0);
+        assertThat(point.periodStart()).isEqualTo(LocalDateTime.of(2026, 9, 1, 0, 0));
+        assertThat(point.totalSales()).isEqualTo(100_001L);
+        assertThat(point.platformFee()).isEqualTo(5_000L); // floor(100001 * 0.05) = floor(5000.05) = 5000
+        assertThat(point.groupBuyCount()).isEqualTo(7);
     }
 }

@@ -251,11 +251,15 @@ public class GroupBuyService {
                 GroupBuySuspensionRequest.request(groupBuyId, producerId, request.reason()));
     }
 
-    // 관리자의 상태별 판매정지 요청 목록 조회 - 공동구매 제목을 함께 보여주기 위해 배치 조회 후 조합
+    // 관리자의 상태별 판매정지 요청 목록 조회 - 공동구매 제목을 함께 보여주기 위해 배치 조회 후 조합.
+    // keyword가 있으면 GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다(요청 테이블 자체엔 제목이 없다)
     @Transactional(readOnly = true)
     public Page<GroupBuySuspensionRequestResponse> listSuspensionRequests(GroupBuySuspensionStatus status,
-            Pageable pageable) {
-        Page<GroupBuySuspensionRequest> page = groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
+            String keyword, Pageable pageable) {
+        Page<GroupBuySuspensionRequest> page = (keyword != null && !keyword.isBlank())
+                ? groupBuySuspensionRequestRepository.findAllByStatusAndGroupBuyTitleContainingIgnoreCase(status,
+                        keyword, pageable)
+                : groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
         List<Long> groupBuyIds = page.getContent().stream().map(GroupBuySuspensionRequest::getGroupBuyId).distinct()
                 .toList();
         Map<Long, String> titlesById = groupBuyRepository.findAllById(groupBuyIds).stream()
@@ -274,6 +278,28 @@ public class GroupBuyService {
         recordSuspensionAction(requestId, adminId, AdminActionType.APPROVE, reason);
     }
 
+    // 관리자 강제 판매정지 - 생산자의 요청 없이 관리자가 직접 이상 있는 ONGOING 공동구매를 정지시킨다.
+    // 대기 없이 즉시 승인 상태인 판매정지 요청을 생성해서 기존 이력 조회 로직(target_type=GROUP_BUY_SUSPENSION_REQUEST)을
+    // 그대로 재사용한다 - PENDING으로 한 번도 저장되지 않으므로 "대기 중 요청 1건" 유니크 제약과도 충돌하지 않는다
+    // TODO(참여자 결제/환불): 이 메서드는 상태 전이(suspended=true, status=CANCELED)만 처리한다.
+    // 이미 결제 완료된 참여자에 대한 환불/취소 처리는 이번 스코프에서 다루지 않았다 - approveSuspensionRequest도
+    // 동일하게 환불을 처리하지 않으므로 기존 판매정지 승인 플로우와 범위가 같다. 별도 후속 작업으로 필요.
+    @Transactional
+    public void forceSuspend(Long groupBuyId, Long adminId, String reason) {
+        GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
+        if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
+        }
+        GroupBuySuspensionRequest request = GroupBuySuspensionRequest.request(groupBuyId, adminId, reason);
+        request.approve();
+        groupBuySuspensionRequestRepository.save(request);
+        groupBuy.suspend();
+        recordSuspensionAction(request.getId(), adminId, AdminActionType.APPROVE, reason);
+    }
+
     // 판매정지 요청 반려 - 요청만 REJECTED로 전환, 공동구매 상태는 변경하지 않음
     @Transactional
     public void rejectSuspensionRequest(Long requestId, Long adminId, String reason) {
@@ -282,11 +308,15 @@ public class GroupBuyService {
         recordSuspensionAction(requestId, adminId, AdminActionType.REJECT, reason);
     }
 
-    // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용
+    // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용.
+    // keyword가 있으면 GroupBuySuspensionRequest/GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다
     @Transactional(readOnly = true)
-    public Page<AdminActionLogResponse> listSuspensionActionLogs(Pageable pageable) {
-        Page<AdminActionLog> page = adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
-                AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
+    public Page<AdminActionLogResponse> listSuspensionActionLogs(String keyword, Pageable pageable) {
+        Page<AdminActionLog> page = (keyword != null && !keyword.isBlank())
+                ? adminActionLogRepository.findAllByTargetTypeAndGroupBuySuspensionRequestTitleContainingIgnoreCase(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, keyword, pageable)
+                : adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
         List<Long> requestIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
         Map<Long, Long> groupBuyIdsByRequestId = groupBuySuspensionRequestRepository.findAllById(requestIds).stream()
                 .collect(Collectors.toMap(GroupBuySuspensionRequest::getId, GroupBuySuspensionRequest::getGroupBuyId));

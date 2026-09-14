@@ -1,19 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock, TrendingUp, Wallet } from "lucide-react";
 import { SettlementDetailModal } from "@/components/producer/SettlementDetailModal";
 import { SettlementTrendChart } from "@/components/producer/SettlementTrendChart";
 import { Banner } from "@/components/ui/Banner";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill } from "@/components/ui/Tag";
 import { ApiError } from "@/lib/api/http";
 import { getSettlementMonthlySummary, getSettlementTrend, listMySettlements } from "@/lib/api/settlement";
-import type { SettlementListItemResponse, SettlementListStatus, SettlementMonthlySummaryResponse, SettlementTrendPointResponse } from "@/lib/api/types";
+import type { PageResponse, SettlementListItemResponse, SettlementListStatus, SettlementMonthlySummaryResponse, SettlementTrendPointResponse } from "@/lib/api/types";
 import { formatDateTime, won } from "@/lib/format";
 import { SETTLEMENT_LIST_STATUS_LABEL, SETTLEMENT_LIST_STATUS_TONE } from "@/lib/settlement/settlementStatus";
+import { usePagedQuery } from "@/hooks/usePagedQuery";
 
 const PAGE_SIZE = 10;
 
@@ -39,12 +40,7 @@ export default function ProducerSettlementsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
-  const [settlements, setSettlements] = useState<SettlementListItemResponse[]>([]);
   const [page, setPage] = useState(0);
-  const [hasNext, setHasNext] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [trend, setTrend] = useState<SettlementTrendPointResponse[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
@@ -91,56 +87,27 @@ export default function ProducerSettlementsPage() {
     };
   }, []);
 
-  const loadFirstPage = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await listMySettlements({
+  const { data, error, loading } = usePagedQuery<PageResponse<SettlementListItemResponse>>(
+    "producer-settlements",
+    { year, month, statusFilter, page },
+    () =>
+      listMySettlements({
         year,
         month,
         status: statusFilter === "ALL" ? undefined : statusFilter,
-        page: 0,
+        page,
         size: PAGE_SIZE,
-      });
-      setSettlements(res.content);
-      setPage(res.page.number);
-      setHasNext(res.page.number + 1 < res.page.totalPages);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "정산 내역을 불러오지 못했어요.");
-    } finally {
-      setLoading(false);
-    }
-  }, [year, month, statusFilter]);
-
-  useEffect(() => {
-    void loadFirstPage();
-  }, [loadFirstPage]);
-
-  async function loadMore() {
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const res = await listMySettlements({
-        year,
-        month,
-        status: statusFilter === "ALL" ? undefined : statusFilter,
-        page: page + 1,
-        size: PAGE_SIZE,
-      });
-      setSettlements((prev) => [...prev, ...res.content]);
-      setPage(res.page.number);
-      setHasNext(res.page.number + 1 < res.page.totalPages);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "더 불러오지 못했어요.");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
+      }),
+    "정산 내역을 불러오지 못했어요.",
+  );
+  const settlements = data?.content ?? [];
+  const totalPages = data?.page.totalPages ?? 0;
 
   function shiftMonth(delta: number) {
     const base = new Date(year, month - 1 + delta, 1);
     setYear(base.getFullYear());
     setMonth(base.getMonth() + 1);
+    setPage(0);
   }
 
   return (
@@ -219,7 +186,10 @@ export default function ProducerSettlementsPage() {
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
+              onClick={() => {
+                setStatusFilter(tab.value);
+                setPage(0);
+              }}
               className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${
                 statusFilter === tab.value ? "bg-wb-green text-white" : "text-wb-secondary hover:text-wb-ink"
               }`}
@@ -283,11 +253,7 @@ export default function ProducerSettlementsPage() {
 
       {error && settlements.length > 0 && <Banner tone="error">{error}</Banner>}
 
-      {hasNext && (
-        <Button variant="secondary" className="w-full" loading={loadingMore} onClick={() => void loadMore()}>
-          더 보기
-        </Button>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <SettlementDetailModal settlement={selected} open={selected !== null} onClose={() => setSelected(null)} />
     </div>

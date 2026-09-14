@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
@@ -10,48 +10,46 @@ import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatusPill } from "@/components/ui/Tag";
 import { cancelGroupBuy, listMyGroupBuys } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
-import type { GroupBuySummaryResponse } from "@/lib/api/types";
+import type { GroupBuySummaryResponse, PageResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
+
+const PAGE_SIZE = 10;
 
 export default function ProducerDealsPage() {
-  const [items, setItems] = useState<GroupBuySummaryResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
   const [suspensionTargetId, setSuspensionTargetId] = useState<number | null>(null);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const page = await listMyGroupBuys({ size: 100 });
-      setItems(page.content);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, error, loading } = usePagedQuery<PageResponse<GroupBuySummaryResponse>>(
+    "producer-group-buys",
+    { page, reloadToken },
+    () => listMyGroupBuys({ page, size: PAGE_SIZE }),
+    "목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? [];
+  const totalPages = data?.page.totalPages ?? 0;
 
-  useEffect(() => {
-    async function load() {
-      await reload();
-    }
-    load();
-  }, [reload]);
+  function reload() {
+    invalidatePagedQuery("producer-group-buys");
+    setReloadToken((t) => t + 1);
+  }
 
   async function handleCancel(id: number) {
-    setError(null);
+    setActionError(null);
     try {
       await cancelGroupBuy(id);
-      await reload();
+      reload();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "취소 처리 중 오류가 발생했어요.");
+      setActionError(e instanceof ApiError ? e.message : "취소 처리 중 오류가 발생했어요.");
     }
   }
 
@@ -70,9 +68,9 @@ export default function ProducerDealsPage() {
         </Button>
       </div>
 
-      {error && <Banner tone="error">{error}</Banner>}
+      {(error || actionError) && <Banner tone="error">{actionError ?? error}</Banner>}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : items.length === 0 ? (
         <EmptyState
@@ -130,6 +128,8 @@ export default function ProducerDealsPage() {
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <GroupBuyCreateModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={reload} />
 

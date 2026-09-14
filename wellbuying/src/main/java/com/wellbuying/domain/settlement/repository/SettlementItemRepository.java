@@ -82,6 +82,18 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
     List<SettlementTrendRow> findTrend(@Param("producerId") Long producerId, @Param("unit") String unit,
             @Param("from") LocalDateTime from);
 
+    // 관리자 매출 추이 그래프 - findTrend와 같으나 판매자 구분 없이 플랫폼 전체를 집계한다
+    @Query(value = """
+            SELECT date_trunc(:unit, si.paid_at) AS "periodStart",
+                   COALESCE(SUM(si.amount), 0) AS "totalSales",
+                   COUNT(DISTINCT si.group_buy_id) AS "groupBuyCount"
+            FROM settlement_item si
+            WHERE si.paid_at >= :from
+            GROUP BY "periodStart"
+            ORDER BY "periodStart"
+            """, nativeQuery = true)
+    List<SettlementTrendRow> findTrendGlobal(@Param("unit") String unit, @Param("from") LocalDateTime from);
+
     // 이번 달 요약 카드 - 기간 범위 매출 (상태 무관, [from, to) 반열림 구간)
     @Query("""
             SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si
@@ -106,6 +118,21 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
             @Param("status") SettlementItemStatus status);
 
     long countByProducerIdAndStatus(Long producerId, SettlementItemStatus status);
+
+    // 관리자 "이번 달 매출" 카드 - sumAmountByProducerIdAndPaidAtRange와 같으나 판매자 구분 없이 전체 집계
+    @Query("""
+            SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si
+            WHERE si.paidAt >= :from AND si.paidAt < :to
+            """)
+    long sumAmountByPaidAtRange(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    // 관리자 정산 대시보드 "정산 대기" 요약 카드 - 판매자 구분 없이 전체 ACCRUED 금액/건수.
+    // 건수는 참여자(행) 수가 아니라 서로 다른 공동구매 수 - 정산은 공동구매 단위로 확정되기 때문
+    @Query("SELECT COALESCE(SUM(si.amount), 0L) FROM SettlementItem si WHERE si.status = :status")
+    long sumAmountByStatus(@Param("status") SettlementItemStatus status);
+
+    @Query("SELECT COUNT(DISTINCT si.groupBuyId) FROM SettlementItem si WHERE si.status = :status")
+    long countDistinctGroupBuyIdByStatus(@Param("status") SettlementItemStatus status);
 
     // "이번 달 정산 완료" 카드 - 이번 달 매출 중 이미 CONFIRMED까지 끝난 몫
     @Query("""
@@ -152,4 +179,57 @@ public interface SettlementItemRepository extends JpaRepository<SettlementItem, 
             """, nativeQuery = true)
     Page<SettlementPendingRow> findPendingByProducerIdAndFinalizedAtRange(@Param("producerId") Long producerId,
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, Pageable pageable);
+
+    // 관리자 "정산 대기중" 월별 리스트 - findPendingByProducerIdAndFinalizedAtRange와 같으나
+    // 판매자 구분 없이 전체를 대상으로 한다 (SettlementQueryService.getAllSettlementsForMonth)
+    @Query(value = """
+            SELECT si.group_buy_id AS "groupBuyId", gb.title AS "groupBuyTitle", si.producer_id AS "producerId",
+                   COUNT(*) AS "itemCount", SUM(si.amount) AS "totalSales"
+            FROM settlement_item si
+            JOIN group_buy gb ON gb.id = si.group_buy_id
+            WHERE si.status = 'ACCRUED'
+              AND gb.finalized_at >= :from AND gb.finalized_at < :to
+            GROUP BY si.group_buy_id, gb.title, si.producer_id, gb.finalized_at
+            ORDER BY gb.finalized_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM (
+                SELECT si.group_buy_id
+                FROM settlement_item si
+                JOIN group_buy gb ON gb.id = si.group_buy_id
+                WHERE si.status = 'ACCRUED'
+                  AND gb.finalized_at >= :from AND gb.finalized_at < :to
+                GROUP BY si.group_buy_id
+            ) sub
+            """, nativeQuery = true)
+    Page<SettlementPendingRow> findPendingByFinalizedAtRange(@Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to, Pageable pageable);
+
+    // 관리자 "정산 대기중" 월별 리스트 + 공동구매 제목 검색(keyword) - 제목 -> groupBuyId 목록을 애플리케이션
+    // 메모리로 먼저 가져와 IN 절로 넘기지 않고, group_buy와의 JOIN에 제목 조건을 바로 걸어 DB에서 한 번에 필터링한다
+    @Query(value = """
+            SELECT si.group_buy_id AS "groupBuyId", gb.title AS "groupBuyTitle", si.producer_id AS "producerId",
+                   COUNT(*) AS "itemCount", SUM(si.amount) AS "totalSales"
+            FROM settlement_item si
+            JOIN group_buy gb ON gb.id = si.group_buy_id
+            WHERE si.status = 'ACCRUED'
+              AND gb.finalized_at >= :from AND gb.finalized_at < :to
+              AND LOWER(gb.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            GROUP BY si.group_buy_id, gb.title, si.producer_id, gb.finalized_at
+            ORDER BY gb.finalized_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM (
+                SELECT si.group_buy_id
+                FROM settlement_item si
+                JOIN group_buy gb ON gb.id = si.group_buy_id
+                WHERE si.status = 'ACCRUED'
+                  AND gb.finalized_at >= :from AND gb.finalized_at < :to
+                  AND LOWER(gb.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                GROUP BY si.group_buy_id
+            ) sub
+            """, nativeQuery = true)
+    Page<SettlementPendingRow> findPendingByFinalizedAtRangeAndTitleContainingIgnoreCase(
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to, @Param("keyword") String keyword,
+            Pageable pageable);
 }

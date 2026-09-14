@@ -104,6 +104,14 @@ public class Product {
         this.status = ProductStatus.REJECTED;
     }
 
+    // 관리자가 등록 해지 - 승인(APPROVED) 상태의 상품을 거절과 동일하게 REJECTED로 전환한다 (물리적 삭제 없음)
+    public void deregister() {
+        if (status != ProductStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);
+        }
+        this.status = ProductStatus.REJECTED;
+    }
+
     public void delete(Long deletedBy, String reason) {
         if (this.deletedAt != null) {
             throw new BusinessException(ErrorCode.PRODUCT_ALREADY_PROCESSED);

@@ -1,5 +1,8 @@
 import { http } from "@/lib/api/http";
 import type {
+  AdminActionLogResponse,
+  AdminSettlementSummaryResponse,
+  AdminSettlementTrendPointResponse,
   GroupBuyStatus,
   GroupBuySummaryResponse,
   GroupBuySuspensionRequestResponse,
@@ -8,11 +11,13 @@ import type {
   MemberSummaryResponse,
   PageResponse,
   ProductAdminResponse,
-  ProductDeletedAdminResponse,
   ProductStatus,
   Role,
   SellerInfoResponse,
   SellerStatus,
+  SettlementListItemResponse,
+  SettlementListStatus,
+  SettlementTrendGranularity,
 } from "@/lib/api/types";
 
 export function listSellerApplications(params: {
@@ -63,32 +68,22 @@ export function rejectProduct(productId: number, reason: string): Promise<void> 
   return http.post<void>(`/api/admin/products/${productId}/reject`, { reason }, { auth: true });
 }
 
-export function listDeletedProducts(params?: {
-  page?: number;
-  size?: number;
-}): Promise<PageResponse<ProductDeletedAdminResponse>> {
-  const query = new URLSearchParams();
-  if (params?.page !== undefined) query.set("page", String(params.page));
-  if (params?.size !== undefined) query.set("size", String(params.size));
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return http.get<PageResponse<ProductDeletedAdminResponse>>(`/api/admin/products/deleted${suffix}`, {
-    auth: true,
-  });
-}
-
-export function forceDeleteProduct(productId: number, reason: string): Promise<void> {
-  return http.post<void>(`/api/admin/products/${productId}/force-delete`, { reason }, { auth: true });
+// 관리자 등록 해지 - 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환
+export function deregisterProduct(productId: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/products/${productId}/deregister`, { reason }, { auth: true });
 }
 
 export function listMembers(params?: {
   role?: Role;
   status?: MemberStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<MemberSummaryResponse>> {
   const query = new URLSearchParams();
   if (params?.role) query.set("role", params.role);
   if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.page !== undefined) query.set("page", String(params.page));
   if (params?.size !== undefined) query.set("size", String(params.size));
   const suffix = query.toString() ? `?${query.toString()}` : "";
@@ -112,10 +107,12 @@ export function listAdminGroupBuys(params?: {
 
 export function listSuspensionRequests(params: {
   status: GroupBuySuspensionStatus;
+  keyword?: string;
   page?: number;
   size?: number;
 }): Promise<PageResponse<GroupBuySuspensionRequestResponse>> {
   const query = new URLSearchParams({ status: params.status });
+  if (params.keyword) query.set("keyword", params.keyword);
   if (params.page !== undefined) query.set("page", String(params.page));
   if (params.size !== undefined) query.set("size", String(params.size));
   return http.get<PageResponse<GroupBuySuspensionRequestResponse>>(
@@ -130,4 +127,84 @@ export function approveSuspensionRequest(id: number, reason: string): Promise<vo
 
 export function rejectSuspensionRequest(id: number, reason: string): Promise<void> {
   return http.post<void>(`/api/admin/groupBuys/suspension-requests/${id}/reject`, { reason }, { auth: true });
+}
+
+// 생산자 요청 없이 관리자가 이상 있는 ONGOING 공동구매를 직접 판매정지
+export function forceSuspendGroupBuy(id: number, reason: string): Promise<void> {
+  return http.post<void>(`/api/admin/groupBuys/${id}/force-suspend`, { reason }, { auth: true });
+}
+
+// 상품 승인/반려 이력
+export function listProductActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/products/action-logs${suffix}`, { auth: true });
+}
+
+// 공동구매 판매정지 요청 승인/반려 이력
+export function listGroupBuySuspensionActionLogs(params?: { page?: number; size?: number; keyword?: string }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/groupBuys/suspension-requests/action-logs${suffix}`, { auth: true });
+}
+
+// 판매자 전환(승인/거절) 이력
+export function listSellerConversionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/conversion${suffix}`, { auth: true });
+}
+
+// 판매자 정지/정지복귀 이력
+export function listSellerSuspensionActionLogs(params?: { page?: number; size?: number }): Promise<PageResponse<AdminActionLogResponse>> {
+  const query = new URLSearchParams();
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<AdminActionLogResponse>>(`/api/admin/sellers/action-logs/suspension${suffix}`, { auth: true });
+}
+
+// 관리자 전체 정산 내역 월별 리스트 - 생산자 대시보드(listMySettlements)와 같은 모양,
+// 판매자 구분 없이 전체를 대상으로 하고 keyword로 공동구매 제목 검색을 지원한다
+export function listAdminSettlementsMonthly(params?: {
+  year?: number;
+  month?: number;
+  status?: SettlementListStatus;
+  keyword?: string;
+  page?: number;
+  size?: number;
+}): Promise<PageResponse<SettlementListItemResponse>> {
+  const query = new URLSearchParams();
+  if (params?.year !== undefined) query.set("year", String(params.year));
+  if (params?.month !== undefined) query.set("month", String(params.month));
+  if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  if (params?.size !== undefined) query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return http.get<PageResponse<SettlementListItemResponse>>(`/api/admin/settlements/monthly${suffix}`, {
+    auth: true,
+  });
+}
+
+// 관리자 매출 추이 그래프 - 판매자 구분 없이 전체 집계, 수수료 추정치 포함
+export function getAdminSettlementTrend(
+  granularity: SettlementTrendGranularity = "MONTHLY",
+): Promise<AdminSettlementTrendPointResponse[]> {
+  return http.get<AdminSettlementTrendPointResponse[]>(
+    `/api/admin/settlements/trend?granularity=${granularity}`,
+    { auth: true },
+  );
+}
+
+// 관리자 정산 대시보드 상단 요약 카드
+export function getAdminSettlementSummary(): Promise<AdminSettlementSummaryResponse> {
+  return http.get<AdminSettlementSummaryResponse>("/api/admin/settlements/summary", { auth: true });
 }

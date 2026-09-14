@@ -3,7 +3,6 @@ package com.wellbuying.domain.admin.controller;
 import com.wellbuying.auth.jwt.AuthenticatedMember;
 import com.wellbuying.domain.admin.dto.AdminActionLogResponse;
 import com.wellbuying.domain.admin.dto.AdminActionReasonRequest;
-import com.wellbuying.domain.product.dto.AdminProductDeleteRequest;
 import com.wellbuying.domain.product.dto.ProductAdminResponse;
 import com.wellbuying.domain.product.dto.ProductDeletedAdminResponse;
 import com.wellbuying.domain.product.entity.ProductStatus;
@@ -86,16 +85,17 @@ public class AdminProductController {
         return ResponseEntity.ok(productService.listActionLogs(pageable));
     }
 
-    // 상품 강제 삭제 - 소유권 무관, 사유 필수, 진행 중인 공동구매가 있으면 차단
+    // 상품 등록 해지 - 소유권 무관, 사유 필수, 진행 중인 공동구매가 있으면 차단.
+    // 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환한다
     // (DELETE + RequestBody는 일부 프록시/클라이언트에서 바디가 유실될 수 있어 POST로 처리)
-    @Operation(summary = "상품 강제 삭제 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 차단")
-    @PostMapping("/{productId}/force-delete")
-    public ResponseEntity<Void> forceDelete(
+    @Operation(summary = "상품 등록 해지 - 소유권 무관, 사유 필수, 공동구매 진행 중이면 차단, REJECTED로 상태 전환")
+    @PostMapping("/{productId}/deregister")
+    public ResponseEntity<Void> deregister(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
             @PathVariable Long productId,
-            @Valid @RequestBody AdminProductDeleteRequest request
+            @Valid @RequestBody AdminActionReasonRequest request
     ) {
-        productService.adminDeleteProduct(authenticatedMember.memberId(), productId, request.reason());
+        productService.deregisterProduct(authenticatedMember.memberId(), productId, request.reason());
         return ResponseEntity.noContent().build();
     }
 }

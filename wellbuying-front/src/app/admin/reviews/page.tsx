@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PackageSearch } from "lucide-react";
+import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
-import { approveProduct, listAdminProducts, rejectProduct } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
-import type { ProductAdminResponse, ProductStatus } from "@/lib/api/types";
+import {
+  approveProduct,
+  deregisterProduct,
+  listAdminProducts,
+  listProductActionLogs,
+  rejectProduct,
+} from "@/lib/api/admin";
+import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { showToast } from "@/lib/toast/toastStore";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
 
@@ -42,30 +51,17 @@ const STATUS_LABEL: Record<ProductStatus, string> = {
 
 function ProductReviewPanel({ status }: { status: ProductStatus }) {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
-
-    listAdminProducts({ status, page })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "상품 목록을 불러오지 못했어요.");
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [status, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
+    "admin-product-review",
+    { status, page, reloadToken },
+    () => listAdminProducts({ status, page, size: 10 }),
+    "상품 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveProduct,
@@ -74,13 +70,15 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    invalidatePagedQuery("admin-product-review");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
   }
 
-  if (items === null) {
+  if (loading && items === null) {
     return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
   }
 
@@ -88,7 +86,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
     <div className="space-y-4">
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="해당 상태의 상품이 없어요" message="다른 필터를 확인해보세요." />
       ) : (
         <div className="space-y-3">
@@ -100,7 +98,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
                 </div>
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>판매자 #{item.sellerId}</Tag>
+                    <Tag>{item.sellerEmail}</Tag>
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>
@@ -132,24 +130,7 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-            이전
-          </Button>
-          <span className="flex items-center px-2 text-xs text-wb-secondary">
-            {page + 1} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <ActionReasonModal
         open={pendingAction !== null}
@@ -163,47 +144,57 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
   );
 }
 
-// ProductStatus엔 ALL이 없어 상태별 API 3번을 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
-// 페이지네이션 대신 상품명 검색만 제공한다
+// ProductStatus엔 ALL이 없어 상태별 API를 병렬 호출해 합친다 - 카탈로그 규모상 상태당 100개면 충분하다고 보고
+// 페이지네이션 대신 상품명 검색만 제공한다. 검토 대기(PENDING)는 "등록 심사" 탭에서 다루므로 여기서는 제외한다.
+// 승인된 상품만 보여준다 - 검토대기/반려 상품은 "등록 심사" 탭에서 다룬다
+// 승인된 상품 목록 - 상품 삭제 관리(구 별도 탭)의 강제 삭제 기능을 여기로 흡수했다.
+// 등록 해지는 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환하며, 사유 입력만 받는다.
 function AllProductsPanel() {
-  const [items, setItems] = useState<ProductAdminResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  const [deregisterTargetId, setDeregisterTargetId] = useState<number | null>(null);
+  const [deregisterTargetName, setDeregisterTargetName] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleKeywordChange(value: string) {
+    setKeyword(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedKeyword(value);
+      setPage(0);
+    }, 300);
+  }
 
   useEffect(() => {
-    let ignore = false;
-
-    Promise.all([
-      listAdminProducts({ status: "PENDING", size: 100 }),
-      listAdminProducts({ status: "APPROVED", size: 100 }),
-      listAdminProducts({ status: "REJECTED", size: 100 }),
-    ])
-      .then(([pending, approved, rejected]) => {
-        if (ignore) return;
-        const merged = [...pending.content, ...approved.content, ...rejected.content].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-        setItems(merged);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "상품 목록을 불러오지 못했어요.");
-      });
-
     return () => {
-      ignore = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!items) return null;
-    const q = query.trim();
-    return q ? items.filter((item) => item.productName.includes(q)) : items;
-  }, [items, query]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductAdminResponse>>(
+    "admin-all-products",
+    { keyword: debouncedKeyword, page, reloadToken },
+    () => listAdminProducts({ status: "APPROVED", keyword: debouncedKeyword || undefined, page, size: 10 }),
+    "상품 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
-  if (items === null) {
-    return <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>;
+  function startDeregister(id: number, name: string) {
+    setDeregisterTargetId(id);
+    setDeregisterTargetName(name);
+  }
+
+  async function handleConfirmDeregister(reason: string) {
+    if (deregisterTargetId === null) return;
+    await deregisterProduct(deregisterTargetId, reason);
+    invalidatePagedQuery("admin-all-products");
+    invalidatePagedQuery("admin-product-action-logs");
+    setReloadToken((t) => t + 1);
+    setDeregisterTargetId(null);
+    showToast("정상적으로 등록 해지되었습니다.");
   }
 
   return (
@@ -211,17 +202,19 @@ function AllProductsPanel() {
       {error && <Banner tone="error">{error}</Banner>}
 
       <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        value={keyword}
+        onChange={(e) => handleKeywordChange(e.target.value)}
         placeholder="상품명 검색"
         className="w-full rounded-lg border border-wb-line bg-wb-surface px-3 py-2 text-sm outline-none sm:w-64"
       />
 
-      {filtered && filtered.length === 0 ? (
+      {loading && items === null ? (
+        <p className="py-24 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="등록된 상품이 없어요" message="검색어를 확인해보세요." />
       ) : (
         <div className="space-y-3">
-          {filtered?.map((item) => (
+          {items.map((item) => (
             <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-wb-line bg-wb-surface p-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-wb-light-green/50">
@@ -229,7 +222,7 @@ function AllProductsPanel() {
                 </div>
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>판매자 #{item.sellerId}</Tag>
+                    <Tag>{item.sellerEmail}</Tag>
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>
@@ -242,21 +235,39 @@ function AllProductsPanel() {
                 </div>
                 <StatusPill tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</StatusPill>
               </div>
+              <Button
+                className="bg-red-600 px-3 py-1.5 text-xs hover:bg-red-600/90"
+                onClick={() => startDeregister(item.id, item.productName)}
+              >
+                등록 해지
+              </Button>
             </div>
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+
+      <ActionReasonModal
+        open={deregisterTargetId !== null}
+        title={`등록 해지 - ${deregisterTargetName}`}
+        actionLabel="등록 해지"
+        confirmVariant="secondary"
+        onClose={() => setDeregisterTargetId(null)}
+        onConfirm={handleConfirmDeregister}
+      />
     </div>
   );
 }
 
-const VIEW_TABS: { key: "review" | "all"; label: string }[] = [
-  { key: "review", label: "등록 심사" },
+const VIEW_TABS: { key: "review" | "all" | "history"; label: string }[] = [
   { key: "all", label: "전체 상품목록" },
+  { key: "review", label: "등록 심사" },
+  { key: "history", label: "처리 이력" },
 ];
 
 export default function AdminReviewsPage() {
-  const [view, setView] = useState<"review" | "all">("review");
+  const [view, setView] = useState<"review" | "all" | "history">("all");
   const [status, setStatus] = useState<ProductStatus>("PENDING");
 
   return (
@@ -299,8 +310,15 @@ export default function AdminReviewsPage() {
 
           <ProductReviewPanel key={status} status={status} />
         </>
-      ) : (
+      ) : view === "all" ? (
         <AllProductsPanel />
+      ) : (
+        <ActionLogPanel
+          cacheNamespace="admin-product-action-logs"
+          fetcher={listProductActionLogs}
+          targetLabelHeader="상품명"
+          emptyMessage="아직 승인/반려 처리된 상품이 없어요."
+        />
       )}
     </div>
   );

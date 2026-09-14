@@ -2,21 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PauseCircle, ShoppingBag } from "lucide-react";
+import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { GroupBuyStatusTag } from "@/components/groupbuy/GroupBuyStatusTag";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusPill, Tag } from "@/components/ui/Tag";
 import {
   approveSuspensionRequest,
+  forceSuspendGroupBuy,
   listAdminGroupBuys,
+  listGroupBuySuspensionActionLogs,
   listSuspensionRequests,
   rejectSuspensionRequest,
 } from "@/lib/api/admin";
-import { ApiError } from "@/lib/api/http";
-import type { GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus } from "@/lib/api/types";
+import type { GroupBuyStatus, GroupBuySummaryResponse, GroupBuySuspensionRequestResponse, GroupBuySuspensionStatus, PageResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { showToast } from "@/lib/toast/toastStore";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 type PendingAction = { id: number; kind: "approve" | "reject" };
 
@@ -46,32 +51,38 @@ const SUSPENSION_STATUS_LABEL: Record<GroupBuySuspensionStatus, string> = {
   REJECTED: "반려됨",
 };
 
+// 판매정지 심사 탭 - 공동구매 제목 검색 + 상태별(대기/승인/반려) 하위 탭, 페이지당 10건
 function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus }) {
   const [page, setPage] = useState(0);
-  const [items, setItems] = useState<GroupBuySuspensionRequestResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleKeywordChange(value: string) {
+    setKeyword(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedKeyword(value);
+      setPage(0);
+    }, 300);
+  }
 
   useEffect(() => {
-    let ignore = false;
-
-    listSuspensionRequests({ status, page })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "판매정지 요청 목록을 불러오지 못했어요.");
-      });
-
     return () => {
-      ignore = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [status, page]);
+  }, []);
+
+  const { data, error, loading } = usePagedQuery<PageResponse<GroupBuySuspensionRequestResponse>>(
+    "admin-suspension-requests",
+    { status, keyword: debouncedKeyword, page, reloadToken },
+    () => listSuspensionRequests({ status, keyword: debouncedKeyword || undefined, page, size: 10 }),
+    "판매정지 요청 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
   const ACTION_FN: Record<PendingAction["kind"], (id: number, reason: string) => Promise<void>> = {
     approve: approveSuspensionRequest,
@@ -80,21 +91,30 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
 
   async function handleConfirmAction(reason: string) {
     if (!pendingAction) return;
-    setError(null);
+    const { actionLabel } = ACTION_MODAL_CONFIG[pendingAction.kind];
     await ACTION_FN[pendingAction.kind](pendingAction.id, reason);
-    setItems((prev) => (prev ?? []).filter((item) => item.id !== pendingAction.id));
+    invalidatePagedQuery("admin-suspension-requests");
+    invalidatePagedQuery("admin-group-buys");
+    setReloadToken((t) => t + 1);
     setPendingAction(null);
-  }
-
-  if (items === null) {
-    return <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>;
+    showToast(`"${reason}" 사유로 ${actionLabel} 처리되었습니다.`);
   }
 
   return (
     <div className="space-y-4">
+      <input
+        type="text"
+        value={keyword}
+        onChange={(e) => handleKeywordChange(e.target.value)}
+        placeholder="공동구매 제목으로 검색"
+        className="w-full rounded-lg border border-wb-line bg-white px-4 py-2.5 text-sm outline-none focus:border-wb-green"
+      />
+
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items.length === 0 ? (
+      {loading && items === null ? (
+        <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={PauseCircle} title="해당 상태의 요청이 없어요" message="다른 탭을 확인해보세요." />
       ) : (
         <div className="space-y-3">
@@ -138,29 +158,7 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page === 0}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            이전
-          </Button>
-          <span className="flex items-center px-2 text-xs text-wb-secondary">
-            {page + 1} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            className="px-3 py-1.5 text-xs"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            다음
-          </Button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <ActionReasonModal
         open={pendingAction !== null}
@@ -174,13 +172,27 @@ function SuspensionRequestsPanel({ status }: { status: GroupBuySuspensionStatus 
   );
 }
 
-function GroupBuyListSection() {
+const GROUP_BUY_STATUS_OPTIONS: { value: GroupBuyStatus | ""; label: string }[] = [
+  { value: "", label: "전체 상태" },
+  { value: "READY", label: "오픈 예정" },
+  { value: "ONGOING", label: "모집 중" },
+  { value: "SUCCESS", label: "성사" },
+  { value: "FAILED", label: "목표 미달" },
+  { value: "CANCELED", label: "취소" },
+];
+
+// 관리자가 직권으로 정지시킬 수 있는 상태 - "진행 중 또는 대기 중"
+const FORCE_SUSPENDABLE_STATUSES: GroupBuyStatus[] = ["ONGOING", "READY"];
+
+// 전체 공동구매 목록 탭 - 상태 필터(GroupBuyStatus 실제 enum 그대로) + 제목 검색 + 페이지네이션.
+// ONGOING/READY 건에는 "정지" 버튼을 노출해 관리자가 직권으로 판매정지할 수 있게 한다.
+function AllGroupBuysPanel() {
+  const [status, setStatus] = useState<GroupBuyStatus | "">("");
   const [page, setPage] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
-  const [items, setItems] = useState<GroupBuySummaryResponse[] | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [suspendTargetId, setSuspendTargetId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -198,55 +210,76 @@ function GroupBuyListSection() {
     };
   }, []);
 
-  useEffect(() => {
-    let ignore = false;
-    setItems(null);
+  const { data, error, loading } = usePagedQuery<PageResponse<GroupBuySummaryResponse>>(
+    "admin-group-buys",
+    { status: status || undefined, keyword: debouncedKeyword, page, reloadToken },
+    () => listAdminGroupBuys({ status: status || undefined, keyword: debouncedKeyword || undefined, page, size: 10 }),
+    "공동구매 목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
-    listAdminGroupBuys({ keyword: debouncedKeyword || undefined, page, size: 20 })
-      .then((response) => {
-        if (ignore) return;
-        setItems(response.content);
-        setTotalPages(response.page.totalPages);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setItems([]);
-        setError(e instanceof ApiError ? e.message : "공동구매 목록을 불러오지 못했어요.");
-      });
+  function startForceSuspend(id: number) {
+    setSuspendTargetId(id);
+  }
 
-    return () => {
-      ignore = true;
-    };
-  }, [debouncedKeyword, page]);
+  async function handleConfirmForceSuspend(reason: string) {
+    if (suspendTargetId === null) return;
+    await forceSuspendGroupBuy(suspendTargetId, reason);
+    invalidatePagedQuery("admin-group-buys");
+    invalidatePagedQuery("admin-suspension-requests");
+    invalidatePagedQuery("admin-groupbuy-suspension-action-logs");
+    setReloadToken((t) => t + 1);
+    setSuspendTargetId(null);
+    showToast("정상적으로 처리되었습니다.");
+  }
 
   return (
     <div className="space-y-3">
-      <input
-        type="text"
-        value={keyword}
-        onChange={(e) => handleKeywordChange(e.target.value)}
-        placeholder="공동구매 제목으로 검색"
-        className="w-full rounded-lg border border-wb-line bg-white px-4 py-2.5 text-sm outline-none focus:border-wb-green"
-      />
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="text"
+          value={keyword}
+          onChange={(e) => handleKeywordChange(e.target.value)}
+          placeholder="공동구매 제목으로 검색"
+          className="w-full rounded-lg border border-wb-line bg-white px-4 py-2.5 text-sm outline-none focus:border-wb-green sm:flex-1"
+        />
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value as GroupBuyStatus | "");
+            setPage(0);
+          }}
+          className="rounded-lg border border-wb-line bg-white px-3 py-2.5 text-sm outline-none focus:border-wb-green sm:w-40"
+        >
+          {GROUP_BUY_STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {error && <Banner tone="error">{error}</Banner>}
 
-      {items === null ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState icon={ShoppingBag} title="등록된 공동구매가 없어요" message="아직 개설된 공동구매가 없어요." />
       ) : (
         <>
           <div className="overflow-hidden rounded-2xl border border-wb-line bg-wb-surface">
-            <div className="grid grid-cols-[2fr_1fr_100px_100px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
+            <div className="grid grid-cols-[2fr_1fr_100px_100px_100px] gap-3 border-b border-wb-line bg-wb-canvas/60 px-5 py-2.5 text-xs font-bold text-wb-secondary">
               <span>공동구매</span>
               <span>진행률</span>
               <span>상태</span>
               <span>판매정지</span>
+              <span>관리</span>
             </div>
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-[2fr_1fr_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
+                className="grid grid-cols-[2fr_1fr_100px_100px_100px] items-center gap-3 border-b border-wb-line px-5 py-3.5 last:border-0"
               >
                 <div className="min-w-0">
                   <p className="line-clamp-1 text-sm font-bold">{item.title}</p>
@@ -257,36 +290,41 @@ function GroupBuyListSection() {
                 </p>
                 <GroupBuyStatusTag status={item.status} />
                 {item.suspended ? <StatusPill tone="red">정지됨</StatusPill> : <span className="text-xs text-wb-secondary">-</span>}
+                <div>
+                  {!item.suspended && FORCE_SUSPENDABLE_STATUSES.includes(item.status) && (
+                    <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => startForceSuspend(item.id)}>
+                      정지
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                이전
-              </Button>
-              <span className="flex items-center px-2 text-xs text-wb-secondary">
-                {page + 1} / {totalPages}
-              </span>
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                다음
-              </Button>
-            </div>
-          )}
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </>
       )}
+
+      <ActionReasonModal
+        open={suspendTargetId !== null}
+        title="공동구매 강제 판매정지"
+        actionLabel="정지"
+        confirmVariant="secondary"
+        onClose={() => setSuspendTargetId(null)}
+        onConfirm={handleConfirmForceSuspend}
+      />
     </div>
   );
 }
 
-const VIEW_TABS: { key: "approval" | "all"; label: string }[] = [
-  { key: "approval", label: "판매정지 심사" },
+const VIEW_TABS: { key: "all" | "approval" | "history"; label: string }[] = [
   { key: "all", label: "전체 공동구매 목록" },
+  { key: "approval", label: "판매정지 심사" },
+  { key: "history", label: "처리이력" },
 ];
 
 export default function AdminDealsPage() {
-  const [view, setView] = useState<"approval" | "all">("approval");
+  const [view, setView] = useState<"all" | "approval" | "history">("all");
   const [suspensionStatus, setSuspensionStatus] = useState<GroupBuySuspensionStatus>("PENDING");
 
   return (
@@ -311,7 +349,9 @@ export default function AdminDealsPage() {
         ))}
       </div>
 
-      {view === "approval" ? (
+      {view === "all" ? (
+        <AllGroupBuysPanel />
+      ) : view === "approval" ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             {SUSPENSION_TABS.map((tab) => (
@@ -331,7 +371,13 @@ export default function AdminDealsPage() {
           <SuspensionRequestsPanel key={suspensionStatus} status={suspensionStatus} />
         </div>
       ) : (
-        <GroupBuyListSection />
+        <ActionLogPanel
+          cacheNamespace="admin-groupbuy-suspension-action-logs"
+          fetcher={listGroupBuySuspensionActionLogs}
+          targetLabelHeader="공동구매"
+          emptyMessage="아직 승인/반려 처리된 판매정지 요청이 없어요."
+          searchPlaceholder="공동구매 제목으로 검색"
+        />
       )}
     </div>
   );
