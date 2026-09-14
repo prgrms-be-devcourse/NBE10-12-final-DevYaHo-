@@ -8,8 +8,8 @@ const TONE_STYLE = {
   error: "bg-red-50 text-red-700 border-red-200",
 };
 
-// 승인/반려 등 관리자 액션 결과를 알려주는 토스트를 화면 우하단에 쌓아서 보여준다.
-// AppShell 등 레이아웃 최상단에 한 번만 마운트한다.
+// 각종 액션 결과를 알려주는 토스트를 화면 우하단에 쌓아서 보여준다.
+// AppShell에 한 번만 마운트해 전 화면에서 공용으로 쓴다.
 export function ToastViewport() {
   const toasts = useToastStore((state) => state.toasts);
   const dismiss = useToastStore((state) => state.dismiss);

@@ -28,12 +28,13 @@ import {
 } from "@/lib/api/auth";
 import { listMyAddresses, createMyAddress, deleteMyAddress, setDefaultAddress } from "@/lib/api/address";
 import { ApiError } from "@/lib/api/http";
+import { showToast } from "@/lib/toast/toastStore";
 import { clearTokens, getDeviceId, getCachedDevices, saveCachedDevices } from "@/lib/auth/token-storage";
 import type { DeviceSessionResponse, MemberResponse, OAuthProvider, BuyerAddressResponse } from "@/lib/api/types";
 
 const ROLE_LABEL: Record<string, string> = {
   BUYER: "구매자",
-  SELLER: "생산자",
+  SELLER: "판매자",
   ADMIN: "관리자",
 };
 
@@ -302,6 +303,7 @@ function AddressSection() {
   const [error, setError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [defaultTarget, setDefaultTarget] = useState<BuyerAddressResponse | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<number | null>(null);
 
   const load = () => {
@@ -333,6 +335,7 @@ function AddressSection() {
     try {
       await deleteMyAddress(deleteTarget);
       load();
+      showToast("배송지를 삭제했어요.");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "배송지 삭제에 실패했어요.");
     } finally {
@@ -346,11 +349,17 @@ function AddressSection() {
     try {
       await setDefaultAddress(addressId);
       load();
+      showToast("기본 배송지로 설정했어요.");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "기본 배송지 설정에 실패했어요.");
     } finally {
       setSettingDefaultId(null);
     }
+  }
+
+  function performSetDefault() {
+    if (defaultTarget === null) return;
+    handleSetDefault(defaultTarget.id);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -387,7 +396,7 @@ function AddressSection() {
                 <div className="flex items-center gap-1.5">
                   {!addr.isDefault && (
                     <button
-                      onClick={() => handleSetDefault(addr.id)}
+                      onClick={() => setDefaultTarget(addr)}
                       disabled={settingDefaultId === addr.id}
                       className="rounded-md border border-wb-green px-2.5 py-1 text-xs font-semibold text-wb-green transition-colors hover:bg-wb-light-green/40 disabled:opacity-50"
                     >
@@ -452,6 +461,15 @@ function AddressSection() {
         confirmLabel="삭제"
         destructive
       />
+
+      <ConfirmDialog
+        open={defaultTarget !== null}
+        onClose={() => setDefaultTarget(null)}
+        onConfirm={performSetDefault}
+        title="기본 배송지 설정"
+        message={`${defaultTarget?.address ?? ""} ${defaultTarget?.addressDetail ?? ""}을(를) 기본 배송지로 선정하시겠습니까?`}
+        confirmLabel="설정"
+      />
     </div>
   );
 }
@@ -473,7 +491,7 @@ function SellerApplicationSection() {
   if (status === "PENDING") {
     return (
       <div className="rounded-lg border border-wb-line bg-wb-canvas px-3 py-2.5 text-center text-sm font-semibold text-wb-orange">
-        생산자 심사 진행 중
+        판매자 심사 진행 중
       </div>
     );
   }
@@ -481,7 +499,7 @@ function SellerApplicationSection() {
   if (status === "TERMINATED") {
     return (
       <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-center text-sm">
-        <span className="font-semibold text-red-600">생산자 신청이 반려되었어요.</span>
+        <span className="font-semibold text-red-600">판매자 신청이 반려되었어요.</span>
         <Link href="/seller/apply" className="text-xs font-semibold text-wb-green hover:underline">
           다시 신청하기
         </Link>
@@ -494,7 +512,7 @@ function SellerApplicationSection() {
       href="/seller/apply"
       className="block rounded-lg border border-wb-line bg-wb-canvas px-3 py-2.5 text-center text-sm font-semibold text-wb-green hover:bg-wb-light-green/40"
     >
-      생산자로 신청하기
+      판매자로 신청하기
     </Link>
   );
 }

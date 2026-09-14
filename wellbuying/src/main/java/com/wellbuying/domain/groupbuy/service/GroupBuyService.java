@@ -33,6 +33,7 @@ import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
@@ -94,7 +95,7 @@ public class GroupBuyService {
                 .orElse("기타");
     }
 
-    // 공동구매 생성 - SELLER 역할의 회원만 생산자로 등록 가능, 자기 소유로 등록된 상품이어야 함, 가격 구간과 함께 저장하고 참여용 Redis 카운터를 0으로 초기화
+    // 공동구매 생성 - SELLER 역할의 회원만 생산자로 등록 가능, 자기 소유로 등록된 상품이면서 관리자 승인(APPROVED)까지 완료된 상품이어야 함, 가격 구간과 함께 저장하고 참여용 Redis 카운터를 0으로 초기화
     @Transactional
     public GroupBuyDetailResponse create(Long producerId, GroupBuyCreateRequest request) {
         Member producer = memberRepository.findByIdAndDeletedAtIsNull(producerId)
@@ -103,6 +104,9 @@ public class GroupBuyService {
             throw new BusinessException(ErrorCode.GROUP_BUY_FORBIDDEN);
         }
         Product product = productService.getOwnedOrThrow(producerId, request.productId());
+        if (product.getStatus() != ProductStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_PRODUCT_NOT_APPROVED);
+        }
         if (!request.startAt().isBefore(request.endAt())) {
             throw new BusinessException(ErrorCode.GROUP_BUY_INVALID_PERIOD);
         }

@@ -49,7 +49,7 @@ export function GroupBuyCreateModal({
     async function loadProducts() {
       setProductsLoading(true);
       try {
-        const list = (await listMyProducts()).content;
+        const list = (await listMyProducts()).content.filter((product) => product.status === "APPROVED");
         if (!ignore) {
           setProducts(list);
           setProductId((current) => current ?? list[0]?.id ?? null);
@@ -154,9 +154,9 @@ export function GroupBuyCreateModal({
             <p className="text-sm text-wb-secondary">불러오는 중...</p>
           ) : products.length === 0 ? (
             <div className="rounded-lg bg-wb-canvas p-3 text-sm text-wb-secondary">
-              등록된 상품이 없어요.{" "}
+              승인 완료된 상품이 없어요.{" "}
               <Link href="/producer/products" className="font-semibold text-wb-green hover:underline">
-                상품을 먼저 등록해주세요
+                상품을 등록하고 승인을 기다려주세요
               </Link>
               .
             </div>

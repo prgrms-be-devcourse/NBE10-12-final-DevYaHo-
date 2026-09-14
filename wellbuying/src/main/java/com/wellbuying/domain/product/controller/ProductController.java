@@ -33,8 +33,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -172,15 +172,16 @@ public class ProductController {
         return ResponseEntity.noContent().build();
     }
 
-    // 로그인한 판매자 본인이 등록한 상품 전체 조회
+    // 로그인한 판매자 본인이 등록한 상품 전체 조회, keyword가 있으면 상품명 LIKE 검색
     @Operation(summary = "내 상품 목록 조회")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     @GetMapping("/mine")
-    public Slice<ProductMineResponse> getMyProducts(
+    public Page<ProductMineResponse> getMyProducts(
             @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return productService.getMyProducts(authenticatedMember.memberId(), pageable);
+        return productService.getMyProducts(authenticatedMember.memberId(), keyword, pageable);
     }
 
     // 판매자 본인이 등록한 상품 수정

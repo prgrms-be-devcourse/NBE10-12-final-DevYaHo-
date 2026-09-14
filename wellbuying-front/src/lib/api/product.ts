@@ -1,25 +1,42 @@
 import { http } from "@/lib/api/http";
 import type {
   CursorPageResponse,
+  PageResponse,
   ProductAutocompleteResponse,
   ProductCreateRequest,
   ProductDeleteRequest,
   ProductDetailResponse,
+  ProductImageUploadUrlResponse,
   ProductMineResponse,
   ProductSearchResponse,
   ProductSortType,
   ProductSummaryResponse,
   ProductUpdateRequest,
   SearchSortType,
-  SliceResponse,
 } from "@/lib/api/types";
 
 export function createProduct(request: ProductCreateRequest): Promise<void> {
   return http.post<void>("/api/products", request, { auth: true });
 }
 
-export function listMyProducts(): Promise<SliceResponse<ProductMineResponse>> {
-  return http.get<SliceResponse<ProductMineResponse>>("/api/products/mine", { auth: true });
+export function requestProductThumbnailUploadUrl(contentType: string): Promise<ProductImageUploadUrlResponse> {
+  return http.post<ProductImageUploadUrlResponse>(
+    "/api/products/thumbnail/upload-url",
+    { contentType },
+    { auth: true },
+  );
+}
+
+export function listMyProducts(params: {
+  keyword?: string;
+  page?: number;
+  size?: number;
+} = {}): Promise<PageResponse<ProductMineResponse>> {
+  const query = new URLSearchParams();
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.page !== undefined) query.set("page", String(params.page));
+  if (params.size !== undefined) query.set("size", String(params.size));
+  return http.get<PageResponse<ProductMineResponse>>(`/api/products/mine?${query.toString()}`, { auth: true });
 }
 
 export function getProduct(productId: number): Promise<ProductDetailResponse> {

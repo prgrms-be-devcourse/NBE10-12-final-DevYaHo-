@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public record ProductSearchResponse(
         Long id,
         String productName,
+        String description,
         Integer startPrice,
         String thumbnailUrl,
         Long viewCount,
@@ -23,6 +24,7 @@ public record ProductSearchResponse(
         return new ProductSearchResponse(
                 doc.id(),
                 doc.productName(),
+                doc.description(),
                 doc.startPrice(),
                 doc.thumbnailUrl(),
                 doc.viewCount(),

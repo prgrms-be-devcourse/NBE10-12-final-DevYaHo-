@@ -111,7 +111,8 @@ services:
       retries: 5
 
   # minio 기동 후 애플리케이션이 쓰는 버킷(wellbuying-dev)을 1회 생성하고 종료 - 없으면 presigned URL 발급은 되지만 실제 PUT이 실패한다
-  # profile-images/product-images 프리픽스는 운영 S3 버킷 정책(phase18 §7)과 동일하게 공개 읽기(download)로 설정 - 없으면 업로드된 이미지 GET이 403
+  # profile-images/product-thumbnails/gallery-images/description-images 프리픽스는 운영 S3 버킷 정책(phase18 §7)과 동일하게
+  # 공개 읽기(download)로 설정 - 없으면 업로드된 이미지 GET이 403 (프리픽스는 ProductImageUploadService/ProfileImageUploadService의 key 생성 규칙과 일치해야 함)
   minio-init:
     image: minio/mc:latest
     container_name: wellbuying-minio-init
@@ -123,7 +124,9 @@ services:
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb -p local/wellbuying-dev &&
       mc anonymous set download local/wellbuying-dev/profile-images &&
-      mc anonymous set download local/wellbuying-dev/product-images
+      mc anonymous set download local/wellbuying-dev/product-thumbnails &&
+      mc anonymous set download local/wellbuying-dev/gallery-images &&
+      mc anonymous set download local/wellbuying-dev/description-images
       "
 
 volumes:

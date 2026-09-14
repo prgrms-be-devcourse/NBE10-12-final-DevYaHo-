@@ -30,6 +30,7 @@ public enum ErrorCode {
     GROUP_BUY_FORBIDDEN(HttpStatus.FORBIDDEN, "GROUPBUY_403_FORBIDDEN", "해당 공동구매에 대한 권한이 없습니다."),
     GROUP_BUY_INVALID_PERIOD(HttpStatus.BAD_REQUEST, "GROUPBUY_400_INVALID_PERIOD", "시작일은 마감일보다 이전이어야 합니다."),
     GROUP_BUY_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "GROUPBUY_400_INVALID_QUANTITY", "최소 수량은 최대 수량보다 클 수 없습니다."),
+    GROUP_BUY_PRODUCT_NOT_APPROVED(HttpStatus.CONFLICT, "GROUPBUY_409_PRODUCT_NOT_APPROVED", "관리자 승인이 완료된 상품만 공동구매를 개설할 수 있습니다."),
     GROUP_BUY_UPDATE_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_UPDATE_NOT_ALLOWED", "시작 전(READY) 상태에서만 정보를 수정할 수 있습니다."),
     GROUP_BUY_CANCEL_NOT_ALLOWED(HttpStatus.CONFLICT, "GROUPBUY_409_CANCEL_NOT_ALLOWED", "시작 전(READY) 상태에서만 취소할 수 있습니다."),
     GROUP_BUY_NOT_ONGOING(HttpStatus.CONFLICT, "GROUPBUY_409_NOT_ONGOING", "진행 중인 공동구매가 아닙니다."),

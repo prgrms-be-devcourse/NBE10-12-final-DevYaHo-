@@ -5,12 +5,12 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.global.dto.CursorPageResponse;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
 
 public interface ProductQueryRepository {
 
     CursorPageResponse<ProductSummaryResponse> search(ProductSearchCondition condition, String cursor, int size);
-    Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable);
+    Page<ProductMineResponse> findBySeller(Long sellerId, String keyword, Pageable pageable);
     List<ProductSummaryResponse> findTopByViewCount(int limit);
 }
