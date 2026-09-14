@@ -44,7 +44,7 @@ public abstract class AbstractIntegrationTest {
 
     // AWS 자격증명 없이도 presigned URL 발급/PUT/태깅을 실제로 검증하기 위한 S3 호환 스토리지 (phase18)
     private static final MinIOContainer MINIO = new MinIOContainer(
-            DockerImageName.parse("bitnami/minio:latest")
+            DockerImageName.parse("quay.io/minio/minio:RELEASE.2023-09-07T02-05-02Z")
                     .asCompatibleSubstituteFor("minio/minio"));
 
     static {
