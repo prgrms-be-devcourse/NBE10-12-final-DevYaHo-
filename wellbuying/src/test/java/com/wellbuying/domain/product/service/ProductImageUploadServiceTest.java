@@ -15,6 +15,7 @@ import com.wellbuying.domain.product.dto.ProductDescriptionImageUploadUrlRespons
 import com.wellbuying.domain.product.dto.ProductGalleryImageUploadUrlResponse;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlRequest;
 import com.wellbuying.domain.product.dto.ProductImageUploadUrlResponse;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.net.MalformedURLException;
@@ -43,11 +44,14 @@ class ProductImageUploadServiceTest {
 
     private ProductImageUploadService productImageUploadService;
 
+    @Mock
+    private SellerInfoService sellerInfoService;
+
     @BeforeEach
     void setUp() {
         // endpoint를 빈 문자열로 주어 운영과 동일한 virtual-hosted-style 공개 URL 형식으로 검증
         productImageUploadService = new ProductImageUploadService(s3Presigner, "wellbuying-dev", "ap-northeast-2", "",
-                300, memberRepository);
+                300, memberRepository, sellerInfoService);
     }
 
     // 허용 목록(jpeg/png/webp)에 속한 contentType이면 presigned URL과 최종 공개 URL이 함께 발급되는지 검증

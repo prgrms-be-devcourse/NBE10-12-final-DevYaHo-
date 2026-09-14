@@ -31,6 +31,7 @@ import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +72,9 @@ class GroupBuyServiceTest {
 
     @Mock
     private ProductCategoryRepository productCategoryRepository;
+
+    @Mock
+    private SellerInfoService sellerInfoService;
 
     @InjectMocks
     private GroupBuyService groupBuyService;

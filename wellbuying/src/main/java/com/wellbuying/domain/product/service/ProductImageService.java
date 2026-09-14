@@ -5,6 +5,7 @@ import com.wellbuying.domain.product.entity.ProductImage;
 import com.wellbuying.domain.product.event.ProductImageConfirmedEvent;
 import com.wellbuying.domain.product.event.ProductImageOrphanedEvent;
 import com.wellbuying.domain.product.repository.ProductImageRepository;
+import com.wellbuying.domain.seller.service.SellerInfoService;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
 import java.util.ArrayList;
@@ -23,13 +24,16 @@ public class ProductImageService {
     private final ProductService productService;
     private final ProductImageUploadService productImageUploadService;
     private final ApplicationEventPublisher eventPublisher;
+    private final SellerInfoService sellerInfoService;
 
     public ProductImageService(ProductImageRepository productImageRepository, ProductService productService,
-            ProductImageUploadService productImageUploadService, ApplicationEventPublisher eventPublisher) {
+            ProductImageUploadService productImageUploadService, ApplicationEventPublisher eventPublisher,
+            SellerInfoService sellerInfoService) {
         this.productImageRepository = productImageRepository;
         this.productService = productService;
         this.productImageUploadService = productImageUploadService;
         this.eventPublisher = eventPublisher;
+        this.sellerInfoService = sellerInfoService;
     }
 
     // 이미지 목록을 전체 교체 방식으로 저장 - 새로 추가된 URL은 확정 이벤트, 빠진 URL은 정리 이벤트를 발행하고
@@ -45,6 +49,7 @@ public class ProductImageService {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         productService.getOwnedOrThrow(sellerId, productId);
+        sellerInfoService.validateApprovedSeller(sellerId);
 
         List<ProductImage> existing = productImageRepository.findByProductIdAndImageType(productId, imageType);
         Set<String> existingUrls = existing.stream().map(ProductImage::getImageUrl).collect(Collectors.toSet());
