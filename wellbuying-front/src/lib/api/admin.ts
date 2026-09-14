@@ -11,7 +11,6 @@ import type {
   MemberSummaryResponse,
   PageResponse,
   ProductAdminResponse,
-  ProductDeletedAdminResponse,
   ProductStatus,
   Role,
   SellerInfoResponse,
@@ -67,19 +66,6 @@ export function approveProduct(productId: number, reason: string): Promise<void>
 
 export function rejectProduct(productId: number, reason: string): Promise<void> {
   return http.post<void>(`/api/admin/products/${productId}/reject`, { reason }, { auth: true });
-}
-
-export function listDeletedProducts(params?: {
-  page?: number;
-  size?: number;
-}): Promise<PageResponse<ProductDeletedAdminResponse>> {
-  const query = new URLSearchParams();
-  if (params?.page !== undefined) query.set("page", String(params.page));
-  if (params?.size !== undefined) query.set("size", String(params.size));
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return http.get<PageResponse<ProductDeletedAdminResponse>>(`/api/admin/products/deleted${suffix}`, {
-    auth: true,
-  });
 }
 
 // 관리자 등록 해지 - 물리적 삭제 없이 반려(REJECTED)와 동일하게 상태만 전환

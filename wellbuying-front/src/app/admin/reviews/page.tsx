@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PackageSearch, Trash2 } from "lucide-react";
+import { PackageSearch } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
 import { Banner } from "@/components/ui/Banner";
@@ -13,11 +13,10 @@ import {
   approveProduct,
   deregisterProduct,
   listAdminProducts,
-  listDeletedProducts,
   listProductActionLogs,
   rejectProduct,
 } from "@/lib/api/admin";
-import type { PageResponse, ProductAdminResponse, ProductDeletedAdminResponse, ProductStatus } from "@/lib/api/types";
+import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
@@ -261,76 +260,14 @@ function AllProductsPanel() {
   );
 }
 
-// 삭제 이력 - 구 "상품 삭제 관리" 탭의 두 번째 화면을 그대로 옮겼다
-function DeletedHistoryPanel() {
-  const [page, setPage] = useState(0);
-
-  const { data, error, loading } = usePagedQuery<PageResponse<ProductDeletedAdminResponse>>(
-    "admin-deleted-products",
-    { page },
-    () => listDeletedProducts({ page, size: 10 }),
-    "삭제 이력을 불러오지 못했어요.",
-  );
-  const items = data?.content ?? null;
-  const totalPages = data?.page.totalPages ?? 0;
-
-  return (
-    <div className="space-y-4">
-      {error && <Banner tone="error">{error}</Banner>}
-
-      {loading && items === null ? (
-        <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items === null || items.length === 0 ? (
-        <EmptyState icon={Trash2} title="삭제 이력이 없어요" message="삭제된 상품이 없어요." />
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-wb-line">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-wb-line bg-wb-canvas text-left text-xs font-bold text-wb-secondary">
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">상품명</th>
-                  <th className="px-4 py-3">판매자 ID</th>
-                  <th className="px-4 py-3">삭제자 ID</th>
-                  <th className="px-4 py-3">삭제 사유</th>
-                  <th className="px-4 py-3">삭제 시각</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-b border-wb-line last:border-0 hover:bg-wb-canvas/50">
-                    <td className="px-4 py-3 text-wb-secondary">{item.id}</td>
-                    <td className="px-4 py-3 font-medium">{item.productName}</td>
-                    <td className="px-4 py-3 text-wb-secondary">{item.sellerId}</td>
-                    <td className="px-4 py-3 text-wb-secondary">{item.deletedBy}</td>
-                    <td className="max-w-xs px-4 py-3">
-                      <p className="truncate text-wb-secondary" title={item.deleteReason}>
-                        {item.deleteReason}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-wb-secondary">{formatDateTime(item.deletedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-        </>
-      )}
-    </div>
-  );
-}
-
-const VIEW_TABS: { key: "review" | "all" | "history" | "deleted"; label: string }[] = [
+const VIEW_TABS: { key: "review" | "all" | "history"; label: string }[] = [
   { key: "all", label: "전체 상품목록" },
   { key: "review", label: "등록 심사" },
   { key: "history", label: "처리 이력" },
-  { key: "deleted", label: "삭제 이력" },
 ];
 
 export default function AdminReviewsPage() {
-  const [view, setView] = useState<"review" | "all" | "history" | "deleted">("all");
+  const [view, setView] = useState<"review" | "all" | "history">("all");
   const [status, setStatus] = useState<ProductStatus>("PENDING");
 
   return (
@@ -375,15 +312,13 @@ export default function AdminReviewsPage() {
         </>
       ) : view === "all" ? (
         <AllProductsPanel />
-      ) : view === "history" ? (
+      ) : (
         <ActionLogPanel
           cacheNamespace="admin-product-action-logs"
           fetcher={listProductActionLogs}
           targetLabelHeader="상품명"
           emptyMessage="아직 승인/반려 처리된 상품이 없어요."
         />
-      ) : (
-        <DeletedHistoryPanel />
       )}
     </div>
   );
