@@ -187,8 +187,13 @@ public class GroupBuyService {
             String categoryName = product != null
                     ? categoryNamesById.getOrDefault(product.getCategoryId(), "기타")
                     : "기타";
+            // 가격 구간이 없는 공동구매(레거시 데이터 등)가 섞여 있어도 그 한 건 때문에 페이지 전체가
+            // 500으로 죽지 않도록, resolveUnitPrice()가 예외를 던지는 대신 0으로 폴백한다 - 상세/참여
+            // 흐름(getPriceOrThrow 등)은 여전히 엄격하게 막아야 하므로 이 폴백은 목록 조회에만 적용한다
             List<GroupBuyPrice> priceTiers = priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of());
-            int currentUnitPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
+            int currentUnitPrice = priceTiers.isEmpty()
+                    ? 0
+                    : GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
             return GroupBuySummaryResponse.of(groupBuy, product, categoryName, currentUnitPrice);
         });
     }

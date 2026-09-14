@@ -116,7 +116,11 @@ export function subscribeNotificationStream(onNotification: (notification: Notif
     }
   }
 
-  connect();
+  // React StrictMode(개발 모드)는 effect를 마운트→정리→재마운트로 두 번 실행한다. connect()를 여기서
+  // 바로 호출하면 첫 번째(버려질) 마운트의 fetch가 서버에 도달한 뒤에야 정리 단계의 abort가 따라와
+  // 연결이 중간에 끊기고 네트워크 탭에 503으로 남는다 - 큐마이크로태스크로 한 틱 미루면 정리 단계가
+  // 먼저 동기적으로 끝나 stopped가 true로 바뀐 뒤에 실행되므로, 버려질 연결 자체를 안 열게 된다
+  queueMicrotask(connect);
 
   return () => {
     stopped = true;
