@@ -166,7 +166,8 @@ public class GroupBuyService {
         return toSummaryPage(page);
     }
 
-    // 상품/카테고리를 배치 조회해 GroupBuySummaryResponse로 조합 - list()/listMine()이 공유
+    // 상품/카테고리/가격 구간을 배치 조회해 GroupBuySummaryResponse로 조합 - list()/listMine()이 공유.
+    // 가격 구간도 getActiveSummariesByProductIds와 동일하게 IN 쿼리 한 번으로 배치 조회해 N+1을 피한다
     private Page<GroupBuySummaryResponse> toSummaryPage(Page<GroupBuy> page) {
         List<Long> productIds = page.getContent().stream().map(GroupBuy::getProductId).distinct().toList();
         Map<Long, Product> productsById = productRepository.findAllById(productIds).stream()
@@ -174,12 +175,17 @@ public class GroupBuyService {
         List<Long> categoryIds = productsById.values().stream().map(Product::getCategoryId).distinct().toList();
         Map<Long, String> categoryNamesById = productCategoryRepository.findAllById(categoryIds).stream()
                 .collect(Collectors.toMap(ProductCategory::getId, ProductCategory::getCategoryName));
+        List<Long> groupBuyIds = page.getContent().stream().map(GroupBuy::getId).toList();
+        Map<Long, List<GroupBuyPrice>> priceTiersByGroupBuyId = groupBuyPriceRepository.findByGroupBuyIdIn(
+                groupBuyIds).stream().collect(Collectors.groupingBy(GroupBuyPrice::getGroupBuyId));
         return page.map(groupBuy -> {
             Product product = productsById.get(groupBuy.getProductId());
             String categoryName = product != null
                     ? categoryNamesById.getOrDefault(product.getCategoryId(), "기타")
                     : "기타";
-            return GroupBuySummaryResponse.of(groupBuy, product, categoryName);
+            List<GroupBuyPrice> priceTiers = priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of());
+            int currentUnitPrice = GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
+            return GroupBuySummaryResponse.of(groupBuy, product, categoryName, currentUnitPrice);
         });
     }
 

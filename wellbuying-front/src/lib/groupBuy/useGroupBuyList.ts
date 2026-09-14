@@ -15,6 +15,7 @@ export type GroupBuyCardView = {
   endAt: string;
   currentQuantity: number;
   maxQuantity: number;
+  currentUnitPrice: number;
   daysLeft: number;
   viewCount: number;
   createdAt: string;
@@ -31,8 +32,8 @@ export function toDaysLeft(endAt: string): number {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
-// 가격/가격 구간은 목록 응답에 없어서 항목마다 /price를 따로 불러야 했다(N+1) - 목록 카드에는 가격을
-// 표시하지 않고, 실제 가격은 상세 페이지 진입 시 그 화면에서만 조회한다.
+// currentUnitPrice(현재 누적 참여 수량 기준 단가)는 목록 응답에 이미 포함되어 있어 카드에 그대로 노출한다
+// (백엔드가 IN 쿼리 배치 조회로 계산 - 항목마다 /price를 따로 부르는 N+1은 없다)
 function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
   const catalog = resolveCatalogEntry(summary.productName);
   return {
@@ -45,6 +46,7 @@ function toCardView(summary: GroupBuySummaryResponse): GroupBuyCardView {
     endAt: summary.endAt,
     currentQuantity: summary.currentQuantity,
     maxQuantity: summary.maxQuantity,
+    currentUnitPrice: summary.currentUnitPrice,
     daysLeft: toDaysLeft(summary.endAt),
     viewCount: summary.viewCount,
     createdAt: summary.createdAt,

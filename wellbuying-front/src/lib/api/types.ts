@@ -168,6 +168,7 @@ export type GroupBuySummaryResponse = {
   suspended: boolean;
   viewCount: number;
   createdAt: string;
+  currentUnitPrice: number;
 };
 
 export type GroupBuyPartCreateRequest = {
