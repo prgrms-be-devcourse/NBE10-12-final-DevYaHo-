@@ -69,7 +69,7 @@ jobs:
           mv /tmp/docker_config.json ~/.docker/config.json
 
       - name: Gradle 테스트 실행
-        run: ./gradlew test --no-daemon
+        run: ./gradlew test --no-daemon --info
 
   build-and-deploy:
     needs: test

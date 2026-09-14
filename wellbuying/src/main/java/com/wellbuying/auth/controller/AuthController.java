@@ -35,6 +35,7 @@ public class AuthController {
     private final EmailVerificationService emailVerificationService;
     private final JwtProperties jwtProperties;
 
+
     public AuthController(AuthService authService, EmailVerificationService emailVerificationService,
             JwtProperties jwtProperties) {
         this.authService = authService;
