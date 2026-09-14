@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import {
@@ -8,12 +8,11 @@ import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  subscribeNotificationStream,
 } from "@/lib/api/notification";
 import { getMyOrderIdByGroupBuy } from "@/lib/api/orders";
 import type { NotificationResponse } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
-
-const POLL_INTERVAL_MS = 30_000;
 
 function formatCreatedAt(createdAt: string): string {
   return new Date(createdAt).toLocaleString("ko-KR", {
@@ -31,26 +30,47 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // header에 backdrop-blur(=backdrop-filter)가 걸려 있어 position:fixed 자식의 containing block이
+  // header로 한정된다 - fixed 오버레이로는 header 밖(본문) 클릭을 감지할 수 없어 document 리스너로 대체
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
 
   useEffect(() => {
     if (!member) return;
 
     let ignore = false;
-    function refreshUnreadCount() {
-      getUnreadNotificationCount()
-        .then((response) => {
-          if (!ignore) setUnreadCount(response.count);
-        })
-        .catch(() => {
-          // 폴링 실패는 다음 주기에 재시도하면 되므로 조용히 무시
-        });
-    }
+    getUnreadNotificationCount()
+      .then((response) => {
+        if (!ignore) setUnreadCount(response.count);
+      })
+      .catch(() => {
+        // 초기 조회가 실패해도 SSE로 새 알림이 오면 그때부터는 정확한 값으로 맞춰진다
+      });
 
-    refreshUnreadCount();
-    const timer = setInterval(refreshUnreadCount, POLL_INTERVAL_MS);
+    // 30초 폴링 대신 SSE로 새 알림을 즉시 받는다 - 연결이 끊기면 subscribeNotificationStream이
+    // 내부적으로 재연결을 시도한다
+    const unsubscribe = subscribeNotificationStream((notification) => {
+      if (ignore) return;
+      setUnreadCount((count) => count + 1);
+      setNotifications((items) => {
+        if (items.some((item) => item.id === notification.id)) return items;
+        return [notification, ...items];
+      });
+    });
+
     return () => {
       ignore = true;
-      clearInterval(timer);
+      unsubscribe();
     };
   }, [member]);
 
@@ -104,7 +124,7 @@ export function NotificationBell() {
   if (!member) return null;
 
   return (
-    <div className="relative flex items-center">
+    <div ref={menuRef} className="relative flex items-center">
       <button
         onClick={toggleOpen}
         aria-label="알림 열기"
@@ -119,39 +139,36 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <>
-          <button aria-label="닫기" onClick={() => setOpen(false)} className="fixed inset-0 z-10 cursor-default" />
-          <div className="absolute right-0 top-full z-20 mt-1 w-80 rounded-xl border border-wb-line bg-wb-surface shadow-md">
-            <div className="flex items-center justify-between border-b border-wb-line px-3 py-2">
-              <span className="text-sm font-bold text-wb-ink">알림</span>
-              <button
-                onClick={handleMarkAllRead}
-                className="text-xs font-semibold text-wb-secondary hover:text-wb-ink"
-              >
-                모두 읽음
-              </button>
-            </div>
-            <div className="max-h-96 overflow-y-auto">
-              {loading && <p className="px-3 py-6 text-center text-xs text-wb-secondary">불러오는 중...</p>}
-              {!loading && notifications.length === 0 && (
-                <p className="px-3 py-6 text-center text-xs text-wb-secondary">알림이 없습니다.</p>
-              )}
-              {!loading &&
-                notifications.map((notification) => (
-                  <button
-                    key={notification.id}
-                    onClick={() => handleItemClick(notification)}
-                    className={`flex w-full flex-col items-start gap-0.5 border-b border-wb-line px-3 py-2.5 text-left last:border-b-0 hover:bg-wb-canvas ${
-                      notification.read ? "" : "bg-wb-orange/5"
-                    }`}
-                  >
-                    <p className="text-xs font-semibold text-wb-ink">{notification.message}</p>
-                    <p className="text-[11px] text-wb-secondary">{formatCreatedAt(notification.createdAt)}</p>
-                  </button>
-                ))}
-            </div>
+        <div className="absolute right-0 top-full z-20 mt-1 w-80 rounded-xl border border-wb-line bg-wb-surface shadow-md">
+          <div className="flex items-center justify-between border-b border-wb-line px-3 py-2">
+            <span className="text-sm font-bold text-wb-ink">알림</span>
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs font-semibold text-wb-secondary hover:text-wb-ink"
+            >
+              모두 읽음
+            </button>
           </div>
-        </>
+          <div className="max-h-96 overflow-y-auto">
+            {loading && <p className="px-3 py-6 text-center text-xs text-wb-secondary">불러오는 중...</p>}
+            {!loading && notifications.length === 0 && (
+              <p className="px-3 py-6 text-center text-xs text-wb-secondary">알림이 없습니다.</p>
+            )}
+            {!loading &&
+              notifications.map((notification) => (
+                <button
+                  key={notification.id}
+                  onClick={() => handleItemClick(notification)}
+                  className={`flex w-full flex-col items-start gap-0.5 border-b border-wb-line px-3 py-2.5 text-left last:border-b-0 hover:bg-wb-canvas ${
+                    notification.read ? "" : "bg-wb-orange/5"
+                  }`}
+                >
+                  <p className="text-xs font-semibold text-wb-ink">{notification.message}</p>
+                  <p className="text-[11px] text-wb-secondary">{formatCreatedAt(notification.createdAt)}</p>
+                </button>
+              ))}
+          </div>
+        </div>
       )}
     </div>
   );

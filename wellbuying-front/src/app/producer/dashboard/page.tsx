@@ -116,7 +116,7 @@ export default function ProducerDashboardPage() {
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">생산자 홈</h1>
+          <h1 className="text-3xl font-bold">대시보드</h1>
           <p className="mt-1 text-sm text-wb-secondary">가격을 투명하게 설계하고 공동구매를 운영하세요.</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>

@@ -5,6 +5,7 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.wellbuying.domain.product.dto.ProductMineResponse;
+import com.wellbuying.domain.product.entity.ProductCategory;
 import com.wellbuying.domain.product.entity.ProductSortType;
 import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.entity.QProduct;
@@ -13,10 +14,11 @@ import com.wellbuying.domain.product.dto.ProductSearchCondition;
 import com.wellbuying.domain.product.dto.ProductSummaryResponse;
 import com.wellbuying.global.dto.CursorPageResponse;
 import com.wellbuying.global.dto.Cursor;
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.support.PageableExecutionUtils;
 
 public class ProductQueryRepositoryImpl implements ProductQueryRepository {
 
@@ -24,9 +26,11 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
     private static final QProductCount productCount = QProductCount.productCount;
 
     private final JPAQueryFactory queryFactory;
+    private final ProductCategoryRepository productCategoryRepository;
 
-    public ProductQueryRepositoryImpl(JPAQueryFactory queryFactory) {
+    public ProductQueryRepositoryImpl(JPAQueryFactory queryFactory, ProductCategoryRepository productCategoryRepository) {
         this.queryFactory = queryFactory;
+        this.productCategoryRepository = productCategoryRepository;
     }
 
     // 판매 중인 상품을 대상으로 카테고리/가격 필터와 정렬을 적용해 커서 기반 목록 조회
@@ -87,33 +91,38 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
                 .fetch();
     }
 
-    // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회
+    // 특정 판매자가 등록한 상품 전체(상태 무관)를 최신순으로 조회, keyword가 있으면 상품명 LIKE 검색
     @Override
-    public Slice<ProductMineResponse> findBySeller(Long sellerId, Pageable pageable) {
+    public Page<ProductMineResponse> findBySeller(Long sellerId, String keyword, Pageable pageable) {
         List<ProductMineResponse> content = queryFactory
                 .select(Projections.constructor(ProductMineResponse.class,
                         product.id,
                         product.productName,
                         product.startPrice,
                         product.thumbnailUrl,
+                        product.categoryId,
+                        product.description,
                         product.status,
                         product.createdAt))
                 .from(product)
-                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull())
+                .where(product.sellerId.eq(sellerId), product.deletedAt.isNull(), productNameContains(keyword))
                 .orderBy(product.id.desc())
                 .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)
+                .limit(pageable.getPageSize())
                 .fetch();
 
-        return toSlice(pageable, content);
+        return PageableExecutionUtils.getPage(content, pageable, () -> {
+            Long total = queryFactory
+                    .select(product.count())
+                    .from(product)
+                    .where(product.sellerId.eq(sellerId), product.deletedAt.isNull(), productNameContains(keyword))
+                    .fetchOne();
+            return total != null ? total : 0L;
+        });
     }
 
-    private <T> Slice<T> toSlice(Pageable pageable, List<T> results) {
-        boolean hasNext = results.size() > pageable.getPageSize();
-        if (hasNext) {
-            results.remove(results.size() - 1);
-        }
-        return new SliceImpl<>(results, pageable, hasNext);
+    private BooleanExpression productNameContains(String keyword) {
+        return keyword != null && !keyword.isBlank() ? product.productName.containsIgnoreCase(keyword) : null;
     }
 
     private String buildCursor(ProductSummaryResponse last, ProductSortType sort) {
@@ -177,8 +186,15 @@ public class ProductQueryRepositoryImpl implements ProductQueryRepository {
         };
     }
 
+    // 선택된 카테고리 자신 + 자식 카테고리(2뎁스) 모두 포함하는 IN 조건.
+    // 1뎁스 카테고리 선택 시 해당 카테고리의 자식 상품까지 함께 조회된다.
     private BooleanExpression categoryEq(Long categoryId) {
-        return categoryId != null ? product.categoryId.eq(categoryId) : null;
+        if (categoryId == null) return null;
+        List<Long> ids = new ArrayList<>();
+        ids.add(categoryId);
+        productCategoryRepository.findAllByParentIdOrderBySortOrderAscIdAsc(categoryId)
+                .stream().map(ProductCategory::getId).forEach(ids::add);
+        return ids.size() == 1 ? product.categoryId.eq(categoryId) : product.categoryId.in(ids);
     }
 
     private BooleanExpression priceGoe(Integer minPrice) {

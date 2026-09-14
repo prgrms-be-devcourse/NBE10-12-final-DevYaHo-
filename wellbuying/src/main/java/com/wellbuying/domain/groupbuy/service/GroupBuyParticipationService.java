@@ -2,8 +2,8 @@ package com.wellbuying.domain.groupbuy.service;
 
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
-import com.wellbuying.domain.address.entity.BuyerAddress;
-import com.wellbuying.domain.address.repository.BuyerAddressRepository;
+import com.wellbuying.domain.address.service.BuyerAddressService;
+import com.wellbuying.domain.address.service.BuyerAddressService.BuyerAddressOwner;
 import com.wellbuying.domain.groupbuy.entity.GroupBuy;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPart;
 import com.wellbuying.domain.groupbuy.entity.GroupBuyPartStatus;
@@ -30,39 +30,59 @@ public class GroupBuyParticipationService {
     private final GroupBuyRepository groupBuyRepository;
     private final GroupBuyPartRepository groupBuyPartRepository;
     private final GroupBuyCounterRepository groupBuyCounterRepository;
-    private final BuyerAddressRepository buyerAddressRepository;
+    private final BuyerAddressService buyerAddressService;
     private final TransactionTemplate transactionTemplate;
 
     public GroupBuyParticipationService(GroupBuyRepository groupBuyRepository,
             GroupBuyPartRepository groupBuyPartRepository, GroupBuyCounterRepository groupBuyCounterRepository,
-            BuyerAddressRepository buyerAddressRepository, PlatformTransactionManager transactionManager) {
+            BuyerAddressService buyerAddressService, PlatformTransactionManager transactionManager) {
         this.groupBuyRepository = groupBuyRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
         this.groupBuyCounterRepository = groupBuyCounterRepository;
-        this.buyerAddressRepository = buyerAddressRepository;
+        this.buyerAddressService = buyerAddressService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     // 참여 신청 - Redis 원자적 카운터로 재고 체크+증가를 먼저 처리한 뒤, 성공한 경우에만 DB에 CONFIRMED로 반영한다.
-    // 검증(STEP1)과 DB 반영(STEP3)만 각각 짧은 트랜잭션으로 끝내 커넥션을 그때그때 반납하고, Redis 호출(STEP2)은
-    // 트랜잭션 밖에서 실행한다(AuthService.login()과 동일한 이유 - 커넥션 풀이 Redis 왕복 시간만큼 묶이는 걸
-    // 피함). 이 메서드 자체엔 @Transactional을 붙이지 않는다 - this.validateParticipation()/confirmParticipation()
-    // 호출은 프록시를 안 타는 self-invocation이라 애초에 걸리지도 않고, TransactionTemplate으로 STEP1/STEP3
-    // 각각의 경계를 명시적으로 잡는 편이 의도도 더 분명하다
+    // DB 트랜잭션이 필요한 STEP1/STEP3만 각각 짧게 끝내 커넥션을 그때그때 반납한다 - Redis/캐시 호출
+    // (STEP1.5, STEP2)은 트랜잭션 밖에서 실행한다(AuthService.login()과 동일한 이유 - 커넥션 풀이 네트워크
+    // 왕복 시간만큼 묶이는 걸 피함). 이 메서드 자체엔 @Transactional을 붙이지 않는다 -
+    // this.validateGroupBuyOngoing()/confirmParticipation() 호출은 프록시를 안 타는 self-invocation이라
+    // 애초에 걸리지도 않고, TransactionTemplate으로 STEP1/STEP3 각각의 경계를 명시적으로 잡는 편이 의도도
+    // 더 분명하다
     public GroupBuyPartResponse participate(Long memberId, Long groupBuyId, GroupBuyPartCreateRequest request) {
-        ValidatedParticipation validated = transactionTemplate.execute(
-                status -> validateParticipation(memberId, groupBuyId, request));
+        // STEP1: groupBuy 상태 검증만 하는 짧은 트랜잭션 - 판매정지/마감 등 groupBuy 자체의 문제가
+        // 배송지 문제보다 먼저 걸러져야 한다는 기존 우선순위를 유지하기 위해 배송지 검증보다 앞에 둔다
+        // (예: 판매정지된 공동구매에 존재하지 않는 배송지로 참여를 시도하면 SUSPENDED로 응답해야지
+        // BUYER_ADDRESS_NOT_FOUND로 응답하면 안 된다 - GroupBuyControllerTest 참고)
+        int maxQuantity = transactionTemplate.execute(status -> validateGroupBuyOngoing(groupBuyId));
 
+        // STEP1.5: 배송지 소유권 검증 - buyerAddressService.findOwner()는 @Cacheable이라 대부분
+        // Redis GET 한 번으로 끝난다(캐시 미스일 때만 DB를 탄다). STEP1 트랜잭션이 이미 끝난 뒤, 그리고
+        // STEP2(Redis 카운터)를 건드리기 전에 트랜잭션 밖에서 확인한다 - STEP1 트랜잭션 "안에서" 이
+        // 호출을 했다면 캐시가 히트해도 그 Redis 왕복 동안 이미 열려 있는 STEP1 커넥션을 그냥 놀리며
+        // 붙잡는 꼴이 되어, STEP2를 트랜잭션 밖으로 뺀 것과 같은 문제가 재발한다. 여기서 검증하면
+        // Redis 카운터를 아직 안 건드린 상태라 실패해도 되돌릴 게 없다
+        BuyerAddressOwner owner = buyerAddressService.findOwner(request.buyerAddressId());
+        if (owner == null) {
+            throw new BusinessException(ErrorCode.BUYER_ADDRESS_NOT_FOUND);
+        }
+        if (!owner.memberId().equals(memberId)) {
+            throw new BusinessException(ErrorCode.BUYER_ADDRESS_FORBIDDEN);
+        }
+
+        // STEP2: Redis 원자적 카운터 - 트랜잭션 밖에서 호출한다
         int quantity = request.quantity();
-        long newTotal = groupBuyCounterRepository.tryIncrease(groupBuyId, quantity, validated.maxQuantity());
+        long newTotal = groupBuyCounterRepository.tryIncrease(groupBuyId, quantity, maxQuantity);
         if (newTotal < 0) {
             throw new BusinessException(ErrorCode.GROUP_BUY_SOLD_OUT);
         }
 
+        // STEP3: 참여 저장 + 수량 반영을 짧은 트랜잭션으로 묶는다
         ConfirmationResult result;
         try {
             result = transactionTemplate.execute(
-                    status -> confirmParticipation(memberId, groupBuyId, quantity, validated.buyerAddressId()));
+                    status -> confirmParticipation(memberId, groupBuyId, quantity, request.buyerAddressId()));
         } catch (RuntimeException e) {
             // DB 반영이 실패하면 먼저 늘려둔 Redis 카운터를 되돌려 재고가 영구히 줄어든 상태로 남지 않도록 한다.
             // decrease()는 이미 삭제된 키에도 안전하다(decrease_groupbuy.lua 참고). try 범위를
@@ -86,10 +106,9 @@ public class GroupBuyParticipationService {
         return result.response();
     }
 
-    // STEP1: groupBuy 상태 + 배송지 소유권 검증만 하고 아무것도 쓰지 않는다. 배송지 소유권은 Redis 카운터를
-    // 건드리기 전에 검증한다 - 검증에 실패하면 카운터를 되돌릴 필요 자체가 없다
-    private ValidatedParticipation validateParticipation(Long memberId, Long groupBuyId,
-            GroupBuyPartCreateRequest request) {
+    // STEP1: groupBuy 상태만 검증하고 아무것도 쓰지 않는다. 배송지 소유권은 이 다음 단계(STEP1.5)에서
+    // 확인한다 - 판매정지/마감 같은 groupBuy 자체의 문제를 배송지 문제보다 먼저 알려주기 위해서다
+    private int validateGroupBuyOngoing(Long groupBuyId) {
         GroupBuy groupBuy = groupBuyRepository.findById(groupBuyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_BUY_NOT_FOUND));
 
@@ -104,19 +123,7 @@ public class GroupBuyParticipationService {
             throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
         }
 
-        BuyerAddress buyerAddress = buyerAddressRepository.findById(request.buyerAddressId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUYER_ADDRESS_NOT_FOUND));
-        if (!buyerAddress.getMemberId().equals(memberId)) {
-            throw new BusinessException(ErrorCode.BUYER_ADDRESS_FORBIDDEN);
-        }
-
-        return new ValidatedParticipation(groupBuy.getMaxQuantity(), buyerAddress.getId());
-    }
-
-    // STEP1 결과 전달용 - Redis 호출(STEP2)에 필요한 maxQuantity와 STEP3에 필요한 buyerAddressId만 담는다.
-    // groupBuy/buyerAddress 엔티티 자체를 들고 나가지 않는 이유는, STEP1의 트랜잭션이 끝나는 순간 영속성
-    // 컨텍스트가 닫혀 detached 상태가 되므로 값만 꺼내 쓰는 편이 안전하기 때문이다
-    private record ValidatedParticipation(int maxQuantity, Long buyerAddressId) {
+        return groupBuy.getMaxQuantity();
     }
 
     // STEP3 결과 전달용 - 매진 확정 여부를 담아서, Redis 카운터 정리(참여자와 무관한 부수효과)를

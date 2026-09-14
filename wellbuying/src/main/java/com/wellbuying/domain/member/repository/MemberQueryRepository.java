@@ -8,6 +8,6 @@ import org.springframework.data.domain.Pageable;
 
 public interface MemberQueryRepository {
 
-    // role/status 필터로 회원 목록을 페이지 단위로 조회 (구현은 MemberQueryRepositoryImpl)
-    Page<MemberSummaryResponse> search(Role role, MemberStatus status, Pageable pageable);
+    // role/status 필터 + email 키워드 검색으로 회원 목록을 페이지 단위로 조회 (구현은 MemberQueryRepositoryImpl)
+    Page<MemberSummaryResponse> search(Role role, MemberStatus status, String keyword, Pageable pageable);
 }

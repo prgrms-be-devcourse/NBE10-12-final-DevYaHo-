@@ -54,3 +54,4 @@ CLAUDE.local.md
 node_modules/
 package-lock.json
 package.json
+summary*.json

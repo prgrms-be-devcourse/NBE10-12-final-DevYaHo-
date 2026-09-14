@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownCircle,
@@ -13,20 +13,17 @@ import {
   PackageSearch,
   Quote,
   Rocket,
-  Sparkles,
 } from "lucide-react";
-import { DealsSubNav } from "@/components/consumer/DealsSubNav";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCard } from "@/components/deal/GroupBuyCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tag } from "@/components/ui/Tag";
-import { CATALOG_CATEGORIES } from "@/lib/groupBuy/seedCatalog";
+import { won } from "@/lib/format";
 import { useGroupBuyList, type GroupBuyCardView } from "@/lib/groupBuy/useGroupBuyList";
 
 const CAROUSEL_INTERVAL_MS = 4500;
 const PROMO_COUNT = 3;
-const POPULAR_COUNT = 4;
-const NOTABLE_COUNT = 8;
+const POPULAR_SIDEBAR_COUNT = 5;
 const CLOSING_SOON_COUNT = 8;
 const UPCOMING_COUNT = 4;
 const NEW_ARRIVAL_COUNT = 4;
@@ -37,47 +34,27 @@ export default function HomePage() {
   // 그대로 재활용하지 않고 정렬 기준별로 따로 받아온다 - 전체 진행중 건수가 한 번에 받는 개수(50)보다
   // 많아지면 클라이언트에서 재정렬해서는 진짜 상위 항목을 놓칠 수 있기 때문(서버가 정렬한 뒤 잘라줘야
   // 정확하다). 목록 카드에 필요한 필드는 동일해 사이즈만 작게 준다
-  const { items: popularSource } = useGroupBuyList("ONGOING", { sort: "viewCount,desc", size: POPULAR_COUNT * 4 });
+  const { items: popularSource } = useGroupBuyList("ONGOING", {
+    sort: "viewCount,desc",
+    size: POPULAR_SIDEBAR_COUNT * 4,
+  });
   const { items: closingSource } = useGroupBuyList("ONGOING", { sort: "endAt,asc", size: CLOSING_SOON_COUNT * 4 });
   const { items: newArrivalSource } = useGroupBuyList("ONGOING", {
     sort: "createdAt,desc",
     size: NEW_ARRIVAL_COUNT * 4,
   });
   const { items: upcomingAll } = useGroupBuyList("READY");
-  const [category, setCategory] = useState("전체");
   const [slide, setSlide] = useState(0);
 
-  const byCategory = useCallback(
-    (items: GroupBuyCardView[]) => (category === "전체" ? items : items.filter((item) => item.category === category)),
-    [category],
-  );
-
-  const filtered = byCategory(ongoing);
+  const filtered = ongoing;
 
   const promoDeals = useMemo(() => filtered.slice(0, PROMO_COUNT), [filtered]);
 
-  const popular = useMemo(() => byCategory(popularSource).slice(0, POPULAR_COUNT), [popularSource, byCategory]);
+  const closingSoon = useMemo(() => closingSource.slice(0, CLOSING_SOON_COUNT), [closingSource]);
 
-  const notable = useMemo(() => filtered.slice(0, NOTABLE_COUNT), [filtered]);
+  const upcoming = useMemo(() => upcomingAll.slice(0, UPCOMING_COUNT), [upcomingAll]);
 
-  const closingSoon = useMemo(
-    () => byCategory(closingSource).slice(0, CLOSING_SOON_COUNT),
-    [closingSource, byCategory],
-  );
-
-  const upcoming = useMemo(() => {
-    const scheduled = category === "전체" ? upcomingAll : upcomingAll.filter((item) => item.category === category);
-    return scheduled.slice(0, UPCOMING_COUNT);
-  }, [upcomingAll, category]);
-
-  const newArrivals = useMemo(
-    () => byCategory(newArrivalSource).slice(0, NEW_ARRIVAL_COUNT),
-    [newArrivalSource, byCategory],
-  );
-
-  useEffect(() => {
-    setSlide(0);
-  }, [category]);
+  const newArrivals = useMemo(() => newArrivalSource.slice(0, NEW_ARRIVAL_COUNT), [newArrivalSource]);
 
   useEffect(() => {
     if (promoDeals.length <= 1) return;
@@ -91,60 +68,46 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 px-6 py-9">
-      <DealsSubNav categories={CATALOG_CATEGORIES} categoryValue={category} onCategoryChange={setCategory} />
-
-      <div>
-        <p className="text-sm font-semibold text-wb-green">좋은 아침이에요</p>
-        <h1 className="mt-1 text-3xl font-bold">가격을 알면, 구매가 달라져요</h1>
-      </div>
-
       {ongoingLoading ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-wb-line py-16 text-center">
           <PackageSearch className="h-8 w-8 text-wb-secondary" strokeWidth={1.5} />
-          <p className="text-sm font-semibold text-wb-secondary">이 카테고리엔 아직 공동구매가 없어요</p>
+          <p className="text-sm font-semibold text-wb-secondary">아직 진행 중인 공동구매가 없어요</p>
         </div>
       ) : (
         <>
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
             {activePromo && (
               <div className="space-y-3 lg:col-span-2">
-                <div className="flex items-center gap-2 text-wb-green">
-                  <ArrowDownCircle className="h-5 w-5" />
-                  <h2 className="text-lg font-bold">지금 주목할 공동구매</h2>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-wb-green">
+                    <ArrowDownCircle className="h-5 w-5" />
+                    <h2 className="text-lg font-bold">지금 주목할 공동구매</h2>
+                  </div>
+                  <Link href="/explore" className="shrink-0 text-xs font-bold text-wb-secondary hover:text-wb-green">
+                    전체보기
+                  </Link>
                 </div>
                 <PromoCarousel items={promoDeals} slide={slide} onSelectSlide={setSlide} />
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="flex h-full flex-col space-y-3">
               <SectionHeading
                 icon={<Flame className="h-5 w-5" />}
                 tone="text-wb-orange"
-                title="지금 인기 중인 공동구매"
+                title="지금 인기 중인 공동구매 TOP 10"
+                subtitle="가장 많이 조회된 공동구매예요"
                 href="/ranking"
               />
-              <div className="space-y-2">
-                {popular.map((item, index) => (
-                  <PopularDealRow key={item.id} item={item} rank={index + 1} />
+              <div className="flex flex-1 flex-col gap-2">
+                {popularSource.slice(0, POPULAR_SIDEBAR_COUNT).map((item, index) => (
+                  <div key={item.id} className="flex-1">
+                    <PopularDealRow item={item} rank={index + 1} />
+                  </div>
                 ))}
               </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeading
-              icon={<Sparkles className="h-5 w-5" />}
-              tone="text-wb-green"
-              title="주목할 만한 공동구매"
-              subtitle="생산 과정과 가격을 투명하게 공개했어요"
-              href="/explore"
-            />
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {notable.map((item) => (
-                <GroupBuyCard key={item.id} item={item} />
-              ))}
             </div>
           </section>
 
@@ -267,8 +230,8 @@ function PromoCarousel({
               <Tag highlighted>마감 D-{item.daysLeft}</Tag>
             </div>
             <h3 className="mt-4 line-clamp-2 h-16 text-2xl leading-8">{item.title}</h3>
-            <p className="mt-1.5 truncate text-sm font-medium text-wb-secondary">{item.producerName}</p>
             <p className="mt-2 line-clamp-2 h-10 text-sm text-wb-secondary">{item.summary}</p>
+            <p className="mt-1.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
             <div className="mt-auto space-y-3 pt-4">
               <ProgressBar value={item.maxQuantity === 0 ? 0 : item.currentQuantity / item.maxQuantity} />
               <div className="flex justify-between text-xs">
@@ -322,6 +285,7 @@ function PromoCarousel({
 }
 
 function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }) {
+  const progress = item.maxQuantity > 0 ? item.currentQuantity / item.maxQuantity : 0;
   return (
     <Link
       href={`/deals/${item.id}`}
@@ -340,10 +304,13 @@ function PopularDealRow({ item, rank }: { item: GroupBuyCardView; rank: number }
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">{item.title}</p>
         <p className="mt-0.5 truncate text-xs text-wb-secondary">{item.producerName}</p>
+        <div className="mt-1.5">
+          <ProgressBar value={progress} />
+        </div>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-bold text-wb-green">조회 {item.viewCount.toLocaleString("ko-KR")}회</p>
-        <p className="mt-0.5 text-xs text-wb-secondary">{item.currentQuantity.toLocaleString("ko-KR")}개 참여</p>
+        <p className="text-sm font-bold">{won(item.currentUnitPrice)}</p>
+        <p className="mt-0.5 text-xs font-bold text-wb-green">{Math.round(progress * 100)}%</p>
       </div>
     </Link>
   );

@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import { DealArtwork } from "@/components/deal/DealArtwork";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { NumberField } from "@/components/ui/NumberField";
 import { Tag } from "@/components/ui/Tag";
 import { TextField } from "@/components/ui/TextField";
 import { useDemoStore } from "@/lib/mock/DemoStoreProvider";
@@ -157,9 +158,9 @@ function DealEditorForm({
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2.5">
-                <NumberField label="시작 인원" suffix="명" value={tier.people} onChange={(v) => updateTier(index, { people: v })} />
-                <NumberField label="판매가" suffix="원" value={tier.price} onChange={(v) => updateTier(index, { price: v })} />
-                <NumberField label="공개 원가" suffix="원" value={tier.cost} onChange={(v) => updateTier(index, { cost: v })} />
+                <NumberField compact label="시작 인원" suffix="명" value={tier.people} onChange={(v) => updateTier(index, { people: v })} />
+                <NumberField compact label="판매가" suffix="원" value={tier.price} onChange={(v) => updateTier(index, { price: v })} />
+                <NumberField compact label="공개 원가" suffix="원" value={tier.cost} onChange={(v) => updateTier(index, { cost: v })} />
               </div>
             </div>
           ))}
@@ -231,33 +232,6 @@ function DealEditorForm({
         )}
       </div>
     </Modal>
-  );
-}
-
-function NumberField({
-  label,
-  suffix,
-  value,
-  onChange,
-}: {
-  label: string;
-  suffix: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[10px] text-wb-secondary">{label}</span>
-      <div className="flex items-center gap-1 rounded-lg border border-wb-line bg-wb-surface px-2.5 py-2">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
-          className="w-full bg-transparent text-sm font-bold outline-none"
-        />
-        <span className="shrink-0 text-[10px] text-wb-secondary">{suffix}</span>
-      </div>
-    </label>
   );
 }
 

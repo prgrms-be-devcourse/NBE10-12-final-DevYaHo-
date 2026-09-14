@@ -8,6 +8,8 @@ public record ProductMineResponse(
         String productName,
         Integer startPrice,
         String thumbnailUrl,
+        Long categoryId,
+        String description,
         ProductStatus status,
         LocalDateTime createdAt
 ) {

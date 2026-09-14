@@ -190,33 +190,35 @@ class ProductSearchRepositoryCustomImplTest extends AbstractIntegrationTest {
 
     private ProductSearchDocument doc(long id, String name, String description, String status) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
-                false, null, null, null, null, null, null, null);
+                false, null, null, null, null, null, null, null, null, null);
     }
 
     private ProductSearchDocument doc(long id, String name, String description, String status, long viewCount) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, viewCount, "url", 1L, LocalDateTime.now(),
-                false, null, null, null, null, null, null, null);
+                false, null, null, null, null, null, null, null, null, null);
     }
 
     private ProductSearchDocument doc(long id, String name, String description, String status, boolean hasActiveGroupBuy) {
         return new ProductSearchDocument(id, name, description, 1L, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
                 hasActiveGroupBuy,
                 hasActiveGroupBuy ? 100L : null,
+                hasActiveGroupBuy ? "감귤 공동구매" : null,
                 hasActiveGroupBuy ? "ONGOING" : null,
                 hasActiveGroupBuy ? 8000 : null,
                 hasActiveGroupBuy ? 5 : null,
                 hasActiveGroupBuy ? 10 : null,
                 hasActiveGroupBuy ? 100 : null,
+                hasActiveGroupBuy ? LocalDateTime.of(2026, 9, 20, 0, 0) : null,
                 hasActiveGroupBuy ? LocalDateTime.of(2026, 9, 30, 23, 59) : null);
     }
 
     private ProductSearchDocument docWithCategory(long id, String name, String description, String status, long categoryId) {
         return new ProductSearchDocument(id, name, description, categoryId, status, 10000, 0L, "url", 1L, LocalDateTime.now(),
-                false, null, null, null, null, null, null, null);
+                false, null, null, null, null, null, null, null, null, null);
     }
 
     private ProductSearchDocument docWithPrice(long id, String name, String description, String status, int startPrice) {
         return new ProductSearchDocument(id, name, description, 1L, status, startPrice, 0L, "url", 1L, LocalDateTime.now(),
-                false, null, null, null, null, null, null, null);
+                false, null, null, null, null, null, null, null, null, null);
     }
 }

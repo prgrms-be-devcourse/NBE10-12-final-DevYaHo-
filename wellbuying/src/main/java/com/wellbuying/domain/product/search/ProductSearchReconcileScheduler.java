@@ -69,6 +69,10 @@ public class ProductSearchReconcileScheduler {
                 .register(meterRegistry);
     }
 
+    public long getLastSuccessTimestamp() { return lastSuccessTimestamp.get(); }
+    public long getResumeFromId() { return resumeFromId.get(); }
+    public int getConsecutiveFailures() { return consecutiveFailures.get(); }
+
     @Scheduled(
             fixedDelayString = "${search.reconcile.fixed-delay-ms:600000}",
             initialDelayString = "${search.reconcile.initial-delay-ms:600000}")

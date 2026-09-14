@@ -33,6 +33,7 @@ import com.wellbuying.domain.member.entity.Role;
 import com.wellbuying.domain.member.repository.MemberRepository;
 import com.wellbuying.domain.product.entity.Product;
 import com.wellbuying.domain.product.entity.ProductCategory;
+import com.wellbuying.domain.product.entity.ProductStatus;
 import com.wellbuying.domain.product.repository.ProductCategoryRepository;
 import com.wellbuying.domain.product.repository.ProductRepository;
 import com.wellbuying.domain.product.service.ProductService;
@@ -94,7 +95,7 @@ public class GroupBuyService {
                 .orElse("기타");
     }
 
-    // 공동구매 생성 - SELLER 역할의 회원만 생산자로 등록 가능, 자기 소유로 등록된 상품이어야 함, 가격 구간과 함께 저장하고 참여용 Redis 카운터를 0으로 초기화
+    // 공동구매 생성 - SELLER 역할의 회원만 생산자로 등록 가능, 자기 소유로 등록된 상품이면서 관리자 승인(APPROVED)까지 완료된 상품이어야 함, 가격 구간과 함께 저장하고 참여용 Redis 카운터를 0으로 초기화
     @Transactional
     public GroupBuyDetailResponse create(Long producerId, GroupBuyCreateRequest request) {
         Member producer = memberRepository.findByIdAndDeletedAtIsNull(producerId)
@@ -103,6 +104,9 @@ public class GroupBuyService {
             throw new BusinessException(ErrorCode.GROUP_BUY_FORBIDDEN);
         }
         Product product = productService.getOwnedOrThrow(producerId, request.productId());
+        if (product.getStatus() != ProductStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_PRODUCT_NOT_APPROVED);
+        }
         if (!request.startAt().isBefore(request.endAt())) {
             throw new BusinessException(ErrorCode.GROUP_BUY_INVALID_PERIOD);
         }
@@ -151,10 +155,9 @@ public class GroupBuyService {
     }
 
     @Transactional(readOnly = true)
-    public Page<GroupBuySummaryResponse> list(GroupBuyStatus status, Pageable pageable) {
-        Page<GroupBuy> page = status != null
-                ? groupBuyRepository.findByStatus(status, pageable)
-                : groupBuyRepository.findAll(pageable);
+    public Page<GroupBuySummaryResponse> list(GroupBuyStatus status, String keyword, Long categoryId,
+            Pageable pageable) {
+        Page<GroupBuy> page = groupBuyRepository.search(status, keyword, categoryId, pageable);
         return toSummaryPage(page);
     }
 
@@ -167,7 +170,8 @@ public class GroupBuyService {
         return toSummaryPage(page);
     }
 
-    // 상품/카테고리를 배치 조회해 GroupBuySummaryResponse로 조합 - list()/listMine()이 공유
+    // 상품/카테고리/가격 구간을 배치 조회해 GroupBuySummaryResponse로 조합 - list()/listMine()이 공유.
+    // 가격 구간도 getActiveSummariesByProductIds와 동일하게 IN 쿼리 한 번으로 배치 조회해 N+1을 피한다
     private Page<GroupBuySummaryResponse> toSummaryPage(Page<GroupBuy> page) {
         List<Long> productIds = page.getContent().stream().map(GroupBuy::getProductId).distinct().toList();
         Map<Long, Product> productsById = productRepository.findAllById(productIds).stream()
@@ -175,12 +179,22 @@ public class GroupBuyService {
         List<Long> categoryIds = productsById.values().stream().map(Product::getCategoryId).distinct().toList();
         Map<Long, String> categoryNamesById = productCategoryRepository.findAllById(categoryIds).stream()
                 .collect(Collectors.toMap(ProductCategory::getId, ProductCategory::getCategoryName));
+        List<Long> groupBuyIds = page.getContent().stream().map(GroupBuy::getId).toList();
+        Map<Long, List<GroupBuyPrice>> priceTiersByGroupBuyId = groupBuyPriceRepository.findByGroupBuyIdIn(
+                groupBuyIds).stream().collect(Collectors.groupingBy(GroupBuyPrice::getGroupBuyId));
         return page.map(groupBuy -> {
             Product product = productsById.get(groupBuy.getProductId());
             String categoryName = product != null
                     ? categoryNamesById.getOrDefault(product.getCategoryId(), "기타")
                     : "기타";
-            return GroupBuySummaryResponse.of(groupBuy, product, categoryName);
+            // 가격 구간이 없는 공동구매(레거시 데이터 등)가 섞여 있어도 그 한 건 때문에 페이지 전체가
+            // 500으로 죽지 않도록, resolveUnitPrice()가 예외를 던지는 대신 0으로 폴백한다 - 상세/참여
+            // 흐름(getPriceOrThrow 등)은 여전히 엄격하게 막아야 하므로 이 폴백은 목록 조회에만 적용한다
+            List<GroupBuyPrice> priceTiers = priceTiersByGroupBuyId.getOrDefault(groupBuy.getId(), List.of());
+            int currentUnitPrice = priceTiers.isEmpty()
+                    ? 0
+                    : GroupBuyPriceCalculator.resolveUnitPrice(priceTiers, groupBuy.getCurrentQuantity());
+            return GroupBuySummaryResponse.of(groupBuy, product, categoryName, currentUnitPrice);
         });
     }
 
@@ -246,11 +260,15 @@ public class GroupBuyService {
                 GroupBuySuspensionRequest.request(groupBuyId, producerId, request.reason()));
     }
 
-    // 관리자의 상태별 판매정지 요청 목록 조회 - 공동구매 제목을 함께 보여주기 위해 배치 조회 후 조합
+    // 관리자의 상태별 판매정지 요청 목록 조회 - 공동구매 제목을 함께 보여주기 위해 배치 조회 후 조합.
+    // keyword가 있으면 GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다(요청 테이블 자체엔 제목이 없다)
     @Transactional(readOnly = true)
     public Page<GroupBuySuspensionRequestResponse> listSuspensionRequests(GroupBuySuspensionStatus status,
-            Pageable pageable) {
-        Page<GroupBuySuspensionRequest> page = groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
+            String keyword, Pageable pageable) {
+        Page<GroupBuySuspensionRequest> page = (keyword != null && !keyword.isBlank())
+                ? groupBuySuspensionRequestRepository.findAllByStatusAndGroupBuyTitleContainingIgnoreCase(status,
+                        keyword, pageable)
+                : groupBuySuspensionRequestRepository.findAllByStatus(status, pageable);
         List<Long> groupBuyIds = page.getContent().stream().map(GroupBuySuspensionRequest::getGroupBuyId).distinct()
                 .toList();
         Map<Long, String> titlesById = groupBuyRepository.findAllById(groupBuyIds).stream()
@@ -269,6 +287,28 @@ public class GroupBuyService {
         recordSuspensionAction(requestId, adminId, AdminActionType.APPROVE, reason);
     }
 
+    // 관리자 강제 판매정지 - 생산자의 요청 없이 관리자가 직접 이상 있는 ONGOING 공동구매를 정지시킨다.
+    // 대기 없이 즉시 승인 상태인 판매정지 요청을 생성해서 기존 이력 조회 로직(target_type=GROUP_BUY_SUSPENSION_REQUEST)을
+    // 그대로 재사용한다 - PENDING으로 한 번도 저장되지 않으므로 "대기 중 요청 1건" 유니크 제약과도 충돌하지 않는다
+    // TODO(참여자 결제/환불): 이 메서드는 상태 전이(suspended=true, status=CANCELED)만 처리한다.
+    // 이미 결제 완료된 참여자에 대한 환불/취소 처리는 이번 스코프에서 다루지 않았다 - approveSuspensionRequest도
+    // 동일하게 환불을 처리하지 않으므로 기존 판매정지 승인 플로우와 범위가 같다. 별도 후속 작업으로 필요.
+    @Transactional
+    public void forceSuspend(Long groupBuyId, Long adminId, String reason) {
+        GroupBuy groupBuy = getGroupBuyOrThrow(groupBuyId);
+        if (groupBuy.isSuspended()) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_SUSPENDED);
+        }
+        if (groupBuy.getStatus() != GroupBuyStatus.ONGOING) {
+            throw new BusinessException(ErrorCode.GROUP_BUY_NOT_ONGOING);
+        }
+        GroupBuySuspensionRequest request = GroupBuySuspensionRequest.request(groupBuyId, adminId, reason);
+        request.approve();
+        groupBuySuspensionRequestRepository.save(request);
+        groupBuy.suspend();
+        recordSuspensionAction(request.getId(), adminId, AdminActionType.APPROVE, reason);
+    }
+
     // 판매정지 요청 반려 - 요청만 REJECTED로 전환, 공동구매 상태는 변경하지 않음
     @Transactional
     public void rejectSuspensionRequest(Long requestId, Long adminId, String reason) {
@@ -277,11 +317,15 @@ public class GroupBuyService {
         recordSuspensionAction(requestId, adminId, AdminActionType.REJECT, reason);
     }
 
-    // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용
+    // 판매정지 요청 승인/반려 이력 조회 - "승인 대기 요청 처리" 화면에서 사용.
+    // keyword가 있으면 GroupBuySuspensionRequest/GroupBuy와 조인해 DB에서 한 번에 제목으로 필터링한다
     @Transactional(readOnly = true)
-    public Page<AdminActionLogResponse> listSuspensionActionLogs(Pageable pageable) {
-        Page<AdminActionLog> page = adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
-                AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
+    public Page<AdminActionLogResponse> listSuspensionActionLogs(String keyword, Pageable pageable) {
+        Page<AdminActionLog> page = (keyword != null && !keyword.isBlank())
+                ? adminActionLogRepository.findAllByTargetTypeAndGroupBuySuspensionRequestTitleContainingIgnoreCase(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, keyword, pageable)
+                : adminActionLogRepository.findAllByTargetTypeOrderByOccurredAtDesc(
+                        AdminActionTargetType.GROUP_BUY_SUSPENSION_REQUEST, pageable);
         List<Long> requestIds = page.getContent().stream().map(AdminActionLog::getTargetId).distinct().toList();
         Map<Long, Long> groupBuyIdsByRequestId = groupBuySuspensionRequestRepository.findAllById(requestIds).stream()
                 .collect(Collectors.toMap(GroupBuySuspensionRequest::getId, GroupBuySuspensionRequest::getGroupBuyId));

@@ -1,3 +1,7 @@
 allowBuilds:
   sharp: false
   unrs-resolver: false
+
+overrides:
+  # eslint(@eslint/eslintrc)가 물고 오는 취약 버전 강제 고정 - CVE-2026-84375
+  js-yaml: ^4.3.2

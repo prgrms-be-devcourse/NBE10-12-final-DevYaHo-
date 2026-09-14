@@ -31,7 +31,8 @@ type RequestOptions = {
 // 동시에 여러 요청이 401을 받아도 reissue는 한 번만 실행되도록 진행 중인 Promise를 공유
 let refreshing: Promise<boolean> | null = null;
 
-async function reissueTokens(): Promise<boolean> {
+// SSE 재연결(subscribeNotificationStream)도 401을 받으면 이 함수로 액세스 토큰을 갱신한다
+export async function reissueTokens(): Promise<boolean> {
   // refreshToken은 httpOnly 쿠키로만 오가므로 JS에서 읽을 수 없다 - credentials: "include"로 브라우저가
   // 자동으로 실어 보내게 하고, X-Device-Id는 백엔드가 CSRF 방어용으로 필수 요구한다(phase25 §2-4)
   const deviceId = getDeviceId();

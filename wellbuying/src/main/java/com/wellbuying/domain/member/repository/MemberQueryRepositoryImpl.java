@@ -34,9 +34,10 @@ public class MemberQueryRepositoryImpl implements MemberQueryRepository {
         this.queryFactory = queryFactory;
     }
 
-    // role/status 필터를 적용해 회원 목록을 pageable.getSort() 기준으로 조회 - 마지막 페이지 등 필요 없을 때는 count 쿼리를 생략
+    // role/status 필터 + email 키워드(대소문자 무시 부분일치)를 적용해 회원 목록을 pageable.getSort() 기준으로 조회
+    // 마지막 페이지 등 필요 없을 때는 count 쿼리를 생략
     @Override
-    public Page<MemberSummaryResponse> search(Role role, MemberStatus status, Pageable pageable) {
+    public Page<MemberSummaryResponse> search(Role role, MemberStatus status, String keyword, Pageable pageable) {
         List<MemberSummaryResponse> content = queryFactory
                 .select(Projections.constructor(MemberSummaryResponse.class,
                         member.id,
@@ -50,7 +51,7 @@ public class MemberQueryRepositoryImpl implements MemberQueryRepository {
                         sellerInfo.status))
                 .from(member)
                 .leftJoin(sellerInfo).on(sellerInfo.memberId.eq(member.id))
-                .where(roleEq(role), statusEq(status))
+                .where(roleEq(role), statusEq(status), emailContains(keyword))
                 .orderBy(sortOrders(pageable.getSort()))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
@@ -60,7 +61,7 @@ public class MemberQueryRepositoryImpl implements MemberQueryRepository {
             Long total = queryFactory
                     .select(member.count())
                     .from(member)
-                    .where(roleEq(role), statusEq(status))
+                    .where(roleEq(role), statusEq(status), emailContains(keyword))
                     .fetchOne();
             return total != null ? total : 0L;
         });
@@ -74,6 +75,11 @@ public class MemberQueryRepositoryImpl implements MemberQueryRepository {
     // status 필터 조건 생성, status가 없으면 조건에서 제외
     private BooleanExpression statusEq(MemberStatus status) {
         return status != null ? member.status.eq(status) : null;
+    }
+
+    // email 키워드 검색 조건 생성, keyword가 없으면(공백만 있어도) 조건에서 제외
+    private BooleanExpression emailContains(String keyword) {
+        return (keyword != null && !keyword.isBlank()) ? member.email.containsIgnoreCase(keyword) : null;
     }
 
     // pageable.getSort()를 OrderSpecifier로 변환 - 화이트리스트에 없는 프로퍼티는 무시하고, 정렬 조건이 하나도 없으면 최신 가입순(createdAt desc)을 기본 적용

@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public record ProductAdminResponse(
         Long id,
         Long sellerId,
+        String sellerEmail,
         Long categoryId,
         String productName,
         Integer startPrice,
@@ -16,8 +17,9 @@ public record ProductAdminResponse(
         LocalDateTime createdAt
 ) {
 
-    public static ProductAdminResponse of(Product product) {
-        return new ProductAdminResponse(product.getId(), product.getSellerId(), product.getCategoryId(),
+    // sellerEmail은 배치 조회한 Map에서 채워 넣는다 - 목록 API에서 상품마다 회원을 개별 조회하지 않기 위함
+    public static ProductAdminResponse of(Product product, String sellerEmail) {
+        return new ProductAdminResponse(product.getId(), product.getSellerId(), sellerEmail, product.getCategoryId(),
                 product.getProductName(), product.getStartPrice(), product.getThumbnailUrl(),
                 product.getStatus(), product.getCreatedAt());
     }
