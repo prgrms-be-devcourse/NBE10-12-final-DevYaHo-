@@ -81,7 +81,7 @@ export default function DealDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation">("story");
+  const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation" | "images">("story");
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
@@ -300,6 +300,9 @@ export default function DealDetailPage() {
   const TABS = [
     { key: "story" as const, label: "스토리" },
     { key: "tiers" as const, label: "가격 구간" },
+    ...(product.descriptionImageUrls.length > 0
+      ? [{ key: "images" as const, label: "상세 이미지" }]
+      : []),
     { key: "participation" as const, label: "내 참여" },
   ];
 
@@ -408,6 +411,20 @@ export default function DealDetailPage() {
                 아직 참여하지 않았어요. 오른쪽에서 수량을 정하고 참여해보세요.
               </p>
             ))}
+
+          {activeTab === "images" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {product.descriptionImageUrls.map((url, index) => (
+                // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 이미지 URL이라 next/image 최적화 대상이 아님
+                <img
+                  key={url}
+                  src={url}
+                  alt={`${detail.title} 상세 이미지 ${index + 1}`}
+                  className="w-full rounded-2xl object-cover"
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
