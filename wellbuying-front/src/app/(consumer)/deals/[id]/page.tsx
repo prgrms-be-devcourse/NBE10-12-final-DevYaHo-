@@ -296,6 +296,7 @@ export default function DealDetailPage() {
   }
 
   const catalog = resolveCatalogEntry(detail.productName);
+  const storyBlocks = catalog.storyBlocks ?? DESCRIPTION_STORY_BLOCKS;
   const newAddressValid = /^\d{5}$/.test(newZipcode.trim()) && newAddress.trim() !== "";
   // 배송지는 "참여하기" 클릭 후 뜨는 별도 모달에서 고르므로, 여기서는 수량/상태만 확인한다.
   // 비로그인 사용자는 수량을 채우지 않아도 참여 버튼을 누를 수 있어야 한다 - 클릭 시 로그인으로 보낸다
@@ -377,7 +378,7 @@ export default function DealDetailPage() {
               )}
 
               {product.descriptionImageUrls.map((url, index) => {
-                const block = DESCRIPTION_STORY_BLOCKS[index];
+                const block = storyBlocks[index];
                 return (
                   <div
                     key={`${url}-${index}`}
