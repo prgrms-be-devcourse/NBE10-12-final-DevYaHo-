@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Package, Plus } from "lucide-react";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { ProductCreateModal } from "@/components/producer/ProductCreateModal";
@@ -10,11 +10,13 @@ import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { StatusPill } from "@/components/ui/Tag";
 import { listMyProducts } from "@/lib/api/product";
-import { ApiError } from "@/lib/api/http";
-import type { ProductMineResponse } from "@/lib/api/types";
+import type { PageResponse, ProductMineResponse } from "@/lib/api/types";
 import { formatDateTime, won } from "@/lib/format";
 import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
+import { showToast } from "@/lib/toast/toastStore";
+import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
 const STATUS_LABEL: Record<ProductMineResponse["status"], string> = {
   PENDING: "승인 대기",
@@ -22,23 +24,20 @@ const STATUS_LABEL: Record<ProductMineResponse["status"], string> = {
   REJECTED: "반려됨",
 };
 
-const STATUS_TONE: Record<ProductMineResponse["status"], string> = {
-  PENDING: "bg-wb-canvas text-wb-secondary",
-  APPROVED: "bg-wb-light-green/60 text-wb-green",
-  REJECTED: "bg-red-600/12 text-red-600",
+const STATUS_TONE: Record<ProductMineResponse["status"], "orange" | "green" | "red"> = {
+  PENDING: "orange",
+  APPROVED: "green",
+  REJECTED: "red",
 };
 
 export default function ProducerProductsPage() {
-  const [items, setItems] = useState<ProductMineResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<ProductMineResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductMineResponse | null>(null);
   const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleKeywordChange(value: string) {
@@ -56,38 +55,27 @@ export default function ProducerProductsPage() {
     };
   }, []);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const slice = await listMyProducts({ keyword: debouncedKeyword || undefined, page, size: 10 });
-      setItems(slice.content);
-      setTotalPages(slice.page.totalPages);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "목록을 불러오지 못했어요.");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedKeyword, page]);
+  const { data, error, loading } = usePagedQuery<PageResponse<ProductMineResponse>>(
+    "producer-products",
+    { keyword: debouncedKeyword, page, reloadToken },
+    () => listMyProducts({ keyword: debouncedKeyword || undefined, page, size: 10 }),
+    "목록을 불러오지 못했어요.",
+  );
+  const items = data?.content ?? null;
+  const totalPages = data?.page.totalPages ?? 0;
 
-  useEffect(() => {
-    async function load() {
-      await reload();
-    }
-    load();
-  }, [reload]);
+  function reload() {
+    invalidatePagedQuery("producer-products");
+    setReloadToken((t) => t + 1);
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-9">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Package className="h-6 w-6 text-wb-green" />
-          <div>
-            <h1 className="text-3xl font-bold">상품 관리</h1>
-            <p className="mt-1 text-sm text-wb-secondary">
-              공동구매를 열려면 먼저 상품을 등록해야 해요.
-            </p>
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold tracking-wide text-wb-green">PRODUCTS</p>
+          <h1 className="mt-1 text-3xl font-bold">상품 관리</h1>
+          <p className="mt-1 text-sm text-wb-secondary">공동구매를 열려면 먼저 상품을 등록해야 해요.</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4" /> 상품 등록
@@ -99,14 +87,14 @@ export default function ProducerProductsPage() {
         value={keyword}
         onChange={(e) => handleKeywordChange(e.target.value)}
         placeholder="상품명으로 검색"
-        className="w-full rounded-lg border border-wb-line bg-white px-4 py-2.5 text-sm outline-none focus:border-wb-green"
+        className="w-full rounded-lg border border-wb-line bg-wb-surface px-3 py-2 text-sm outline-none sm:w-64"
       />
 
       {error && <Banner tone="error">{error}</Banner>}
 
-      {loading ? (
+      {loading && items === null ? (
         <p className="py-16 text-center text-sm text-wb-secondary">불러오는 중...</p>
-      ) : items.length === 0 ? (
+      ) : items === null || items.length === 0 ? (
         <EmptyState
           icon={Package}
           title={keyword ? "검색 결과가 없어요" : "아직 등록한 상품이 없어요"}
@@ -132,20 +120,33 @@ export default function ProducerProductsPage() {
         </>
       )}
 
-      <ProductCreateModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={reload} />
+      <ProductCreateModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => {
+          reload();
+          showToast("상품이 등록되었습니다.");
+        }}
+      />
 
       <ProductEditModal
         open={editTarget !== null}
         product={editTarget}
         onClose={() => setEditTarget(null)}
-        onUpdated={reload}
+        onUpdated={() => {
+          reload();
+          showToast("상품 정보가 수정되었습니다.");
+        }}
       />
 
       <ProductDeleteModal
         open={deleteTarget !== null}
         product={deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onDeleted={(id) => setItems((prev) => prev.filter((p) => p.id !== id))}
+        onDeleted={() => {
+          reload();
+          showToast("상품이 삭제되었습니다.");
+        }}
       />
     </div>
   );
@@ -179,11 +180,9 @@ function ProductCard({
         ) : (
           <GroupBuyArtwork entry={catalog} className="h-36 w-full rounded-none" />
         )}
-        <span
-          className={`absolute left-2.5 top-2.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_TONE[product.status]}`}
-        >
-          {STATUS_LABEL[product.status]}
-        </span>
+        <div className="absolute left-2.5 top-2.5">
+          <StatusPill tone={STATUS_TONE[product.status]}>{STATUS_LABEL[product.status]}</StatusPill>
+        </div>
       </div>
       <div className="space-y-2 p-4">
         <p className="text-xs text-wb-secondary">{formatDateTime(product.createdAt)}</p>
