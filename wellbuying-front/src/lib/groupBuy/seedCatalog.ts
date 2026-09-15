@@ -3,13 +3,18 @@ import type { ColorToken } from "@/lib/mock/types";
 // 상품명/카테고리는 이제 백엔드 Product 도메인의 실제 값을 쓴다(GroupBuySummaryResponse/DetailResponse에 포함).
 // 이 파일은 그 외의 순수 장식용 필드(아이콘/색/요약·상세 문구)만 담당하고, GroupBuySeedRunner(백엔드)가
 // 등록하는 8개 시드 상품의 정확한 상품명을 키로 매칭한다 - productId는 재기동마다 새로 발급돼(고정 리터럴 아님) 키로 쓸 수 없다.
+export type StoryBlock = {
+  headline: string;
+  body: string;
+};
+
 export type GroupBuyCatalogEntry = {
   producerName: string;
   icon: string;
   tint: ColorToken;
   summary: string;
   detail: string;
-  storyBlocks?: { headline: string; body: string }[];
+  storyBlocks?: StoryBlock[];
 };
 
 const CATALOG: Record<string, GroupBuyCatalogEntry> = {
