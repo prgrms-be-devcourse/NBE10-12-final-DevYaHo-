@@ -5,8 +5,8 @@ import Link from "next/link";
 import { Package, Plus, Radio } from "lucide-react";
 import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { GroupBuyCreateModal } from "@/components/producer/GroupBuyCreateModal";
+import { ParticipationTrendChart, type ParticipationChartPoint } from "@/components/producer/ParticipationTrendChart";
 import { SuspensionRequestModal } from "@/components/producer/SuspensionRequestModal";
-import { BarChart, type BarChartPoint } from "@/components/ui/BarChart";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -34,10 +34,10 @@ const PRODUCT_STATUS_TONE: Record<ProductMineResponse["status"], "orange" | "gre
 // 참여자 수(participantCount)와 가격 구간(priceTiers)은 목록 응답에 없고, 항목마다 상세/상태 API를
 // 따로 호출해야 얻을 수 있었다(N+1). 백엔드에 대시보드용 요약 API가 추가되기 전까지는 목록 응답만으로
 // 보여줄 수 있는 정보로 대시보드를 단순화한다 - 전체 참여자 수·예상 매출 카드는 뺐다.
-function buildMonthlyChart(deals: GroupBuySummaryResponse[]): BarChartPoint[] {
+function buildMonthlyChart(deals: GroupBuySummaryResponse[]): ParticipationChartPoint[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const points: BarChartPoint[] = [];
+  const points: ParticipationChartPoint[] = [];
 
   for (let i = CHART_DAYS - 1; i >= 0; i -= 1) {
     const day = new Date(today);
@@ -52,7 +52,11 @@ function buildMonthlyChart(deals: GroupBuySummaryResponse[]): BarChartPoint[] {
       return activeThatDay ? sum + deal.currentQuantity : sum;
     }, 0);
 
-    points.push({ label: `${day.getMonth() + 1}/${day.getDate()}`, value });
+    points.push({
+      label: `${day.getMonth() + 1}/${day.getDate()}`,
+      fullLabel: `${day.getFullYear()}년 ${day.getMonth() + 1}월 ${day.getDate()}일`,
+      value,
+    });
   }
 
   return points;
@@ -141,7 +145,7 @@ export default function ProducerDashboardPage() {
               별도 집계 API가 필요해 이번엔 제공하지 않아요.
             </p>
             <div className="mt-4">
-              <BarChart data={chartData} />
+              <ParticipationTrendChart data={chartData} />
             </div>
           </div>
 

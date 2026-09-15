@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PackageSearch } from "lucide-react";
 import { ActionLogPanel } from "@/components/admin/ActionLogPanel";
 import { ActionReasonModal } from "@/components/admin/ActionReasonModal";
+import { GroupBuyArtwork } from "@/components/deal/GroupBuyArtwork";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -18,6 +19,7 @@ import {
 } from "@/lib/api/admin";
 import type { PageResponse, ProductAdminResponse, ProductStatus } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { resolveCatalogEntry } from "@/lib/groupBuy/seedCatalog";
 import { showToast } from "@/lib/toast/toastStore";
 import { invalidatePagedQuery, usePagedQuery } from "@/hooks/usePagedQuery";
 
@@ -89,43 +91,24 @@ function ProductReviewPanel({ status }: { status: ProductStatus }) {
       {items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="해당 상태의 상품이 없어요" message="다른 필터를 확인해보세요." />
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {items.map((item) => (
-            <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-wb-line bg-wb-surface p-4 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-wb-light-green/50">
-                  <PackageSearch className="h-6 w-6 text-wb-green" />
-                </div>
-                <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>{item.sellerEmail}</Tag>
-                    <span>{formatDateTime(item.createdAt)}</span>
-                  </div>
-                  <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-2">
-                <div className="text-right">
-                  <p className="text-xs text-wb-secondary">제안 시작가</p>
-                  <p className="text-sm font-bold">{item.startPrice.toLocaleString("ko-KR")}원</p>
-                </div>
-                <StatusPill tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</StatusPill>
-              </div>
+            <ProductAdminCard key={item.id} item={item}>
               {item.status === "PENDING" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-1">
                   <Button
                     variant="secondary"
-                    className="px-3 py-1.5 text-xs"
+                    className="flex-1 text-xs"
                     onClick={() => setPendingAction({ id: item.id, kind: "reject" })}
                   >
                     반려
                   </Button>
-                  <Button className="px-3 py-1.5 text-xs" onClick={() => setPendingAction({ id: item.id, kind: "approve" })}>
+                  <Button className="flex-1 text-xs" onClick={() => setPendingAction({ id: item.id, kind: "approve" })}>
                     승인
                   </Button>
                 </div>
               )}
-            </div>
+            </ProductAdminCard>
           ))}
         </div>
       )}
@@ -213,35 +196,16 @@ function AllProductsPanel() {
       ) : items === null || items.length === 0 ? (
         <EmptyState icon={PackageSearch} title="등록된 상품이 없어요" message="검색어를 확인해보세요." />
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {items.map((item) => (
-            <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-wb-line bg-wb-surface p-4 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-wb-light-green/50">
-                  <PackageSearch className="h-6 w-6 text-wb-green" />
-                </div>
-                <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs text-wb-secondary">
-                    <Tag>{item.sellerEmail}</Tag>
-                    <span>{formatDateTime(item.createdAt)}</span>
-                  </div>
-                  <p className="line-clamp-2 text-sm font-bold">{item.productName}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-2">
-                <div className="text-right">
-                  <p className="text-xs text-wb-secondary">제안 시작가</p>
-                  <p className="text-sm font-bold">{item.startPrice.toLocaleString("ko-KR")}원</p>
-                </div>
-                <StatusPill tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</StatusPill>
-              </div>
+            <ProductAdminCard key={item.id} item={item}>
               <Button
-                className="bg-red-600 px-3 py-1.5 text-xs hover:bg-red-600/90"
+                className="w-full bg-red-600 text-xs hover:bg-red-600/90"
                 onClick={() => startDeregister(item.id, item.productName)}
               >
                 등록 해지
               </Button>
-            </div>
+            </ProductAdminCard>
           ))}
         </div>
       )}
@@ -256,6 +220,44 @@ function AllProductsPanel() {
         onClose={() => setDeregisterTargetId(null)}
         onConfirm={handleConfirmDeregister}
       />
+    </div>
+  );
+}
+
+// 판매자 상품관리(producer/products) 카드와 동일한 패턴 - 썸네일 + 상품명 + 가격, 하단 액션만 패널별로 다르다
+function ProductAdminCard({ item, children }: { item: ProductAdminResponse; children?: ReactNode }) {
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const catalog = resolveCatalogEntry(item.productName);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-wb-line bg-wb-surface">
+      <div className="relative">
+        {item.thumbnailUrl && !thumbnailFailed ? (
+          <div className="flex h-36 w-full items-center justify-center bg-wb-canvas">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 썸네일 URL이라 next/image 최적화 대상이 아님 */}
+            <img
+              src={item.thumbnailUrl}
+              alt={item.productName}
+              className="h-full w-full object-contain"
+              onError={() => setThumbnailFailed(true)}
+            />
+          </div>
+        ) : (
+          <GroupBuyArtwork entry={catalog} className="h-36 w-full rounded-none" />
+        )}
+        <div className="absolute left-2.5 top-2.5">
+          <StatusPill tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</StatusPill>
+        </div>
+      </div>
+      <div className="space-y-2 p-4">
+        <div className="flex items-center gap-2 text-xs text-wb-secondary">
+          <Tag>{item.sellerEmail}</Tag>
+          <span>{formatDateTime(item.createdAt)}</span>
+        </div>
+        <p className="line-clamp-2 min-h-12 text-base font-bold">{item.productName}</p>
+        <p className="text-sm font-bold">{item.startPrice.toLocaleString("ko-KR")}원</p>
+        {children}
+      </div>
     </div>
   );
 }

@@ -5,19 +5,23 @@ import { useEffect, useState } from "react";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { SelectField } from "@/components/ui/SelectField";
 import { TextField } from "@/components/ui/TextField";
 import { createGroupBuy } from "@/lib/api/groupBuy";
 import { ApiError } from "@/lib/api/http";
 import { listMyProducts } from "@/lib/api/product";
 import type { GroupBuyPriceTier, ProductMineResponse } from "@/lib/api/types";
 
-type TierInput = { thresholdQuantity: number; unitPrice: number };
+type TierInput = { thresholdQuantity: number | ""; unitPrice: number | "" };
+
+const TIER_QUANTITY_PLACEHOLDERS = ["예: 10", "예: 30", "예: 50"] as const;
+const TIER_PRICE_PLACEHOLDERS = ["예: 15000", "예: 14000", "예: 13000"] as const;
 
 function defaultTiers(): [TierInput, TierInput, TierInput] {
   return [
-    { thresholdQuantity: 100, unitPrice: 15_000 },
-    { thresholdQuantity: 1_000, unitPrice: 12_000 },
-    { thresholdQuantity: 10_000, unitPrice: 10_000 },
+    { thresholdQuantity: "", unitPrice: "" },
+    { thresholdQuantity: "", unitPrice: "" },
+    { thresholdQuantity: "", unitPrice: "" },
   ];
 }
 
@@ -36,8 +40,8 @@ export function GroupBuyCreateModal({
   const [title, setTitle] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
-  const [minQuantity, setMinQuantity] = useState(100);
-  const [maxQuantity, setMaxQuantity] = useState(10_000);
+  const [minQuantity, setMinQuantity] = useState<number | "">("");
+  const [maxQuantity, setMaxQuantity] = useState<number | "">("");
   const [tiers, setTiers] = useState<[TierInput, TierInput, TierInput]>(defaultTiers());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +84,8 @@ export function GroupBuyCreateModal({
     setTitle("");
     setStartAt("");
     setEndAt("");
-    setMinQuantity(100);
-    setMaxQuantity(10_000);
+    setMinQuantity("");
+    setMaxQuantity("");
     setTiers(defaultTiers());
     setError(null);
   }
@@ -96,23 +100,35 @@ export function GroupBuyCreateModal({
       setError("제목과 시작/마감 일시를 입력해주세요.");
       return;
     }
-    if (tiers[0].thresholdQuantity <= 0 || tiers[0].unitPrice <= 0) {
+    if (minQuantity === "" || maxQuantity === "") {
+      setError("최소/최대 수량을 입력해주세요.");
+      return;
+    }
+    if (tiers.some((tier) => tier.thresholdQuantity === "" || tier.unitPrice === "")) {
+      setError("가격 구간의 기준 수량과 판매 단가를 모두 입력해주세요.");
+      return;
+    }
+    const resolvedTiers = tiers.map((tier) => ({
+      thresholdQuantity: tier.thresholdQuantity as number,
+      unitPrice: tier.unitPrice as number,
+    }));
+    if (resolvedTiers[0].thresholdQuantity <= 0 || resolvedTiers[0].unitPrice <= 0) {
       setError("기준 수량과 판매 단가는 0보다 커야 해요.");
       return;
     }
-    for (let i = 0; i < tiers.length - 1; i += 1) {
-      if (tiers[i].thresholdQuantity >= tiers[i + 1].thresholdQuantity) {
+    for (let i = 0; i < resolvedTiers.length - 1; i += 1) {
+      if (resolvedTiers[i].thresholdQuantity >= resolvedTiers[i + 1].thresholdQuantity) {
         setError("다음 구간의 기준 수량은 이전 구간보다 커야 해요.");
         return;
       }
-      if (tiers[i].unitPrice <= tiers[i + 1].unitPrice) {
+      if (resolvedTiers[i].unitPrice <= resolvedTiers[i + 1].unitPrice) {
         setError("다음 구간의 판매 단가는 이전 구간보다 저렴해야 해요.");
         return;
       }
     }
     setSubmitting(true);
     try {
-      const priceTiers: GroupBuyPriceTier[] = tiers.map((tier, index) => ({
+      const priceTiers: GroupBuyPriceTier[] = resolvedTiers.map((tier, index) => ({
         tierOrder: index + 1,
         thresholdQuantity: tier.thresholdQuantity,
         unitPrice: tier.unitPrice,
@@ -161,20 +177,23 @@ export function GroupBuyCreateModal({
               .
             </div>
           ) : (
-            <select
-              value={productId ?? ""}
-              onChange={(e) => setProductId(Number(e.target.value))}
-              className="h-11 w-full rounded-lg border border-wb-line bg-wb-surface px-3 text-sm font-semibold outline-none"
-            >
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.productName} ({product.startPrice.toLocaleString()}원)
-                </option>
-              ))}
-            </select>
+            <SelectField
+              placeholder="상품 선택"
+              value={productId ? String(productId) : ""}
+              onChange={(value) => setProductId(Number(value))}
+              options={products.map((product) => ({
+                value: String(product.id),
+                label: `${product.productName} (${product.startPrice.toLocaleString()}원)`,
+              }))}
+            />
           )}
         </div>
-        <TextField label="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <TextField
+          label="제목"
+          placeholder="예: 무농약 사과 5kg 공동구매"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <TextField
@@ -194,17 +213,23 @@ export function GroupBuyCreateModal({
         <div className="grid grid-cols-2 gap-3">
           <TextField
             label="최소 수량"
-            type="number"
-            min={1}
-            value={minQuantity}
-            onChange={(e) => setMinQuantity(Number(e.target.value))}
+            placeholder="예: 10"
+            inputMode="numeric"
+            value={String(minQuantity)}
+            onChange={(e) => {
+              const digitsOnly = e.target.value.replace(/[^0-9]/g, "");
+              setMinQuantity(digitsOnly === "" ? "" : Number(digitsOnly));
+            }}
           />
           <TextField
             label="최대 수량"
-            type="number"
-            min={1}
-            value={maxQuantity}
-            onChange={(e) => setMaxQuantity(Number(e.target.value))}
+            placeholder="예: 100"
+            inputMode="numeric"
+            value={String(maxQuantity)}
+            onChange={(e) => {
+              const digitsOnly = e.target.value.replace(/[^0-9]/g, "");
+              setMaxQuantity(digitsOnly === "" ? "" : Number(digitsOnly));
+            }}
           />
         </div>
 
@@ -213,26 +238,26 @@ export function GroupBuyCreateModal({
           <div className="space-y-2.5">
             {tiers.map((tier, index) => (
               <div key={index} className="grid grid-cols-2 gap-2.5 rounded-lg bg-wb-canvas p-3">
-                <label className="block">
-                  <span className="mb-1 block text-[10px] text-wb-secondary">{index + 1}단계 기준 수량</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={tier.thresholdQuantity}
-                    onChange={(e) => updateTier(index, { thresholdQuantity: Number(e.target.value) })}
-                    className="w-full rounded-md border border-wb-line bg-wb-surface px-2 py-1.5 text-sm font-bold outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[10px] text-wb-secondary">판매 단가(원)</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={tier.unitPrice}
-                    onChange={(e) => updateTier(index, { unitPrice: Number(e.target.value) })}
-                    className="w-full rounded-md border border-wb-line bg-wb-surface px-2 py-1.5 text-sm font-bold outline-none"
-                  />
-                </label>
+                <TextField
+                  label={`${index + 1}단계 기준 수량`}
+                  placeholder={TIER_QUANTITY_PLACEHOLDERS[index]}
+                  inputMode="numeric"
+                  value={String(tier.thresholdQuantity)}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/[^0-9]/g, "");
+                    updateTier(index, { thresholdQuantity: digitsOnly === "" ? "" : Number(digitsOnly) });
+                  }}
+                />
+                <TextField
+                  label="판매 단가(원)"
+                  placeholder={TIER_PRICE_PLACEHOLDERS[index]}
+                  inputMode="numeric"
+                  value={String(tier.unitPrice)}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/[^0-9]/g, "");
+                    updateTier(index, { unitPrice: digitsOnly === "" ? "" : Number(digitsOnly) });
+                  }}
+                />
               </div>
             ))}
           </div>
