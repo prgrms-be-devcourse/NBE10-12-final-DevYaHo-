@@ -185,6 +185,20 @@ class PaymentTransactionServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("markUnconfirmed: 결제를 UNCONFIRMED로 남기고 주문은 건드리지 않으며(PENDING 유지) 이벤트도 발행하지 않는다")
+    void markUnconfirmed_정상() {
+        PaymentPreparation preparation = paymentTransactionService.prepare(message(ADDRESS), PG_PROVIDER);
+
+        paymentTransactionService.markUnconfirmed(preparation.paymentId());
+
+        Payment payment = paymentRepository.findById(preparation.paymentId()).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNCONFIRMED);
+        Order order = orderRepository.findById(preparation.orderId()).orElseThrow();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(paymentEventOutboxRepository.findAll()).isEmpty();
+    }
+
+    @Test
     @DisplayName("prepareRetry: 실패했던 원래 주문은 그대로 두고 새 Payment/Order 쌍을 만든다")
     void prepareRetry_정상() {
         // 부분 유니크 인덱스(uk_payment_group_buy_participant_id)는 status<>'FAILED'에만 걸리므로,

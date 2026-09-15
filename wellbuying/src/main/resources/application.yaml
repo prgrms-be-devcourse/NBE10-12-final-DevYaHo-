@@ -170,6 +170,20 @@ seller-info:
 toss:
   base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
   secret-key: ${TOSS_SECRET_KEY:CHANGE_ME_local_dev_toss_test_secret_key}
+  # 커넥션이 안 열리면(네트워크/DNS) 승인 지연과 다른 문제라 짧게 잡는다
+  connect-timeout-ms: 3000
+  # 빌링키 자동결제는 카드사 인증 단계가 없어 정상이면 수 초 내 끝난다 - 정상 지연은 흡수하되 과도하게 묶지 않음
+  read-timeout-ms: 10000
+  approve-retry:
+    # 최초 1회 + 재시도 2회. 타임아웃/5xx일 때만 같은 Idempotency-Key로 재시도한다 (09-pg-timeout-retry.md)
+    max-attempts: 3
+    backoff-ms: 1000
+
+payment:
+  reconciliation:
+    # UNCONFIRMED(PG 타임아웃/5xx 재시도 소진) 건을 결제조회로 정리하는 배치 주기.
+    # 드문 케이스라 PaymentOutboxRelay(3초)만큼 촘촘할 필요는 없다 (09-pg-timeout-retry.md)
+    fixed-delay-ms: 60000
 
 billing-key:
   # 빌링키 암복호화용 마스터 키. AES-256(32바이트) 키를 Base64로 인코딩한 값이며,

@@ -15,6 +15,7 @@ import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
 import com.wellbuying.domain.payment.gateway.PgApprovalException;
+import com.wellbuying.domain.payment.gateway.PgApprovalTimeoutException;
 import com.wellbuying.domain.payment.gateway.PgApproveCommand;
 import com.wellbuying.domain.payment.gateway.PgApproveResult;
 import com.wellbuying.domain.payment.repository.PaymentConsumedEventRepository;
@@ -161,6 +162,23 @@ class PaymentProcessorTest {
         verify(paymentTransactionService).markFailed(PAYMENT_ID, ORDER_ID, EVENT_CONTEXT, "카드 한도 초과");
         // 승인이 안 됐으므로 수동 처리 대상이 아니다
         verifyNoInteractions(paymentFailureRecorder);
+    }
+
+    @Test
+    @DisplayName("PG 승인 응답을 끝내 못 받으면(재시도 소진) FAILED가 아니라 UNCONFIRMED로 남기고 실패 이벤트는 발행하지 않는다")
+    void PG_승인_응답_불명() {
+        givenPrepared();
+        when(billingKeyProvider.findBillingKey(MEMBER_ID))
+                .thenReturn(Optional.of(new BillingCredential("bk_test", "cust_test")));
+        PgApprovalTimeoutException timeoutException = new PgApprovalTimeoutException("응답 없음", null);
+        when(paymentGateway.approve(any(PgApproveCommand.class))).thenThrow(timeoutException);
+
+        paymentProcessor.process(message);
+
+        verify(paymentTransactionService).markUnconfirmed(PAYMENT_ID);
+        verify(paymentTransactionService, never()).markFailed(any(), any(), any(), any());
+        verify(paymentFailureRecorder).record(PaymentFailureType.APPROVAL_UNCONFIRMED_AFTER_TIMEOUT, EVENT_ID,
+                PART_ID, MEMBER_ID, PAYMENT_ID, null, 10_000, timeoutException);
     }
 
     @Test

@@ -12,6 +12,9 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     // Payment는 승인됐는데 Order 반영만 실패한 건을 재처리할 때, 이미 만들어졌는지 확인
     boolean existsByPaymentId(Long paymentId);
 
+    // PaymentUnconfirmedReconciliationJob이 UNCONFIRMED Payment 건에 대응하는 Order를 찾을 때 사용 (1:1)
+    Optional<Order> findByPaymentId(Long paymentId);
+
     // 결제/주문 내역 목록 - 정렬은 서비스에서 Pageable로 지정한다
     Page<Order> findByMemberId(Long memberId, Pageable pageable);
 

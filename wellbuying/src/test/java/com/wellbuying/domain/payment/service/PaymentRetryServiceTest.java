@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,7 +20,9 @@ import com.wellbuying.domain.payment.event.PaymentEventContext;
 import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
+import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.gateway.PgApprovalException;
+import com.wellbuying.domain.payment.gateway.PgApprovalTimeoutException;
 import com.wellbuying.domain.payment.gateway.PgApproveCommand;
 import com.wellbuying.domain.payment.gateway.PgApproveResult;
 import com.wellbuying.global.exception.BusinessException;
@@ -63,6 +66,8 @@ class PaymentRetryServiceTest {
     private PaymentGateway paymentGateway;
     @Mock
     private BillingKeyProvider billingKeyProvider;
+    @Mock
+    private PaymentFailureRecorder paymentFailureRecorder;
 
     private PaymentRetryService paymentRetryService;
     private Order failedOrder;
@@ -71,7 +76,7 @@ class PaymentRetryServiceTest {
     void setUp() {
         // @Value(repayment.grace-period-days) 주입 때문에 @InjectMocks 대신 수동 생성한다
         paymentRetryService = new PaymentRetryService(orderRepository, groupBuyPartRepository, groupBuyRepository,
-                paymentTransactionService, paymentGateway, billingKeyProvider, GRACE_DAYS);
+                paymentTransactionService, paymentGateway, billingKeyProvider, paymentFailureRecorder, GRACE_DAYS);
         failedOrder = Order.pending(PAYMENT_ID, PART_ID, MEMBER_ID, ADDRESS, 30_000);
         failedOrder.markPaymentFailed();
     }
@@ -183,6 +188,22 @@ class PaymentRetryServiceTest {
 
         assertThat(orderId).isEqualTo(NEW_ORDER_ID);
         verify(paymentTransactionService).markFailed(PAYMENT_ID, NEW_ORDER_ID, EVENT_CONTEXT, "카드 한도 초과");
+    }
+
+    @Test
+    @DisplayName("PG 승인 응답을 끝내 못 받으면(재시도 소진) FAILED가 아니라 UNCONFIRMED로 남기고 실패 이벤트는 발행하지 않는다")
+    void PG_승인_응답_불명() {
+        givenOwnedFailedOrder();
+        PgApprovalTimeoutException timeoutException = new PgApprovalTimeoutException("응답 없음", null);
+        when(paymentGateway.approve(any(PgApproveCommand.class))).thenThrow(timeoutException);
+
+        String orderId = paymentRetryService.retry(MEMBER_ID, FAILED_ORDER_ID);
+
+        assertThat(orderId).isEqualTo(NEW_ORDER_ID);
+        verify(paymentTransactionService).markUnconfirmed(PAYMENT_ID);
+        verify(paymentTransactionService, never()).markFailed(any(), any(), any(), any());
+        verify(paymentFailureRecorder).record(eq(PaymentFailureType.APPROVAL_UNCONFIRMED_AFTER_TIMEOUT), anyString(),
+                eq(PART_ID), eq(MEMBER_ID), eq(PAYMENT_ID), isNull(), eq(30_000), eq(timeoutException));
     }
 
     @Test

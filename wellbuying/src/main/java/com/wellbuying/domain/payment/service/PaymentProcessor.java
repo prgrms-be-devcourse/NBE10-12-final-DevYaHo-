@@ -8,6 +8,7 @@ import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
 import com.wellbuying.domain.payment.gateway.PgApproveCommand;
 import com.wellbuying.domain.payment.gateway.PgApprovalException;
+import com.wellbuying.domain.payment.gateway.PgApprovalTimeoutException;
 import com.wellbuying.domain.payment.gateway.PgApproveResult;
 import com.wellbuying.domain.payment.repository.PaymentConsumedEventRepository;
 import java.util.Optional;
@@ -76,6 +77,14 @@ public class PaymentProcessor {
         PgApproveResult result;
         try {
             result = paymentGateway.approve(toApproveCommand(message, credential.get(), preparation.orderId()));
+        } catch (PgApprovalTimeoutException e) {
+            // 재시도(같은 Idempotency-Key)까지 소진했는데도 응답을 못 받음 - 실제 승인 여부를 모르므로
+            // FAILED로 단정하지 않는다. PaymentUnconfirmedReconciliationJob이 결제조회로 확정한다
+            log.warn("PG 승인 응답 불명(재시도 소진) - eventId={}, paymentId={}", message.eventId(), preparation.paymentId(), e);
+            paymentTransactionService.markUnconfirmed(preparation.paymentId());
+            paymentFailureRecorder.record(PaymentFailureType.APPROVAL_UNCONFIRMED_AFTER_TIMEOUT, message.eventId(),
+                    message.partId(), message.memberId(), preparation.paymentId(), null, message.totalAmount(), e);
+            return;
         } catch (PgApprovalException e) {
             log.warn("PG 승인 실패 - eventId={}, paymentId={}", message.eventId(), preparation.paymentId(), e);
             paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId(), eventContext,

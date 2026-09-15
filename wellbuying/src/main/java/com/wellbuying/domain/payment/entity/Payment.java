@@ -56,6 +56,11 @@ public class Payment {
     @Column(name = "canceled_at")
     private LocalDateTime canceledAt;
 
+    // UNCONFIRMED 건을 어떤 인스턴스가 처리 중인지 표시하는 선점 마커. NULL이면 미점유
+    // (PaymentUnconfirmedReconciliationJob의 다중 인스턴스 동시 처리 방지, 09-pg-timeout-retry.md)
+    @Column(name = "reconciling_at")
+    private LocalDateTime reconcilingAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -90,6 +95,12 @@ public class Payment {
 
     public void fail() {
         this.status = PaymentStatus.FAILED;
+    }
+
+    // PG 응답을 끝내 받지 못했을 때(타임아웃/5xx 재시도 소진) - 실제 승인 여부를 모르므로 FAILED로 단정하지 않는다.
+    // PaymentUnconfirmedReconciliationJob이 결제조회로 확정할 때까지의 과도 상태다 (09-pg-timeout-retry.md)
+    public void unconfirmed() {
+        this.status = PaymentStatus.UNCONFIRMED;
     }
 
     public void cancel(LocalDateTime canceledAt) {
@@ -139,6 +150,10 @@ public class Payment {
 
     public LocalDateTime getCanceledAt() {
         return canceledAt;
+    }
+
+    public LocalDateTime getReconcilingAt() {
+        return reconcilingAt;
     }
 
     public LocalDateTime getCreatedAt() {

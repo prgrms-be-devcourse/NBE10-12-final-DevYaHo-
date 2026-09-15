@@ -7,12 +7,14 @@ import com.wellbuying.domain.groupbuy.repository.GroupBuyRepository;
 import com.wellbuying.domain.order.entity.Order;
 import com.wellbuying.domain.order.entity.OrderStatus;
 import com.wellbuying.domain.order.repository.OrderRepository;
+import com.wellbuying.domain.payment.entity.PaymentFailureType;
 import com.wellbuying.domain.payment.event.PaymentEventContext;
 import com.wellbuying.domain.payment.gateway.BillingCredential;
 import com.wellbuying.domain.payment.gateway.BillingKeyProvider;
 import com.wellbuying.domain.payment.gateway.PaymentGateway;
 import com.wellbuying.domain.payment.gateway.PgApproveCommand;
 import com.wellbuying.domain.payment.gateway.PgApprovalException;
+import com.wellbuying.domain.payment.gateway.PgApprovalTimeoutException;
 import com.wellbuying.domain.payment.gateway.PgApproveResult;
 import com.wellbuying.global.exception.BusinessException;
 import com.wellbuying.global.exception.ErrorCode;
@@ -39,6 +41,7 @@ public class PaymentRetryService {
     private final PaymentTransactionService paymentTransactionService;
     private final PaymentGateway paymentGateway;
     private final BillingKeyProvider billingKeyProvider;
+    private final PaymentFailureRecorder paymentFailureRecorder;
     // 재결제 유효기간(일). 공동구매 finalized_at + 이 일수가 지나면 재결제를 거부한다.
     // settlement 정산 확정 배치(SettlementConfirmationWorker)와 같은 값을 써야 "재결제는 되는데
     // 정산은 이미 확정된" 창이 안 생긴다 - 그래서 공용 설정키로 관리한다
@@ -47,6 +50,7 @@ public class PaymentRetryService {
     public PaymentRetryService(OrderRepository orderRepository, GroupBuyPartRepository groupBuyPartRepository,
             GroupBuyRepository groupBuyRepository, PaymentTransactionService paymentTransactionService,
             PaymentGateway paymentGateway, BillingKeyProvider billingKeyProvider,
+            PaymentFailureRecorder paymentFailureRecorder,
             @Value("${repayment.grace-period-days:3}") int repaymentGracePeriodDays) {
         this.orderRepository = orderRepository;
         this.groupBuyPartRepository = groupBuyPartRepository;
@@ -54,6 +58,7 @@ public class PaymentRetryService {
         this.paymentTransactionService = paymentTransactionService;
         this.paymentGateway = paymentGateway;
         this.billingKeyProvider = billingKeyProvider;
+        this.paymentFailureRecorder = paymentFailureRecorder;
         this.repaymentGracePeriodDays = repaymentGracePeriodDays;
     }
 
@@ -100,6 +105,15 @@ public class PaymentRetryService {
                     "공동구매 결제",
                     failedOrder.getTotalPrice(),
                     idempotencyKey));
+        } catch (PgApprovalTimeoutException e) {
+            // 재시도(같은 Idempotency-Key)까지 소진했는데도 응답을 못 받음 - 실제 승인 여부를 모르므로
+            // FAILED로 단정하지 않는다. PaymentUnconfirmedReconciliationJob이 결제조회로 확정한다
+            log.warn("결제 재시도 PG 승인 응답 불명(재시도 소진) - orderId={}", preparation.orderId(), e);
+            paymentTransactionService.markUnconfirmed(preparation.paymentId());
+            paymentFailureRecorder.record(PaymentFailureType.APPROVAL_UNCONFIRMED_AFTER_TIMEOUT, idempotencyKey,
+                    failedOrder.getGroupBuyParticipantId(), memberId, preparation.paymentId(), null,
+                    failedOrder.getTotalPrice(), e);
+            return preparation.orderId();
         } catch (PgApprovalException e) {
             log.warn("결제 재시도 PG 승인 실패 - orderId={}", preparation.orderId(), e);
             paymentTransactionService.markFailed(preparation.paymentId(), preparation.orderId(), eventContext,

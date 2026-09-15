@@ -6,5 +6,8 @@ public enum PaymentFailureType {
     // Payment를 APPROVED로 전이시키는 트랜잭션이 커밋되지 못함
     APPROVE_RESULT_PERSIST_FAILED,
     // Payment는 APPROVED가 됐으나 Order 반영(PENDING → PAID)에서 실패
-    ORDER_CREATE_FAILED
+    ORDER_CREATE_FAILED,
+    // PG 승인 타임아웃/5xx 재시도가 소진돼 UNCONFIRMED로 남은 건.
+    // PaymentUnconfirmedReconciliationJob이 확정하면 resolved=true로 마감한다 (09-pg-timeout-retry.md)
+    APPROVAL_UNCONFIRMED_AFTER_TIMEOUT
 }

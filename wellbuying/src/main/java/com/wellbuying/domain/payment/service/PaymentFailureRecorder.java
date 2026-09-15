@@ -26,20 +26,29 @@ public class PaymentFailureRecorder {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(PaymentFailureType failureType, GroupBuyCompletedMessage message, Long paymentId,
             String pgTransactionId, Throwable cause) {
-        // 로그 기록 자체가 실패해도 컨슈머를 멈추지 않는다 - 대신 반드시 ERROR 로그로 남겨 사람이 볼 수 있게 한다
+        record(failureType, message.eventId(), message.partId(), message.memberId(), paymentId, pgTransactionId,
+                message.totalAmount(), cause);
+    }
+
+    // 카프카 이벤트가 없는 경로(PaymentRetryService의 수동 재결제, PaymentUnconfirmedReconciliationJob의
+    // 자동 재시도)에서도 쓸 수 있도록 GroupBuyCompletedMessage 대신 필요한 값만 직접 받는 버전 (09-pg-timeout-retry.md)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void record(PaymentFailureType failureType, String eventId, Long groupBuyParticipantId, Long memberId,
+            Long paymentId, String pgTransactionId, int amount, Throwable cause) {
+        // 로그 기록 자체가 실패해도 호출자를 멈추지 않는다 - 대신 반드시 ERROR 로그로 남겨 사람이 볼 수 있게 한다
         try {
             paymentFailureLogRepository.save(PaymentFailureLog.of(
                     failureType,
-                    message.eventId(),
-                    message.partId(),
-                    message.memberId(),
+                    eventId,
+                    groupBuyParticipantId,
+                    memberId,
                     paymentId,
                     pgTransactionId,
-                    message.totalAmount(),
+                    amount,
                     cause == null ? null : cause.toString()));
         } catch (RuntimeException e) {
             log.error("결제 실패 로그 기록 실패 - 수동 확인 필요. eventId={}, paymentId={}, pgTransactionId={}, amount={}",
-                    message.eventId(), paymentId, pgTransactionId, message.totalAmount(), e);
+                    eventId, paymentId, pgTransactionId, amount, e);
         }
     }
 }

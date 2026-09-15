@@ -141,6 +141,18 @@ public class PaymentTransactionService {
         paymentEventPublisher.publishFailed(failedEvent(payment, ctx.groupBuyId(), reason));
     }
 
+    // PG 응답을 끝내 받지 못했을 때(타임아웃/5xx 재시도 소진, PgApprovalTimeoutException) - 실제 승인 여부를
+    // 모르므로 FAILED로 단정하지 않는다. Order는 건드리지 않고 PENDING으로 남겨둔다 - PENDING이면
+    // PaymentRetryService의 재결제 가드(status != PAYMENT_FAILED)에 자동으로 막혀 이중 출금을 피할 수 있다.
+    // 완료/실패 이벤트도 발행하지 않는다 - 아직 확정된 결과가 아니기 때문. PaymentUnconfirmedReconciliationJob이
+    // 결제조회로 확정한 뒤 completeApproval()/markFailed()를 호출한다 (09-pg-timeout-retry.md)
+    @Transactional
+    public void markUnconfirmed(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        payment.unconfirmed();
+    }
+
     // 실패 이벤트에 실을 값 중 groupBuyId만 바깥에서 받고, 참여 건/회원/금액은 방금 로드한 Payment에서 꺼낸다
     private PaymentFailedEvent failedEvent(Payment payment, Long groupBuyId, String reason) {
         return PaymentFailedEvent.of(payment.getId(), groupBuyId, payment.getGroupBuyParticipantId(),
