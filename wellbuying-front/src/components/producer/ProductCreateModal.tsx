@@ -40,6 +40,7 @@ export function ProductCreateModal({
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL.createObjectURL은 브라우저 리소스라 cleanup(revokeObjectURL)이 필수 - 렌더링 중에는 만들 수 없는 부수효과
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     }

@@ -25,6 +25,7 @@ function CallbackBody() {
     const customerKey = params.get("customerKey");
 
     if (!authKey || !customerKey) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 빌링키 콜백 리다이렉트 - started 가드로 1회만 실행
       setState("failed");
       setMessage(params.get("message") ?? "카드 인증이 취소되었거나 실패했습니다.");
       return;

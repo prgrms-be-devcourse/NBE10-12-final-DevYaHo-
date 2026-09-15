@@ -39,6 +39,7 @@ export function useProductSearch(
     if (keyword.trim().length > 0) {
       void loadFirst();
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 키워드 검색 결과 페칭 이펙트의 일부
       setItems([]);
       setCursor(null);
       setHasNext(false);
