@@ -377,7 +377,8 @@ export default function DealDetailPage() {
               )}
 
               {product.descriptionImageUrls.map((url, index) => {
-                const block = DESCRIPTION_STORY_BLOCKS[index];
+                const storyBlocks = catalog.storyBlocks ?? DESCRIPTION_STORY_BLOCKS;
+                const block = storyBlocks[index];
                 return (
                   <div
                     key={`${url}-${index}`}
