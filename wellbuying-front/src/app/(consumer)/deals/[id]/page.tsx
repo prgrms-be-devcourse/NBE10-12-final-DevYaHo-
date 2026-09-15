@@ -37,11 +37,23 @@ import { clearPendingParticipation, takePendingParticipation } from "@/lib/payme
 
 const NEW_ADDRESS = "new" as const;
 
-const DESCRIPTION_IMAGE_CAPTIONS = [
-  "가까이서 보면 더 믿음이 가요",
-  "실제 모습을 확인해보세요",
-  "정성껏 만든 상품이에요",
-  "꼼꼼하게 포장해서 안전하게 보내드려요",
+const DESCRIPTION_STORY_BLOCKS = [
+  {
+    headline: "선명하게 보이는 디테일",
+    body: "가까이서 보면 소재와 마감을 그대로 확인할 수 있어요. 사진 그대로의 품질을 약속드립니다.",
+  },
+  {
+    headline: "실물 그대로의 모습",
+    body: "화면으로 보는 색감과 실제 받아보시는 상품의 차이를 최소화하기 위해 있는 그대로의 모습을 보여드려요.",
+  },
+  {
+    headline: "정성으로 만든 상품",
+    body: "하나하나 정성껏 골라 준비한 상품이에요. 좋은 재료와 꼼꼼한 과정으로 만족스러운 경험을 드리고 싶습니다.",
+  },
+  {
+    headline: "안전하게, 꼼꼼하게",
+    body: "배송 중 손상되지 않도록 꼼꼼하게 포장해서 보내드려요. 받으시는 순간까지 신경 썼습니다.",
+  },
 ];
 
 // select 옵션과 결제 확인 창에 공통으로 쓰는 배송지 한 줄 표기
@@ -88,7 +100,7 @@ export default function DealDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"story" | "tiers" | "participation" | "images">("story");
+  const [activeTab, setActiveTab] = useState<"description" | "tiers" | "participation">("description");
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
@@ -156,6 +168,7 @@ export default function DealDetailPage() {
     if (!Number.isFinite(groupBuyId)) return;
     const pending = takePendingParticipation();
     if (!pending || pending.groupBuyId !== groupBuyId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 카드 등록 후 리다이렉트 복귀 시 1회 처리 - 외부 브라우저 이동에 대한 동기화
     setQuantity(pending.quantity);
     setSelectedAddressId(pending.buyerAddressId);
     setPendingAddressId(pending.buyerAddressId);
@@ -305,11 +318,8 @@ export default function DealDetailPage() {
   const activeTierOrder = reachedTiers.at(-1)?.tierOrder ?? sortedTiers[0]?.tierOrder;
 
   const TABS = [
-    { key: "story" as const, label: "스토리" },
+    { key: "description" as const, label: "상세 설명" },
     { key: "tiers" as const, label: "가격 구간" },
-    ...(product.descriptionImageUrls.length > 0
-      ? [{ key: "images" as const, label: "상세 이미지" }]
-      : []),
     { key: "participation" as const, label: "내 참여" },
   ];
 
@@ -352,15 +362,42 @@ export default function DealDetailPage() {
             ))}
           </div>
 
-          {activeTab === "story" && (
-            <div className="space-y-4">
-              {catalog.summary && <p className="text-base">{catalog.summary}</p>}
-              {(product.description || catalog.detail) && (
-                <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>
+          {activeTab === "description" && (
+            <div className="space-y-14">
+              {(catalog.summary || product.description || catalog.detail) && (
+                <div className="space-y-3">
+                  {catalog.summary && <p className="text-base">{catalog.summary}</p>}
+                  {(product.description || catalog.detail) && (
+                    <p className="text-sm text-wb-secondary">{product.description || catalog.detail}</p>
+                  )}
+                  <p className="text-sm text-wb-secondary">
+                    모집 기간 {formatDateTime(detail.startAt)} ~ {formatDateTime(detail.endAt)}
+                  </p>
+                </div>
               )}
-              <p className="text-sm text-wb-secondary">
-                모집 기간 {formatDateTime(detail.startAt)} ~ {formatDateTime(detail.endAt)}
-              </p>
+
+              {product.descriptionImageUrls.map((url, index) => {
+                const block = DESCRIPTION_STORY_BLOCKS[index];
+                return (
+                  <div
+                    key={`${url}-${index}`}
+                    className={`space-y-6 rounded-3xl p-8 ${index % 2 === 0 ? "bg-wb-canvas" : ""}`}
+                  >
+                    {block && (
+                      <div className="mx-auto max-w-xl space-y-2 text-center">
+                        <h3 className="text-2xl font-bold text-wb-green">{block.headline}</h3>
+                        <p className="text-base text-wb-secondary">{block.body}</p>
+                      </div>
+                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 이미지 URL이라 next/image 최적화 대상이 아님 */}
+                    <img
+                      src={url}
+                      alt={`${detail.title} 상세 이미지 ${index + 1}`}
+                      className="aspect-[16/10] w-full rounded-2xl object-cover shadow-md"
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -419,25 +456,6 @@ export default function DealDetailPage() {
               </p>
             ))}
 
-          {activeTab === "images" && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {product.descriptionImageUrls.map((url, index) => (
-                <figure key={`${url}-${index}`} className="space-y-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 이미지 URL이라 next/image 최적화 대상이 아님 */}
-                  <img
-                    src={url}
-                    alt={`${detail.title} 상세 이미지 ${index + 1}`}
-                    className="w-full rounded-2xl object-cover"
-                  />
-                  {DESCRIPTION_IMAGE_CAPTIONS[index] && (
-                    <figcaption className="text-sm text-wb-secondary">
-                      {DESCRIPTION_IMAGE_CAPTIONS[index]}
-                    </figcaption>
-                  )}
-                </figure>
-              ))}
-            </div>
-          )}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">

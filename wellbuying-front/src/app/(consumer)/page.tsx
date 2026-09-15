@@ -213,10 +213,11 @@ function PromoCarousel({
 }) {
   const item = items[slide];
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
-
-  useEffect(() => {
+  const [prevItemId, setPrevItemId] = useState(item.id);
+  if (item.id !== prevItemId) {
+    setPrevItemId(item.id);
     setThumbnailFailed(false);
-  }, [item.id]);
+  }
 
   function goTo(index: number) {
     onSelectSlide((index + items.length) % items.length);

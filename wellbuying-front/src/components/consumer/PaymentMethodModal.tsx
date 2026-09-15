@@ -63,6 +63,7 @@ export function PaymentMethodModal({
   // 닫았다 다시 열면 그 사이 바뀐 카드 정보를 반영해야 하므로 열릴 때마다 조회한다
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 모달이 열릴 때마다 최신 결제수단 다시 조회 - 외부 데이터 동기화
     void reload();
   }, [open, reload]);
 

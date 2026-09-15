@@ -54,6 +54,7 @@ export default function DevBillingKeyPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 데이터 페칭
     void reload();
   }, [reload]);
 
