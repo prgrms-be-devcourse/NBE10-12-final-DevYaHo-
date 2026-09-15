@@ -31,12 +31,13 @@ function OrdersContent() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(() => searchParams.get("orderId"));
 
   // 이 페이지를 이미 보고 있는 상태에서 알림(NotificationBell은 전역이라 어디서든 클릭 가능)을 또 클릭하면
-  // 같은 라우트라 리마운트 없이 쿼리스트링만 바뀌므로, 위 초기값만으로는 새 orderId를 못 따라간다 -
-  // searchParams 변화를 별도로 구독해 갱신한다
-  useEffect(() => {
+  // 같은 라우트라 리마운트 없이 쿼리스트링만 바뀌므로, 위 초기값만으로는 새 orderId를 못 따라간다.
+  const [prevSearchParams, setPrevSearchParams] = useState(searchParams);
+  if (searchParams !== prevSearchParams) {
+    setPrevSearchParams(searchParams);
     const orderId = searchParams.get("orderId");
     if (orderId) setSelectedOrderId(orderId);
-  }, [searchParams]);
+  }
 
   useEffect(() => {
     let cancelled = false;

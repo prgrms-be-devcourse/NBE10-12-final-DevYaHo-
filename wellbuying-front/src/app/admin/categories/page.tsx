@@ -64,6 +64,7 @@ export default function AdminCategoryPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 데이터 페칭 - 리액트 공식 문서가 인정하는 이펙트 용법
     loadTree();
   }, [loadTree]);
 

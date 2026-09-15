@@ -168,6 +168,7 @@ export default function DealDetailPage() {
     if (!Number.isFinite(groupBuyId)) return;
     const pending = takePendingParticipation();
     if (!pending || pending.groupBuyId !== groupBuyId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 카드 등록 후 리다이렉트 복귀 시 1회 처리 - 외부 브라우저 이동에 대한 동기화
     setQuantity(pending.quantity);
     setSelectedAddressId(pending.buyerAddressId);
     setPendingAddressId(pending.buyerAddressId);

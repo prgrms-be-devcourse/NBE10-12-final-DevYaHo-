@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { TextField } from "@/components/ui/TextField";
@@ -27,13 +27,16 @@ export function CategoryFormModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const syncKey = `${String(open)}:${initialName}:${initialSortOrder}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
     if (open) {
       setName(initialName);
       setSortOrder(initialSortOrder.toString());
       setError(null);
     }
-  }, [open, initialName, initialSortOrder]);
+  }
 
   const handleSubmit = async () => {
     if (!name.trim()) {

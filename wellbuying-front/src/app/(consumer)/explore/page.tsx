@@ -64,6 +64,11 @@ function ExploreContent() {
   const [productParentCategoryId, setProductParentCategoryId] = useState<number | null>(null);
   const [productSubCategoryId, setProductSubCategoryId] = useState<number | null>(null);
   const [browseSubCategoryId, setBrowseSubCategoryId] = useState<number | null>(null);
+  const [prevCategory, setPrevCategory] = useState(category);
+  if (category !== prevCategory) {
+    setPrevCategory(category);
+    setBrowseSubCategoryId(null);
+  }
   const [productCategories, setProductCategories] = useState<CategoryTreeResponse[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
@@ -90,10 +95,6 @@ function ExploreContent() {
         : statusFilter === "ongoing"
           ? "진행중인 공동구매"
           : null;
-
-  useEffect(() => {
-    setBrowseSubCategoryId(null);
-  }, [category]);
 
   useEffect(() => {
     let ignore = false;
@@ -211,13 +212,16 @@ function ExploreContent() {
     }
   }, [effectiveStatus, ongoingHasNext, scheduledHasNext, loadMoreOngoing, loadMoreScheduled]);
 
-  useEffect(() => {
+  const searchParamsKey = searchParams.toString();
+  const [prevSearchParamsKey, setPrevSearchParamsKey] = useState(searchParamsKey);
+  if (searchParamsKey !== prevSearchParamsKey) {
+    setPrevSearchParamsKey(searchParamsKey);
     setQuery(searchParams.get("q") ?? "");
     setCategory(searchParams.get("category") ?? "전체");
     setStatusFilter(toStatusFilter(searchParams.get("status")));
     const param = searchParams.get("sort");
     setSort(isSort(param) ? param : "popular");
-  }, [searchParams]);
+  }
 
   // 아래쪽 "진행 중인 공동구매" 섹션 전용 무한 스크롤 - sentinel이 뷰포트에 들어오면 다음
   // 커서를 불러온다. 위쪽 "상품" 섹션은 버튼 방식이라 이 관찰 대상이 아니다.

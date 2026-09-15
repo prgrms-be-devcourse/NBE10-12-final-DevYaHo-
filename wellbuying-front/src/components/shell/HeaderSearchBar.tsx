@@ -16,14 +16,17 @@ function HeaderSearchBarInner() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  const [prevSearchParams, setPrevSearchParams] = useState(searchParams);
+  if (searchParams !== prevSearchParams) {
+    setPrevSearchParams(searchParams);
     setValue(searchParams.get("q") ?? "");
-  }, [searchParams]);
+  }
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = value.trim();
     if (trimmed.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 디바운스 타이머와 얽혀있는 자동완성 로직의 일부 - 단독으로 분리 어려움
       setSuggestions([]);
       return;
     }

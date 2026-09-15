@@ -53,6 +53,7 @@ export function ProductEditModal({
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL.createObjectURL은 브라우저 리소스라 cleanup(revokeObjectURL)이 필수 - 렌더링 중에는 만들 수 없는 부수효과
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     }
@@ -62,6 +63,7 @@ export function ProductEditModal({
     if (!open || !product) return;
     let ignore = false;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 모달 대상 상품이 바뀔 때 폼 초기화 + 관련 데이터 재조회
     setProductName(product.productName);
     setStartPrice(product.startPrice);
     setThumbnailUrl(product.thumbnailUrl ?? "");

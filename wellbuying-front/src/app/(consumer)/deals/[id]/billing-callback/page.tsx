@@ -33,6 +33,7 @@ function CallbackBody() {
     if (!authKey || !customerKey) {
       // 취소하고 돌아온 경우 보관해 둔 참여 정보를 남겨둘 이유가 없다
       clearPendingParticipation();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 카드 인증 리다이렉트 콜백 - started 가드로 1회만 실행되는 정당한 이펙트
       setMessage(searchParams.get("message") ?? "카드 인증이 취소되었거나 실패했어요.");
       return;
     }

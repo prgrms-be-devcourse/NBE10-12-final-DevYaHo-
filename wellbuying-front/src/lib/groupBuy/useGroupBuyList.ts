@@ -84,10 +84,13 @@ export function useGroupBuyList(
   const fetchingRef = useRef(false);
 
   // sort/size/status/categoryId가 바뀌면 이전 조건으로 쌓아온 목록은 더 이상 의미가 없으므로 1페이지부터 다시 쌓는다
-  useEffect(() => {
+  const syncKey = `${status}:${sort}:${size}:${categoryId}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
     setPage(0);
     setItems([]);
-  }, [status, sort, size, categoryId]);
+  }
 
   useEffect(() => {
     if (!enabled) return;
