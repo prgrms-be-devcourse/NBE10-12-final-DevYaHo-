@@ -203,6 +203,8 @@ export type ProductDetailResponse = {
   startPrice: number;
   thumbnailUrl: string | null;
   approved: boolean;
+  galleryImageUrls: string[];
+  descriptionImageUrls: string[];
   activeGroupBuys: {
     id: number;
     title: string;
