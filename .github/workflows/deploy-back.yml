@@ -55,21 +55,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 러너가 credsStore(예: pass)를 기본 credential helper로 쓰는데, Testcontainers(docker-java)의
-      # RegistryAuthLocator는 config.json에 credsStore 키가 있으면 평문 auths보다 그 헬퍼를 우선 호출한다.
-      # 헤드리스 CI에서는 pass의 GPG 키링이 잠겨 있어 헬퍼 호출이 조용히 실패 → 익명 pull로 폴백된다.
-      # (docker CLI 자체는 credsStore가 있어도 정상 동작하므로 이 문제는 docker-java에서만 재현된다)
-      # → credsStore/credHelpers를 아예 제거해 docker-java가 무조건 평문 auths를 쓰도록 강제한다.
-      - name: Testcontainers용 ghcr.io 인증 config.json 직접 주입
-        run: |
-          GHCR_AUTH=$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w 0)
-          jq --arg auth "$GHCR_AUTH" \
-            'del(.credsStore) | del(.credHelpers) | .auths["ghcr.io"] = {auth: $auth}' \
-            ~/.docker/config.json > /tmp/docker_config.json
-          mv /tmp/docker_config.json ~/.docker/config.json
-
       - name: Gradle 테스트 실행
-        run: ./gradlew test --no-daemon --info
+        run: ./gradlew test --no-daemon
 
   build-and-deploy:
     needs: test

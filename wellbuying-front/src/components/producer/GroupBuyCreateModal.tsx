@@ -14,6 +14,9 @@ import type { GroupBuyPriceTier, ProductMineResponse } from "@/lib/api/types";
 
 type TierInput = { thresholdQuantity: number | ""; unitPrice: number | "" };
 
+const TIER_QUANTITY_PLACEHOLDERS = ["예: 10", "예: 30", "예: 50"] as const;
+const TIER_PRICE_PLACEHOLDERS = ["예: 15000", "예: 14000", "예: 13000"] as const;
+
 function defaultTiers(): [TierInput, TierInput, TierInput] {
   return [
     { thresholdQuantity: "", unitPrice: "" },
@@ -185,7 +188,12 @@ export function GroupBuyCreateModal({
             />
           )}
         </div>
-        <TextField label="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <TextField
+          label="제목"
+          placeholder="예: 무농약 사과 5kg 공동구매"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <TextField
@@ -205,6 +213,7 @@ export function GroupBuyCreateModal({
         <div className="grid grid-cols-2 gap-3">
           <TextField
             label="최소 수량"
+            placeholder="예: 10"
             inputMode="numeric"
             value={String(minQuantity)}
             onChange={(e) => {
@@ -214,6 +223,7 @@ export function GroupBuyCreateModal({
           />
           <TextField
             label="최대 수량"
+            placeholder="예: 100"
             inputMode="numeric"
             value={String(maxQuantity)}
             onChange={(e) => {
@@ -230,6 +240,7 @@ export function GroupBuyCreateModal({
               <div key={index} className="grid grid-cols-2 gap-2.5 rounded-lg bg-wb-canvas p-3">
                 <TextField
                   label={`${index + 1}단계 기준 수량`}
+                  placeholder={TIER_QUANTITY_PLACEHOLDERS[index]}
                   inputMode="numeric"
                   value={String(tier.thresholdQuantity)}
                   onChange={(e) => {
@@ -239,6 +250,7 @@ export function GroupBuyCreateModal({
                 />
                 <TextField
                   label="판매 단가(원)"
+                  placeholder={TIER_PRICE_PLACEHOLDERS[index]}
                   inputMode="numeric"
                   value={String(tier.unitPrice)}
                   onChange={(e) => {
