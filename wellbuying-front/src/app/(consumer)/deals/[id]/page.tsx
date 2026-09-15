@@ -37,6 +37,13 @@ import { clearPendingParticipation, takePendingParticipation } from "@/lib/payme
 
 const NEW_ADDRESS = "new" as const;
 
+const DESCRIPTION_IMAGE_CAPTIONS = [
+  "가까이서 보면 더 믿음이 가요",
+  "실제 모습을 확인해보세요",
+  "정성껏 만든 상품이에요",
+  "꼼꼼하게 포장해서 안전하게 보내드려요",
+];
+
 // select 옵션과 결제 확인 창에 공통으로 쓰는 배송지 한 줄 표기
 function formatAddressLabel(address: BuyerAddressResponse): string {
   return `[${address.zipcode}] ${address.address}${
@@ -415,13 +422,19 @@ export default function DealDetailPage() {
           {activeTab === "images" && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {product.descriptionImageUrls.map((url, index) => (
-                // eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 이미지 URL이라 next/image 최적화 대상이 아님
-                <img
-                  key={url}
-                  src={url}
-                  alt={`${detail.title} 상세 이미지 ${index + 1}`}
-                  className="w-full rounded-2xl object-cover"
-                />
+                <figure key={`${url}-${index}`} className="space-y-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- 판매자가 등록한 외부 이미지 URL이라 next/image 최적화 대상이 아님 */}
+                  <img
+                    src={url}
+                    alt={`${detail.title} 상세 이미지 ${index + 1}`}
+                    className="w-full rounded-2xl object-cover"
+                  />
+                  {DESCRIPTION_IMAGE_CAPTIONS[index] && (
+                    <figcaption className="text-sm text-wb-secondary">
+                      {DESCRIPTION_IMAGE_CAPTIONS[index]}
+                    </figcaption>
+                  )}
+                </figure>
               ))}
             </div>
           )}
